@@ -106,6 +106,29 @@ int compare_by_rr(const void *a, const void *b)
 }
 
 /**
+ * @brief Comparison function for sorting LAndIndex structures by the L member.
+ * @details Sorts LAndIndex structures in ascending order based on their 'L'
+ *          (angular momentum or squared difference from a reference L) value.
+ *          Used with qsort for ordering particles by their L values, typically
+ *          for selecting particles with lowest L or L closest to a target.
+ *
+ * @param a [in] Pointer to the first LAndIndex structure.
+ * @param b [in] Pointer to the second LAndIndex structure.
+ * @return int -1 if a->L < b->L, 1 if a->L > b->L, 0 if equal.
+ */
+int cmp_LAI(const void *a, const void *b)
+{
+    double La = ((const LAndIndex *)a)->L;
+    double Lb = ((const LAndIndex *)b)->L;
+
+    if (La < Lb)
+        return -1;
+    if (La > Lb)
+        return 1;
+    return 0;
+}
+
+/**
  * @brief Sorts an array of PartData structures by their radial position (`rad`).
  * @details Uses the standard library `qsort` function with `compare_partdata_by_rad`
  *          as the comparison function. Includes basic safety checks for NULL array

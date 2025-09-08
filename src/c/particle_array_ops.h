@@ -17,40 +17,14 @@
  #ifndef PARTICLE_ARRAY_OPS_H
  #define PARTICLE_ARRAY_OPS_H
 
- /**
-  * @brief Compact data structure for particle properties used in sorting and analysis.
-  * @details Contains essential physical properties (radial position, velocity,
-  *          angular momentum) and tracking metadata (rank, original index) for each
-  *          particle in the simulation. Used extensively for sorting, file I/O, and
-  *          data analysis operations.
-  *
-  * @note Uses compact `float` types for physical quantities to reduce memory usage
-  *       when processing large particle counts.
-  * @note The `rank` field is assigned during radial sorting, while `original_index`
-  *       preserves the initial array position for tracking particles across snapshots.
-  */
-struct PartData
-{
-    int rank;           // Particle rank (sorted position)
-    float rad;          // Radial position
-    float vrad;         // Radial velocity
-    float angmom;       // Angular momentum
-    int original_index; // Original position in array before sorting
-};
-typedef struct PartData PartData;
-
-struct RrPsiPair
-{
-    double rr;  ///< Radius value or x-axis value for sorting
-    double psi; ///< Corresponding potential value or y-axis value
-};
-typedef struct RrPsiPair RrPsiPair;
+ #include "particle_data.h"
 
 int check_strict_monotonicity(const double *arr, int n, const char *name);
 
 int compare_partdata_by_rad(const void *a, const void *b);
 int compare_particles(const void *a, const void *b);
 int compare_by_rr(const void *a, const void *b);
+int cmp_LAI(const void *a, const void *b);
 
 void sort_by_rad(struct PartData *array, int npts);
 int double_cmp(const void *a, const void *b);

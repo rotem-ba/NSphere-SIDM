@@ -40,4 +40,48 @@ extern double **lowestL_r; ///< Radial positions of tracked low-L particles over
 extern double **lowestL_E; ///< Energy values of tracked low-L particles over time [particle][time_step].
 extern double **lowestL_L; ///< Angular momenta of tracked low-L particles over time [particle][time_step].
 
+
+/**
+ * @brief Structure to track angular momentum with particle index and direction.
+ * @details Used in sorting and selection of particles by angular momentum,
+ *          especially when finding particles closest to a reference L.
+ */
+struct LAndIndex
+{
+    double L; ///< Angular momentum value (or squared difference from Lcompare).
+    int idx;  ///< Original particle index (before sorting by L).
+    int sign; ///< Direction indicator (+1 or -1) or sign of (L - Lcompare).
+};
+typedef struct LAndIndex LAndIndex;
+
+/**
+ * @brief Compact data structure for particle properties used in sorting and analysis.
+ * @details Contains essential physical properties (radial position, velocity,
+ *          angular momentum) and tracking metadata (rank, original index) for each
+ *          particle in the simulation. Used extensively for sorting, file I/O, and
+ *          data analysis operations.
+ *
+ * @note Uses compact `float` types for physical quantities to reduce memory usage
+ *       when processing large particle counts.
+ * @note The `rank` field is assigned during radial sorting, while `original_index`
+ *       preserves the initial array position for tracking particles across snapshots.
+ */
+struct PartData
+{
+   int rank;           // Particle rank (sorted position)
+   float rad;          // Radial position
+   float vrad;         // Radial velocity
+   float angmom;       // Angular momentum
+   int original_index; // Original position in array before sorting
+};
+typedef struct PartData PartData;
+
+struct RrPsiPair
+{
+   double rr;  ///< Radius value or x-axis value for sorting
+   double psi; ///< Corresponding potential value or y-axis value
+};
+typedef struct RrPsiPair RrPsiPair;
+
+
 #endif // PARTICLE_DATA_H

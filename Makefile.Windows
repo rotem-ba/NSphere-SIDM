@@ -159,7 +159,7 @@ else
 endif
 
 # Source files
-SOURCES = nsphere.c logging.c sidm.c globals.c particle_array_ops.c particle_data.c exit.c utils.c signal_processing.c dynamics.c
+SOURCES = nsphere.c logging.c sidm.c globals.c particle_array_ops.c particle_data.c exit.c utils.c signal_processing.c dynamics.c cli.h
 SRC = $(addprefix $(C_SRC_DIR)/, $(SOURCES))
 
 # --- Python Executable Definitions ---

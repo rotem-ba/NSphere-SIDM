@@ -14,4 +14,11 @@
  * limitations under the License.
  */
 
-#include "dynamics.h"
+ #ifndef CLI_H
+ #define CLI_H
+
+
+void printUsage(const char *prog);
+void errorAndExit(const char *msg, const char *arg, const char *prog);
+
+#endif // CLI_H
