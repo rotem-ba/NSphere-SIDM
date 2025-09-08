@@ -17,6 +17,8 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
+#include <gsl/gsl_rng.h>
+
 /**
  * @brief Global simulation feature flags.
  * @details These control various optional behaviors and optimizations
@@ -126,3 +128,9 @@ extern double Lcompare;          ///< Reference L value for closest-match mode (
 
 
 #endif // GLOBALS_H
+
+/* ========================================================================= */
+
+extern gsl_rng *g_rng; ///< GSL Random Number Generator state.
+extern gsl_rng **g_rng_per_thread; ///< Array of GSL RNG states, one per OpenMP thread.
+extern int g_max_omp_threads_for_rng; ///< Number of threads for which RNGs are allocated.

@@ -15,6 +15,7 @@
  */
 
 #include <stdio.h>
+#include <gsl/gsl_rng.h>
 
 /**
  * @brief Global simulation feature flags.
@@ -136,3 +137,9 @@ double g_active_halo_mass = HALO_MASS; ///< Active halo mass for N-body force ca
  */
 int use_closest_to_Lcompare = 1; ///< Mode selector (0 or 1).
 double Lcompare = 0.05;          ///< Reference L value for closest-match mode (Mode 1).
+
+/* ========================================================================= */
+
+gsl_rng *g_rng = NULL; ///< GSL Random Number Generator state.
+gsl_rng **g_rng_per_thread = NULL; ///< Array of GSL RNG states, one per OpenMP thread.
+int g_max_omp_threads_for_rng = 1; ///< Number of threads for which RNGs are allocated.

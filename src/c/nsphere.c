@@ -25,13 +25,13 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 #include <time.h>
-#include <sys/time.h>  /* For gettimeofday */
 #include <unistd.h>    /* For getpid */
 #ifdef _OPENMP
 #include <omp.h>
 #else
 // OpenMP function stubs when compiled without OpenMP
 // Use __attribute__((unused)) to prevent unused function warnings
+#include <sys/time.h>  /* For gettimeofday */
 static int __attribute__((unused)) omp_get_max_threads(void) { return 1; }
 static int __attribute__((unused)) omp_get_num_procs(void) { return 1; }
 static int __attribute__((unused)) omp_get_thread_num(void) { return 0; }
@@ -99,9 +99,9 @@ typedef struct {
 #endif
 /* ========================================================================= */
 
-static gsl_rng *g_rng = NULL; ///< GSL Random Number Generator state.
-static gsl_rng **g_rng_per_thread = NULL; ///< Array of GSL RNG states, one per OpenMP thread.
-static int g_max_omp_threads_for_rng = 1; ///< Number of threads for which RNGs are allocated.
+extern gsl_rng *g_rng;
+extern gsl_rng **g_rng_per_thread;
+extern int g_max_omp_threads_for_rng;
 
 // =========================================================================
 // PERSISTENT SORT BUFFER CONFIGURATION
@@ -3579,82 +3579,6 @@ static int check_strict_monotonicity(const double *arr, int n, const char *name)
         }
     }
     return 1;
-}
-
-/**
- * @brief Handles the SIDM scattering phase for a single timestep.
- * @details Checks if SIDM is enabled and if not in a bootstrap phase that should skip SIDM.
- *          If proceeding, it resets particle scatter flags, selects serial or parallel execution
- *          based on `g_sidm_execution_mode`, calls the appropriate core scattering function
- *          (`perform_sidm_scattering_serial` or `perform_sidm_scattering_parallel`),
- *          updates the global total scatter count, and logs debug information if scatters occurred
- *          and debugging is enabled. The core scattering functions are responsible for updating
- *          the `g_particle_scatter_state` flags for particles that underwent scattering.
- *
- * @param particles         [in,out] The main particle data array: `particles[component][current_sorted_index]`.
- *                              Modified in-place with post-scattering velocities/angular momenta.
- * @param npts              [in] Total number of particles.
- * @param dt                [in] The simulation timestep (Myr).
- * @param current_sim_time  [in] The current simulation time at the beginning of this step (Myr).
- * @param active_profile_rc [in] The scale radius (kpc) of the currently active profile (NFW or Cored),
- *                              passed to `sigmatotal`.
- * @param current_method_display_num [in] The user-facing display number of the current integration method (for logging).
- * @param bootstrap_phase_active [in] Flag (0 or 1) indicating if a bootstrap phase (e.g., for Adams-Bashforth)
- *                               is active. If 1, SIDM scattering is skipped for this step.
- * @note This function modifies the `particles` array in-place.
- * @note It uses global variables: `g_enable_sidm_scattering`, `g_sidm_execution_mode`,
- *       `g_rng_per_thread`, `g_max_omp_threads_for_rng`, `g_rng`, `g_total_sidm_scatters`,
- *       `g_active_halo_mass`, `g_doDebug`, and `g_particle_scatter_state`.
- */
-void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time,
-                             double active_profile_rc, int current_method_display_num,
-                             int bootstrap_phase_active)
-{
-    if (!g_enable_sidm_scattering || bootstrap_phase_active) {
-        return; // Skip SIDM if disabled or in a bootstrap phase that should skip SIDM
-    }
-
-    long long Nscatters_in_this_step = 0;
-
-    if (g_sidm_execution_mode == 1) { // Parallel
-        #ifdef _OPENMP
-            if (g_rng_per_thread != NULL && g_max_omp_threads_for_rng > 0) {
-                perform_sidm_scattering_parallel(particles, npts, dt, current_sim_time,
-                                               g_rng_per_thread, g_max_omp_threads_for_rng,
-                                               &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
-            } else {
-                log_message("ERROR", "SIDM Parallel mode selected but per-thread RNGs not available. Skipping SIDM for step.");
-                Nscatters_in_this_step = 0;
-            }
-        #else
-            // Serial fallback if OpenMP not compiled but parallel mode selected
-            log_message("WARNING", "SIDM Parallel mode selected but OpenMP not enabled. Running SIDM serially.");
-            gsl_rng *rng_for_serial_fallback = (g_rng_per_thread != NULL && g_rng_per_thread[0] != NULL) ? g_rng_per_thread[0] : g_rng;
-            if (rng_for_serial_fallback != NULL) {
-                perform_sidm_scattering_serial(particles, npts, dt, current_sim_time, rng_for_serial_fallback,
-                                             &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
-            } else {
-                log_message("ERROR", "SIDM Serial fallback: No suitable RNG available. Skipping SIDM for step.");
-                Nscatters_in_this_step = 0;
-            }
-        #endif
-    } else { // Serial SIDM execution
-        gsl_rng *rng_for_serial = (g_rng_per_thread != NULL && g_rng_per_thread[0] != NULL) ? g_rng_per_thread[0] : g_rng;
-        if (rng_for_serial != NULL) {
-            perform_sidm_scattering_serial(particles, npts, dt, current_sim_time, rng_for_serial,
-                                         &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
-        } else {
-            log_message("ERROR", "SIDM Serial mode: No suitable RNG available. Skipping SIDM for step.");
-            Nscatters_in_this_step = 0;
-        }
-    }
-
-    g_total_sidm_scatters += Nscatters_in_this_step;
-
-    if (Nscatters_in_this_step > 0 && g_doDebug) {
-        log_message("DEBUG", "Method %d Step: %lld SIDM scatters this step, %lld total",
-                    current_method_display_num, Nscatters_in_this_step, g_total_sidm_scatters);
-    }
 }
 
 /**

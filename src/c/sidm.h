@@ -67,9 +67,9 @@ threevector crossproduct(threevector X, threevector Y);
 double sigmatotal(double vrel, int npts, double halo_mass_for_calc, double rc_for_calc);
 
 // SIDM scattering functions
-// void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time,
-//                              double active_profile_rc, int current_method_display_num,
-//                              int bootstrap_phase_active);
+void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time,
+                             double active_profile_rc, int current_method_display_num,
+                             int bootstrap_phase_active);
 
 void perform_sidm_scattering_serial(double **particles, int npts, double dt,
                                     double current_time, gsl_rng *rng,
