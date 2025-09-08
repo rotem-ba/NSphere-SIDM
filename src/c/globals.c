@@ -199,3 +199,20 @@ int doReadInit = 0;
 int doWriteInit = 0;
 const char *readInitFilename = NULL;
 const char *writeInitFilename = NULL;
+
+// =========================================================================
+// RUNTIME PARAMETERS
+// =========================================================================
+
+int npts = 100000;
+int Ntimes = 10000;
+int tfinal_factor = 5;
+int nout = 100;
+int dtwrite = 100;
+double tidal_fraction = 0.0;
+int method_select = 1;
+char *method_name = "Adaptive Leapfrog with Adaptive Levi-Civita";
+char method_filename[32] = "adp.leap.adp.levi";
+int display_sort = 1;
+int include_method_in_suffix = 0;
+char custom_tag[256] = {0};

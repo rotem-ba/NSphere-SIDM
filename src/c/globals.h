@@ -250,9 +250,26 @@ extern const int PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD;
 // - Snapshot file management
 // - Binary file format utilities
 
-extern int doReadInit;            ///< Flag indicating whether to read initial conditions from file (1=yes, 0=no).
-extern int doWriteInit;           ///< Flag indicating whether to write initial conditions to file (1=yes, 0=no).
-extern const char *readInitFilename; ///< Filename to read initial conditions from (if doReadInit=1).
-extern const char *writeInitFilename; ///< Filename to write initial conditions to (if doWriteInit=1).
+extern int doReadInit;                  ///< Flag indicating whether to read initial conditions from file (1=yes, 0=no).
+extern int doWriteInit;                 ///< Flag indicating whether to write initial conditions to file (1=yes, 0=no).
+extern const char *readInitFilename;    ///< Filename to read initial conditions from (if doReadInit=1).
+extern const char *writeInitFilename;   ///< Filename to write initial conditions to (if doWriteInit=1).
+
+// =========================================================================
+// RUNTIME PARAMETERS
+// =========================================================================
+
+extern int npts;                      ///< Number of particles in the simulation (default 100,000)
+extern int Ntimes;                    ///< Number of time steps the simulation will run over (default 10,000)
+extern int tfinal_factor;             ///< Number of dynamical times scales the simulation will run over (default 5)
+extern int nout;                      ///< Number of output snapshots (default 100)
+extern int dtwrite;                   ///< Number of steps between writes (default 100)
+extern double tidal_fraction;         ///< Tidal stripping fraction (default 0.0 = off)
+extern int method_select;             ///< Integration method used (default 1 = Adaptive Leapfrog with Adaptive Levi-Civita)
+extern char *method_name;             ///< Name of the integration method used
+extern char method_filename[32];      ///< Filename suffix for the integration method used
+extern int display_sort;              ///< Sorting algorithm used (default 1 = Parallel Quadsort)
+extern int include_method_in_suffix;  ///< Boolean, include method string in output filenames (default 0 = don't show)
+extern char custom_tag[256];          ///< Tag added to output files (default: no custom tag)
 
 #endif // GLOBALS_H

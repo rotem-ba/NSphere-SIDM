@@ -22,4 +22,10 @@ void errorAndExit(const char *msg, const char *arg, const char *prog);
 int prompt_yes_no(const char *prompt);
 void parseSaveArgs(int argc, char *argv[], int *pIndex);
 
+int exit_on_help(int argc, char *argv[]);
+void read_user_arguments(int argc, char *argv[]);
+int parse_user_arguments(int argc, char *argv[]);
+void set_method_name();
+
+
 #endif // CLI_H

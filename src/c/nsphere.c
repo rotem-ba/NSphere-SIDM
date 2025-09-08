@@ -213,460 +213,10 @@ printf("  \n");
     fftw_init_threads();
     fftw_plan_with_nthreads(max_threads);
 #endif
-
-    int npts = 100000;
-    int Ntimes = 10000;
-    int tfinal_factor = 5;
-    int nout = 100;
-    int dtwrite = 100;
-    double tidal_fraction = 0.0;
-    int noutsnaps;
     g_total_sidm_scatters = 0; // Initialize global SIDM scatter counter
-
-    int method_select = 1;            // Default: option 1 (Adaptive Leapfrog with Adaptive Levi-Civita)
-    int display_sort = 1;             // Default: option 1 (Parallel Quadsort)
-    int include_method_in_suffix = 0; // Default: exclude method from filenames.
-    char custom_tag[256] = {0};       // Default: no custom tag.
-
-    /** @note Check for the `--help` argument first before parsing other options. */
-    for (int i = 1; i < argc; i++)
-    {
-        if (strcmp(argv[i], "--help") == 0)
-        {
-            printUsage(argv[0]);
-            return 0;
-        }
-    }
-
-    /** @note Handle the case where no command-line arguments are provided. */
-    if (argc == 1)
-    {
-        printf("No command-line arguments given. Using default parameters.\n");
-        printf("Run `%s --help` to learn how to adjust parameters.\n\n", argv[0]);
-    }
-
-    /** @note Main command-line argument parsing loop (strict parsing). */
-    for (int i = 1; i < argc; i++)
-    {
-        /** @note Forbid using '=' within options; require space separation. */
-        // Check for "--option=value" format, which is disallowed.
-        if (strncmp(argv[i], "--", 2) == 0 && strstr(argv[i], "=") != NULL)
-        {
-            errorAndExit("use space, not '=' after option", argv[i], argv[0]);
-        }
-
-        if (strcmp(argv[i], "--nparticles") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--nparticles requires an integer argument", NULL, argv[0]);
-            }
-            if (!isInteger(argv[i + 1]))
-            {
-                errorAndExit("invalid integer for --nparticles", argv[i + 1], argv[0]);
-            }
-            npts = atoi(argv[++i]);
-        }
-        else if (strcmp(argv[i], "--ntimesteps") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--ntimesteps requires an integer argument", NULL, argv[0]);
-            }
-            if (!isInteger(argv[i + 1]))
-            {
-                errorAndExit("invalid integer for --ntimesteps", argv[i + 1], argv[0]);
-            }
-            Ntimes = atoi(argv[++i]);
-        }
-        else if (strcmp(argv[i], "--tfinal") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--tfinal requires an integer argument", NULL, argv[0]);
-            }
-            if (!isInteger(argv[i + 1]))
-            {
-                errorAndExit("invalid integer for --tfinal", argv[i + 1], argv[0]);
-            }
-            tfinal_factor = atoi(argv[++i]);
-        }
-        else if (strcmp(argv[i], "--nout") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--nout requires an integer argument", NULL, argv[0]);
-            }
-            if (!isInteger(argv[i + 1]))
-            {
-                errorAndExit("invalid integer for --nout", argv[i + 1], argv[0]);
-            }
-            nout = atoi(argv[++i]);
-        }
-        else if (strcmp(argv[i], "--dtwrite") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--dtwrite requires an integer argument", NULL, argv[0]);
-            }
-            if (!isInteger(argv[i + 1]))
-            {
-                errorAndExit("invalid integer for --dtwrite", argv[i + 1], argv[0]);
-            }
-            dtwrite = atoi(argv[++i]);
-        }
-        else if (strcmp(argv[i], "--tag") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--tag requires a string argument", NULL, argv[0]);
-            }
-
-            strncpy(custom_tag, argv[++i], 255);
-            custom_tag[255] = '\0'; // Ensure null-termination.
-        }
-        else if (strcmp(argv[i], "--method") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--method requires an integer argument", NULL, argv[0]);
-            }
-            if (!isInteger(argv[i + 1]))
-            {
-                errorAndExit("invalid integer for --method", argv[i + 1], argv[0]);
-            }
-            method_select = atoi(argv[++i]);
-
-            if (method_select < 1 || method_select > 9)
-            {
-                char buf[256];
-                snprintf(buf, sizeof(buf), "method must be in [1..9]");
-                errorAndExit(buf, NULL, argv[0]);
-            }
-        }
-        else if (strcmp(argv[i], "--sort") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--sort requires an integer argument", NULL, argv[0]);
-            }
-            if (!isInteger(argv[i + 1]))
-            {
-                errorAndExit("invalid integer for --sort", argv[i + 1], argv[0]);
-            }
-            int sort_val = atoi(argv[++i]);
-
-            if (sort_val < 1 || sort_val > 4)
-            {
-                char buf[256];
-                snprintf(buf, sizeof(buf), "sort must be in [1..4]");
-                errorAndExit(buf, NULL, argv[0]);
-            }
-
-            display_sort = sort_val;
-
-            switch (sort_val)
-            {
-            case 1:
-                g_defaultSortAlg = "quadsort_parallel"; // Formerly case 1.
-                break;
-            case 2:
-                g_defaultSortAlg = "quadsort"; // Formerly case 0.
-                break;
-            case 3:
-                g_defaultSortAlg = "insertion_parallel"; // Formerly case 2.
-                break;
-            case 4:
-                g_defaultSortAlg = "insertion"; // Formerly case 3.
-                break;
-            }
-        }
-        else if (strcmp(argv[i], "--readinit") == 0)
-        {
-            if (i + 1 >= argc) // Check if filename argument exists
-            {
-                errorAndExit("--readinit requires a file argument", NULL, argv[0]);
-            }
-
-            /** @warning Check for incompatibility with `--restart` and `--writeinit`. */
-            if (g_doRestart)
-            {
-                errorAndExit("--readinit is incompatible with --restart. These options cannot be used together. Use either --restart OR --readinit, not both.", NULL, argv[0]);
-            }
-            if (doWriteInit)
-            {
-                errorAndExit("--readinit is incompatible with --writeinit. These options cannot be used together. Use either --readinit OR --writeinit, not both.", NULL, argv[0]);
-            }
-
-            const char* user_filename = argv[++i]; // consume next arg
-            // Prefix the path with "init/" directory
-            static char prefixed_read_path[512]; // Static buffer for the path
-            snprintf(prefixed_read_path, sizeof(prefixed_read_path), "init/%s", user_filename);
-            readInitFilename = prefixed_read_path; // Assign the prefixed path
-            doReadInit = 1;
-        }
-        else if (strcmp(argv[i], "--writeinit") == 0)
-        {
-            if (i + 1 >= argc) // Check if filename argument exists
-            {
-                errorAndExit("--writeinit requires a file argument", NULL, argv[0]);
-            }
-
-            /** @warning Check for incompatibility with `--restart` and `--readinit`. */
-            if (g_doRestart)
-            {
-                errorAndExit("--writeinit is incompatible with --restart. These options cannot be used together. Use either --restart OR --writeinit, not both.", NULL, argv[0]);
-            }
-            if (doReadInit)
-            {
-                errorAndExit("--writeinit is incompatible with --readinit. These options cannot be used together. Use either --writeinit OR --readinit, not both.", NULL, argv[0]);
-            }
-
-            const char* user_filename = argv[++i]; // consume next arg
-            // Prefix the path with "init/" directory
-            static char prefixed_write_path[512]; // Static buffer for the path
-            snprintf(prefixed_write_path, sizeof(prefixed_write_path), "init/%s", user_filename);
-            writeInitFilename = prefixed_write_path; // Assign the prefixed path
-            doWriteInit = 1;
-        }
-        else if (strcmp(argv[i], "--restart") == 0)
-        {
-            /** @warning Check for incompatibility with `--readinit` and `--writeinit`. */
-            if (doReadInit)
-            {
-                errorAndExit("--restart is incompatible with --readinit. These options cannot be used together. Use either --restart OR --readinit, not both.", NULL, argv[0]);
-            }
-            if (doWriteInit)
-            {
-                errorAndExit("--restart is incompatible with --writeinit. These options cannot be used together. Use either --restart OR --writeinit, not both.", NULL, argv[0]);
-            }
-
-            g_doRestart = 1;
-            printf("Restart mode enabled. Will look for existing data products to resume processing.\n\n");
-        }
-        else if (strcmp(argv[i], "--save") == 0)
-        {
-            /** @note Delegate parsing of subsequent arguments to parseSaveArgs. */
-            parseSaveArgs(argc, argv, &i);
-            // The main loop continues from the updated index 'i'.
-        }
-        else if (strcmp(argv[i], "--ftidal") == 0)
-        {
-            if (i + 1 >= argc)
-            {
-                errorAndExit("--ftidal requires a float argument", NULL, argv[0]);
-            }
-            if (!isFloat(argv[i + 1]))
-            {
-                errorAndExit("invalid float for --ftidal", argv[i + 1], argv[0]);
-            }
-            tidal_fraction = atof(argv[++i]);
-
-            /** @warning Check range [0.0, 1.0]. */
-            if (tidal_fraction < 0.0 || tidal_fraction > 1.0)
-            {
-                char buf[256];
-                snprintf(buf, sizeof(buf), "tidal_fraction must be in [0.0..1.0]");
-                errorAndExit(buf, NULL, argv[0]);
-            }
-        }
-        else if (strcmp(argv[i], "--methodtag") == 0)
-        {
-            /** @note Flag to include integration method string in output filename suffix. */
-            include_method_in_suffix = 1;
-        }
-        else if (strcmp(argv[i], "--log") == 0)
-        {
-            /** @note Flag to enable logging to log/nsphere.log. */
-            g_enable_logging = 1;
-        }
-        else if (strcmp(argv[i], "--sidm") == 0)
-        {
-            /** @note Flag to enable Self-Interacting Dark Matter physics. */
-            g_enable_sidm_scattering = 1;
-            // This flag does not take a value, so 'i' is not incremented further.
-        }
-        else if (strcmp(argv[i], "--sidm-mode") == 0)
-        {
-            if (i + 1 >= argc) {
-                errorAndExit("--sidm-mode requires an argument (serial or parallel)", NULL, argv[0]);
-            }
-            char* mode_arg = argv[++i];
-            if (strcmp(mode_arg, "serial") == 0) {
-                g_sidm_execution_mode = 0;
-            } else if (strcmp(mode_arg, "parallel") == 0) {
-                #ifndef _OPENMP
-                    printf("Warning: OpenMP is not enabled in this build. SIDM will run serially despite '--sidm-mode parallel'.\n");
-                    log_message("WARNING", "OpenMP not enabled, SIDM forced to serial despite --sidm-mode parallel request.");
-                    g_sidm_execution_mode = 0; // Force serial if no OpenMP
-                #else
-                    g_sidm_execution_mode = 1;
-                #endif
-            } else {
-                errorAndExit("Invalid argument for --sidm-mode. Use 'serial' or 'parallel'.", mode_arg, argv[0]);
-            }
-        }
-        else if (strcmp(argv[i], "--sidm-kappa") == 0) {
-            if (i + 1 >= argc || !isFloat(argv[i + 1])) {
-                errorAndExit("--sidm-kappa requires a float argument", argv[i + 1], argv[0]);
-            }
-            g_sidm_kappa = atof(argv[++i]);
-            if (g_sidm_kappa < 0) { // Kappa can be 0 (no interaction) but not negative
-                errorAndExit("--sidm-kappa must be non-negative", NULL, argv[0]);
-            }
-            g_sidm_kappa_provided = 1;
-        }
-        else if (strcmp(argv[i], "--master-seed") == 0) {
-            if (i + 1 >= argc || !isInteger(argv[i + 1])) {
-                errorAndExit("--master-seed requires an integer argument", argv[i + 1], argv[0]);
-            }
-            g_master_seed = strtoul(argv[++i], NULL, 10);
-            g_master_seed_provided = 1;
-        } else if (strcmp(argv[i], "--init-cond-seed") == 0) {
-            if (i + 1 >= argc || !isInteger(argv[i + 1])) {
-                errorAndExit("--init-cond-seed requires an integer argument", argv[i + 1], argv[0]);
-            }
-            g_initial_cond_seed = strtoul(argv[++i], NULL, 10);
-            g_initial_cond_seed_provided = 1;
-        } else if (strcmp(argv[i], "--sidm-seed") == 0) {
-            if (i + 1 >= argc || !isInteger(argv[i + 1])) {
-                errorAndExit("--sidm-seed requires an integer argument", argv[i + 1], argv[0]);
-            }
-            g_sidm_seed = strtoul(argv[++i], NULL, 10);
-            g_sidm_seed_provided = 1;
-        } else if (strcmp(argv[i], "--load-seeds") == 0) {
-            g_attempt_load_seeds = 1;
-        } else if (strcmp(argv[i], "--profile") == 0) {
-            if (i + 1 >= argc) {
-                errorAndExit("--profile requires a type argument ('nfw' or 'cored')", NULL, argv[0]);
-            }
-            strncpy(g_profile_type_str, argv[++i], sizeof(g_profile_type_str) - 1);
-            g_profile_type_str[sizeof(g_profile_type_str) - 1] = '\0'; // Ensure null termination
-            if (strcmp(g_profile_type_str, "nfw") != 0 && strcmp(g_profile_type_str, "cored") != 0) {
-                errorAndExit("Invalid argument for --profile. Use 'nfw' or 'cored'.", g_profile_type_str, argv[0]);
-            }
-            g_profile_type_str_provided = 1;
-        } else if (strcmp(argv[i], "--scale-radius") == 0) {
-            if (i + 1 >= argc || !isFloat(argv[i + 1])) {
-                errorAndExit("--scale-radius requires a float argument", argv[i + 1], argv[0]);
-            }
-            g_scale_radius_param = atof(argv[++i]);
-            if (g_scale_radius_param <= 0) errorAndExit("--scale-radius must be positive", NULL, argv[0]);
-            g_scale_radius_param_provided = 1;
-        } else if (strcmp(argv[i], "--halo-mass") == 0) {
-            if (i + 1 >= argc || !isFloat(argv[i + 1])) { // Ensure isFloat is robust for scientific notation
-                errorAndExit("--halo-mass requires a float argument", argv[i + 1], argv[0]);
-            }
-            g_halo_mass_param = atof(argv[++i]);
-            if (g_halo_mass_param <= 0) errorAndExit("--halo-mass must be positive", NULL, argv[0]);
-            g_halo_mass_param_provided = 1;
-        } else if (strcmp(argv[i], "--cutoff-factor") == 0) {
-            if (i + 1 >= argc || !isFloat(argv[i + 1])) {
-                errorAndExit("--cutoff-factor requires a float argument", argv[i + 1], argv[0]);
-            }
-            g_cutoff_factor_param = atof(argv[++i]);
-            if (g_cutoff_factor_param <= 0) errorAndExit("--cutoff-factor must be positive", NULL, argv[0]);
-            g_cutoff_factor_param_provided = 1;
-        } else if (strcmp(argv[i], "--falloff-factor") == 0) {
-            if (i + 1 >= argc || !isFloat(argv[i + 1])) {
-                errorAndExit("--falloff-factor requires a float argument", argv[i + 1], argv[0]);
-            }
-            g_falloff_factor_param = atof(argv[++i]);
-            if (g_falloff_factor_param <= 0) errorAndExit("--falloff-factor must be positive", NULL, argv[0]);
-            g_falloff_factor_param_provided = 1;
-        }
-        else if (strncmp(argv[i], "--", 2) == 0)
-        {
-            errorAndExit("unrecognized option", argv[i], argv[0]);
-        }
-        else
-        {
-            errorAndExit("unrecognized argument", argv[i], argv[0]);
-        }
-    }
-
-    /** @note Convert user-facing method number (1-9) to internal identifier (0-8) and get description string. */
-    int display_method = method_select; // Store original user input for display
-    char *method_verbose_name;
-
-    // Convert method number to internal index and set descriptive name.
-    switch (method_select)
-    {
-    case 1:
-        method_select = 5;
-        method_verbose_name = "Adaptive Leapfrog with Adaptive Levi-Civita";
-        break;
-    case 2:
-        method_select = 4;
-        method_verbose_name = "Full-Step Adaptive Leapfrog + Levi-Civita";
-        break;
-    case 3:
-        method_select = 3;
-        method_verbose_name = "Full-Step Adaptive Leapfrog";
-        break;
-    case 4:
-        method_select = 6;
-        method_verbose_name = "Yoshida 4th-Order";
-        break;
-    case 5:
-        method_select = 8;
-        method_verbose_name = "Adams-Bashforth 3rd-Order";
-        break;
-    case 6:
-        method_select = 2;
-        method_verbose_name = "Leapfrog (Vel Half-Step)";
-        break;
-    case 7:
-        method_select = 1;
-        method_verbose_name = "Leapfrog (Pos Half-Step)";
-        break;
-    case 8:
-        method_select = 7;
-        method_verbose_name = "Classic RK4";
-        break;
-    case 9:
-        method_select = 0;
-        method_verbose_name = "Euler";
-        break;
-    default:
-        method_verbose_name = "Unknown Method";
-        break;
-    }
-
-    /** @note Generate internal method string identifier for filenames. */
-    char method_str[32];
-    switch (method_select)
-    {
-    case 0:
-        strcpy(method_str, "euler");
-        break;
-    case 1:
-        strcpy(method_str, "pos.leap");
-        break;
-    case 2:
-        strcpy(method_str, "vel.leap");
-        break;
-    case 3:
-        strcpy(method_str, "adp.leap");
-        break;
-    case 4:
-        strcpy(method_str, "adp.leap.levi");
-        break;
-    case 5:
-        strcpy(method_str, "adp.leap.adp.levi");
-        break;
-    case 6:
-        strcpy(method_str, "fr4.yoshi");
-        break;
-    case 7:
-        strcpy(method_str, "rk4");
-        break;
-    case 8:
-        strcpy(method_str, "ab3");
-        break;
-    default:
-        strcpy(method_str, "unknown");
-        break;
+    int noutsnaps;
+    if (parse_user_arguments(argc, argv)) {
+        return 0;
     }
 
     // Determine active profile type (NFW is default)
@@ -741,7 +291,7 @@ printf("  \n");
     printf("  Number of Output Snapshots:   %d\n", nout);
     printf("  Steps Between Writes:         %d\n", dtwrite);
     printf("  Tidal Stripping Fraction:     %.5f\n", tidal_fraction);
-    printf("  Integration Method:           %d (%s)\n", display_method, method_verbose_name);
+    printf("  Integration Method:           %d (%s)\n", method_select, method_name);
     printf("  Sorting Algorithm:            %d (%s)\n", display_sort, get_sort_description(g_defaultSortAlg));
     /** @note Build the filename tag string based on options for display purposes. */
     char filename_tag[512] = "";
@@ -757,7 +307,7 @@ printf("  \n");
         {
             strcat(filename_tag, "_");
         }
-        strcat(filename_tag, method_str);
+        strcat(filename_tag, method_filename);
     }
 
     printf("  Filename Tag:                 %s\n", filename_tag[0] ? filename_tag : "[none]");
@@ -862,7 +412,7 @@ printf("  \n");
     char temp[256];
     if (include_method_in_suffix)
     {
-        snprintf(temp, sizeof(temp), "_%s_%d_%d_%d", method_str, npts, Ntimes, tfinal_factor);
+        snprintf(temp, sizeof(temp), "_%s_%d_%d_%d", method_filename, npts, Ntimes, tfinal_factor);
     }
     else
     {
@@ -920,12 +470,12 @@ printf("  \n");
             if (include_method_in_suffix)
             {
                 strcat(file_tag, "_");
-                strcat(file_tag, method_str);
+                strcat(file_tag, method_filename);
             }
         }
         else if (include_method_in_suffix)
         {
-            strcat(file_tag, method_str);
+            strcat(file_tag, method_filename);
         }
 
         /** @note Create filename with suffix for the specific run parameters file. */
@@ -3682,7 +3232,7 @@ cleanup_diag_iteration:
             int current_step;
 
             // Method_select = 1; Flag now.
-            if (method_select == 0)
+            if (method_select == 9)//
             {
 /****************************/
 // EULER METHOD
@@ -3720,7 +3270,7 @@ cleanup_diag_iteration:
 
                 // SIDM scattering: profile-aware scale radius selection and execution mode handling
                 double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, 0);
+                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
 
 #pragma omp single
                 {
@@ -3748,7 +3298,7 @@ cleanup_diag_iteration:
                     L_arr[p][j] = l_current;
                 }
             }
-            else if (method_select == 1)
+            else if (method_select == 7)//
             {
                 /****************************/
                 // LEAPFROG METHOD (POSITION HALF STEP)
@@ -3787,7 +3337,7 @@ cleanup_diag_iteration:
 
                 // SIDM scattering after leapfrog drift completion
                 double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, 0);
+                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
 
 #pragma omp single
                 {
@@ -3816,7 +3366,7 @@ cleanup_diag_iteration:
                     L_arr[p][j] = l_current;
                 }
             }
-            else if (method_select == 2)
+            else if (method_select == 6)//
             {
 
 #pragma omp parallel for default(shared) schedule(static)
@@ -3867,7 +3417,7 @@ cleanup_diag_iteration:
 
                 // SIDM scattering after velocity half-step completion
                 double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, 0);
+                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
 
 #pragma omp single
                 {
@@ -3896,7 +3446,7 @@ cleanup_diag_iteration:
                     L_arr[p][j] = l_current;
                 }
             }
-            else if (method_select == 3)
+            else if (method_select == 3)//
             {
                 /**
                  * @brief Full-step adaptive leapfrog integration.
@@ -3965,7 +3515,7 @@ cleanup_diag_iteration:
 
                 // SIDM scattering after adaptive leapfrog completion
                 double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, 0);
+                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
 
                 /**
                  * @brief Timestep wrap-up phase - update time and record particle states.
@@ -4001,7 +3551,7 @@ cleanup_diag_iteration:
                     L_arr[p][j] = ell;
                 }
             }
-            else if (method_select == 4)
+            else if (method_select == 2)//
             {
                 /**
                  * @brief Hybrid integration with adaptive method selection.
@@ -4089,7 +3639,7 @@ cleanup_diag_iteration:
 
                 // SIDM scattering after hybrid integrator completion (Levi-Civita/adaptive leapfrog)
                 double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, 0);
+                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
 
 #pragma omp single
                 {
@@ -4120,7 +3670,7 @@ cleanup_diag_iteration:
                     L_arr[p][j] = ell;
                 }
             }
-            else if (method_select == 5)
+            else if (method_select == 1)//
             {
                 double velocity_tol = 1.0e-7;
                 double radius_tol = 1.0e-7;
@@ -4143,7 +3693,7 @@ cleanup_diag_iteration:
 
                 // SIDM scattering before adaptive orbital integration with Levi-Civita regularization
                 double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, 0);
+                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
 
 #pragma omp parallel for default(shared) schedule(static)
                 for (int i = 0; i < npts; i++)
@@ -4217,7 +3767,7 @@ cleanup_diag_iteration:
                     L_arr[p][j] = ell;
                 }
             }
-            else if (method_select == 6)
+            else if (method_select == 4)//
             {
 
                 // Coefficients for 4th-order Forest-Ruth-Yoshida integrator (c1=c3).
@@ -4344,7 +3894,7 @@ cleanup_diag_iteration:
 
                 // SIDM scattering after 4th-order Yoshida symplectic integration
                 double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, 0);
+                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
 
 #pragma omp single
                 {
@@ -4373,7 +3923,7 @@ cleanup_diag_iteration:
                     L_arr[p][j] = l_current;
                 }
             }
-            else if (method_select == 7)
+            else if (method_select == 8)//
             {
                 /****************************/
                 // RK4 METHOD
@@ -4501,7 +4051,7 @@ cleanup_diag_iteration:
 
                 // SIDM scattering after RK4 state update completion
                 double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, 0);
+                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
 
 #pragma omp single
                 {
@@ -4542,7 +4092,7 @@ cleanup_diag_iteration:
                 free(k4r_by_id);
                 free(k4v_by_id);
             }
-            else if (method_select == 8)
+            else if (method_select == 5)
             {
                 // Static variables for Adams-Bashforth 3rd Order (AB3) method
                 static int ab3_bootstrap_done = 0;           ///< Flag indicating if the AB3 bootstrap phase has been completed (0=no, 1=yes).
@@ -4714,7 +4264,7 @@ cleanup_diag_iteration:
 
                     // SIDM scattering after Adams-Bashforth update (skip during bootstrap)
                     double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                    handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, display_method, !ab3_bootstrap_done);
+                    handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, !ab3_bootstrap_done);
 
                     // We re-sort & compute new derivatives to shift the AB3 history.
 #pragma omp single
