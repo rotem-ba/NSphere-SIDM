@@ -17,9 +17,9 @@
  #ifndef CLI_H
  #define CLI_H
 
-
 void printUsage(const char *prog);
 void errorAndExit(const char *msg, const char *arg, const char *prog);
 int prompt_yes_no(const char *prompt);
+void parseSaveArgs(int argc, char *argv[], int *pIndex);
 
 #endif // CLI_H

@@ -82,6 +82,7 @@ extern int g_attempt_load_seeds;                ///< Flag: 1 if we should try to
 
 extern const char* g_initial_cond_seed_filename_base;     ///< Base name for IC seed file.
 extern const char* g_sidm_seed_filename_base;             ///< Base name for SIDM seed file.
+extern char g_file_suffix[256]; ///< Global file suffix string.
 
 // Profile parameter macros used by profile variables
 #define RC 100.0                            ///< Core radius in kpc.
@@ -238,5 +239,19 @@ extern const int PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP;
  * avoid overhead from managing very small parallel tasks.
  */
 extern const int PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD;
+
+// =========================================================================
+// FILE I/O AND DATA MANAGEMENT SUBSYSTEM
+// =========================================================================
+//
+// Functions for saving, loading, and managing simulation data including:
+// - Initial condition generation and I/O
+// - Snapshot file management
+// - Binary file format utilities
+
+extern int doReadInit;            ///< Flag indicating whether to read initial conditions from file (1=yes, 0=no).
+extern int doWriteInit;           ///< Flag indicating whether to write initial conditions to file (1=yes, 0=no).
+extern const char *readInitFilename; ///< Filename to read initial conditions from (if doReadInit=1).
+extern const char *writeInitFilename; ///< Filename to write initial conditions to (if doWriteInit=1).
 
 #endif // GLOBALS_H

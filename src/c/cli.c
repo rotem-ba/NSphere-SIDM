@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include "globals.h"
+ #include "exit.h"
+
  // =========================================================================
  // COMMAND LINE ARGUMENT PROCESSING
  // =========================================================================
@@ -37,10 +43,6 @@
   * @note Called when the user specifies `--help` or when errors occur during
   *       argument parsing.
   */
-
-  #include <stdio.h>
-  #include <stdlib.h>
-  #include "exit.h"
 
 void printUsage(const char *prog)
  {
@@ -188,4 +190,101 @@ void errorAndExit(const char *msg, const char *arg, const char *prog)
          }
          // Any other input repeats the prompt
      }
+ }
+
+ /**
+  * @brief Parses sub-arguments for the `--save` command-line option.
+  * @details This function is called when the `--save` option is encountered during
+  *          command-line argument parsing. It reads subsequent arguments (until another
+  *          option starting with '-' is found, or arguments end) which specify the
+  *          level or type of data to save. It then sets the corresponding global data
+  *          output flags (`g_doDebug`, `g_doDynPsi`, `g_doDynRank`, `g_doAllParticleData`)
+  *          based on the highest priority valid sub-argument encountered.
+  *          Valid sub-arguments and their priority (lowest to highest):
+  *          - "raw-data": Enables `g_doAllParticleData`.
+  *          - "psi-snaps": Enables `g_doAllParticleData`, `g_doDynPsi`.
+  *          - "full-snaps": Enables `g_doAllParticleData`, `g_doDynPsi`, `g_doDynRank`.
+  *          - "all" or "debug-energy": Enables all flags (`g_doDebug`, `g_doDynPsi`, `g_doDynRank`, `g_doAllParticleData`).
+  *
+  * @param argc   [in] The total argument count from `main()`.
+  * @param argv   [in] The argument array from `main()`.
+  * @param pIndex [in,out] Pointer to the current index in `argv`. On input, it points to the
+  *                       `--save` option. On output, it is updated to point to the last
+  *                       sub-argument consumed by this function.
+  * @note Exits the program with an error message if an unknown sub-argument to `--save` is found.
+  */
+ void parseSaveArgs(int argc, char *argv[], int *pIndex)
+ {
+     // Use an integer priority to track the highest level of saving requested
+     static int savePriority = 0; // 0=none, 1=raw, 2=psi, 3=full, 4=all/debug
+
+     // Start checking arguments after "--save"
+     int i = *pIndex + 1;
+
+     // Process arguments until the end or another option (starting with '-') is found
+     while (i < argc && argv[i][0] != '-')
+     {
+         const char *subarg = argv[i];
+
+         if (strcmp(subarg, "all") == 0 || strcmp(subarg, "debug-energy") == 0)
+         {
+             savePriority = 4; // Highest priority
+         }
+         else if (strcmp(subarg, "full-snaps") == 0)
+         {
+             if (savePriority < 3)
+                 savePriority = 3;
+         }
+         else if (strcmp(subarg, "psi-snaps") == 0)
+         {
+             if (savePriority < 2)
+                 savePriority = 2;
+         }
+         else if (strcmp(subarg, "raw-data") == 0)
+         {
+             if (savePriority < 1)
+                 savePriority = 1;
+         }
+         else
+         {
+             fprintf(stderr, "Error: unknown argument to --save '%s'\n", subarg);
+             exit(1);
+         }
+
+         i++;
+     }
+
+     // Set global flags based on the highest priority encountered
+     switch (savePriority)
+     {
+     case 4: // All or debug-energy
+         g_doDebug = 1;
+         g_doDynPsi = 1;
+         g_doDynRank = 1;
+         g_doAllParticleData = 1;
+         break;
+     case 3: // Full-snaps.
+         g_doDebug = 0;
+         g_doDynPsi = 1;
+         g_doDynRank = 1;
+         g_doAllParticleData = 1;
+         break;
+     case 2: // Psi-snaps.
+         g_doDebug = 0;
+         g_doDynPsi = 1;
+         g_doDynRank = 0;
+         g_doAllParticleData = 1;
+         break;
+     case 1: // Raw-data.
+         g_doDebug = 0;
+         g_doDynPsi = 0;
+         g_doDynRank = 0;
+         g_doAllParticleData = 1;
+         break;
+     default: // No saving option specified, all flags remain 0
+         break;
+     }
+
+     // Update index to point to the last processed argument
+     *pIndex = i - 1;
  }

@@ -213,6 +213,76 @@ int compare_particles(const void *a, const void *b)
 }
 
 /**
+ * @brief Remaps original particle IDs to their zero-based rank among a given set of particles.
+ * @details This function is typically used after a process like tidal stripping, where a
+ *          subset of particles remains. The `orig_ids` array at this point contains the
+ *          original, potentially non-contiguous, IDs of these remaining `n` particles.
+ *          The function sorts these original IDs and then replaces each ID in the input
+ *          array with its new rank (0 to n-1) within this sorted sequence.
+ *          This effectively transforms arbitrary original ID values into a compact,
+ *          contiguous sequence of rank IDs for the final set of particles.
+ *          The input `orig_ids` array (which is `particles[3]` in `main`) is modified in-place.
+ *
+ * @param orig_ids [in,out] Pointer to an array of particle IDs (stored as doubles).
+ *                        These are modified in-place to become rank IDs.
+ * @param n        [in] The number of elements in the `orig_ids` array (i.e., `npts` after stripping).
+ * @note Uses `qsort` and a temporary array for sorting. Exits via `exit(1)` if memory
+ *       allocation for the temporary array fails.
+ */
+void reassign_orig_ids_with_rank(double *orig_ids, int n)
+{
+    if (n <= 0) return; // Handle empty or invalid input
+
+    double *temp = (double *)malloc(n * sizeof(double));
+    if (temp == NULL)
+    {
+        fprintf(stderr, "Error: Memory allocation failed in reassign_orig_ids_with_rank\n");
+        exit(1);
+    }
+
+    // Step 1: Copy original IDs to temporary array
+    for (int i = 0; i < n; i++)
+    {
+        temp[i] = orig_ids[i];
+    }
+
+    // Step 2: Sort temporary array to establish rank order
+    qsort(temp, n, sizeof(double), double_cmp);
+
+    // Step 3: Find rank of each original ID using binary search
+    for (int i = 0; i < n; i++)
+    {
+        int low = 0, high = n - 1, rank = -1;
+        while (low <= high)
+        {
+            int mid = (low + high) / 2;
+            if (temp[mid] == orig_ids[i])
+            {
+                rank = mid;
+                break;
+            }
+            else if (temp[mid] < orig_ids[i])
+            {
+                low = mid + 1;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+        if (rank == -1)
+        {
+            // Use insertion point as fallback if exact match not found
+            rank = low;
+        }
+
+        // Step 4: Replace original ID with its rank
+        orig_ids[i] = (double)rank;
+    }
+    free(temp);
+}
+
+/**
  * @brief Implementation of classic insertion sort algorithm for particle data.
  *
  * @details Sorts an array of particle data using the insertion sort algorithm.
@@ -857,4 +927,28 @@ void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts)
     }
 
     free(pairs);
+}
+
+/**
+ * @brief Returns a human-readable description for a sort algorithm identifier string.
+ * @details Maps internal sort algorithm identifiers (e.g., "quadsort_parallel")
+ *          to user-friendly descriptive names (e.g., "Parallel Quadsort").
+ *          This is primarily used for display purposes in command-line output
+ *          or logs, providing more context than the internal short string identifiers.
+ *
+ * @param sort_alg [in] The internal algorithm identifier string.
+ * @return const char* A descriptive name for the algorithm. If no match is found,
+ *                     the input `sort_alg` string itself is returned as a fallback.
+ */
+const char *get_sort_description(const char *sort_alg)
+{
+    if (strcmp(sort_alg, "quadsort_parallel") == 0)
+        return "Parallel Quadsort";
+    if (strcmp(sort_alg, "quadsort") == 0)
+        return "Sequential Quadsort";
+    if (strcmp(sort_alg, "insertion_parallel") == 0)
+        return "Parallel Insertion Sort";
+    if (strcmp(sort_alg, "insertion") == 0)
+        return "Sequential Insertion Sort";
+    return sort_alg; // Default fallback.
 }

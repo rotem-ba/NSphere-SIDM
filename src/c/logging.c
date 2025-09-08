@@ -23,8 +23,7 @@
  #include <stdarg.h>
  #include <time.h>
  #include <sys/stat.h>
-// Forward declaration of global logging flag
-static char g_file_suffix[256] = ""; ///< Global file suffix string.
+ #include "globals.h"
 
 /**
  * @brief Writes a formatted message to the log file with timestamp and severity level.
@@ -47,7 +46,6 @@ static char g_file_suffix[256] = ""; ///< Global file suffix string.
  *          Logging only occurs if the global `g_enable_logging` flag is set.
  * @see g_enable_logging
  */
-extern int g_enable_logging;
 void log_message(const char *level, const char *format, ...)
 {
     // Only write to log file if logging is enabled

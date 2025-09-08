@@ -23,6 +23,7 @@ int check_strict_monotonicity(const double *arr, int n, const char *name);
 
 int compare_partdata_by_rad(const void *a, const void *b);
 int compare_particles(const void *a, const void *b);
+void reassign_orig_ids_with_rank(double *orig_ids, int n);
 int compare_by_rr(const void *a, const void *b);
 int cmp_LAI(const void *a, const void *b);
 
@@ -40,5 +41,7 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg);
 void sort_particles(double **particles, int npts);
 
 void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts);
+
+const char *get_sort_description(const char *sort_alg);
 
 #endif // PARTICLE_ARRAY_OPS_H

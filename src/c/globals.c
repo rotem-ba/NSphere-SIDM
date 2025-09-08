@@ -51,6 +51,7 @@ int g_attempt_load_seeds = 0;
 
 const char* g_initial_cond_seed_filename_base = "data/last_initial_seed";
 const char* g_sidm_seed_filename_base = "data/last_sidm_seed";
+char g_file_suffix[256] = ""; ///< Global file suffix string.
 
 // Profile parameter macros used by profile variables
 #define RC 100.0                            ///< In kpc
@@ -183,3 +184,17 @@ const int PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP = 32;
  * avoid overhead from managing very small parallel tasks.
  */
 const int PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD = 128;
+
+// =========================================================================
+// FILE I/O AND DATA MANAGEMENT SUBSYSTEM
+// =========================================================================
+//
+// Functions for saving, loading, and managing simulation data including:
+// - Initial condition generation and I/O
+// - Snapshot file management
+// - Binary file format utilities
+
+int doReadInit = 0;
+int doWriteInit = 0;
+const char *readInitFilename = NULL;
+const char *writeInitFilename = NULL;

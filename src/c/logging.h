@@ -17,10 +17,6 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
-// Global variables (extern declarations - defined in sidm.c)
-extern int g_enable_logging;
-static char g_file_suffix[256] = ""; ///< Global file suffix string.
-
 void log_message(const char *level, const char *format, ...);
 
 #endif // LOGGING_H

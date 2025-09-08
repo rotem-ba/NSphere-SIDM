@@ -10,4 +10,5 @@ SOURCES = nsphere.c \
           utils.c \
           signal_processing.c \
           dynamics.c \
-          cli.c
+          cli.c \
+          io.c
