@@ -49,6 +49,8 @@ static double __attribute__((unused)) omp_get_wtime(void) {
 #include <sys/types.h>
 #include <unistd.h> // For usleep function
 #include "nsphere_sort.h" // Clean custom wrapper around quadsort
+#include "sidm.h"
+#include "logging.h"
 #include <ctype.h>
 #include <fftw3.h>
 #include <float.h> // For DBL_MAX
@@ -57,30 +59,6 @@ static double __attribute__((unused)) omp_get_wtime(void) {
 #else
 #include <sys/statvfs.h>
 #endif
-
-/**
- * @brief Three-dimensional vector structure for particle physics calculations.
- * @details Represents velocity and position vectors in 3D space for self-interacting
- *          dark matter simulations. Components are stored in Cartesian coordinates.
- */
-typedef struct {
-  double x; ///< x-component of the vector.
-  double y; ///< y-component of the vector.
-  double z; ///< z-component of the vector.
-} threevector;
-
-/**
- * @brief Container for self-interacting dark matter scattering event data.
- * @details Stores particle indices and final velocity vectors for a single scattering
- *          interaction. Used to buffer scattering results before applying velocity updates,
- *          particularly useful for parallel implementations where race conditions must be avoided.
- */
-typedef struct {
-    int i;              ///< Index of the first particle in the scattering pair.
-    int m_offset;       ///< Offset of the scattering partner relative to particle i (e.g., partner is i + m_offset).
-    threevector Vifinal;///< Final 3D velocity vector of particle i.
-    threevector Vmfinal;///< Final 3D velocity vector of the partner particle.
-} ScatterEvent;
 
 /**
  * @brief Parameters for the NFW distribution function integrand fEintegrand_nfw.
@@ -120,20 +98,6 @@ typedef struct {
 #endif
 /* ========================================================================= */
 
-// SIDM vector mathematics and cross-section function declarations
-threevector make_threevector(double x, double y, double z);
-double dotproduct(threevector X, threevector Y);
-threevector crossproduct(threevector X, threevector Y);
-double sigmatotal(double vrel, int npts, double halo_mass_for_calc, double rc_for_calc);
-
-// Serial SIDM scattering integration function declaration
-void perform_sidm_scattering_serial(double **particles, int npts, double dt, double current_time, gsl_rng *rng, long long *Nscatter_total_step, double halo_mass_for_sidm, double rc_for_sidm);
-
-// Forward declaration for the parallel SIDM scattering function
-void perform_sidm_scattering_parallel(double **particles, int npts, double dt, double current_time, gsl_rng **rng_per_thread_list, int num_threads_for_rng, long long *Nscatter_total_step, double halo_mass_for_sidm, double rc_for_sidm);
-
-
-static char g_file_suffix[256] = ""; ///< Global file suffix string.
 static gsl_rng *g_rng = NULL; ///< GSL Random Number Generator state.
 static gsl_rng **g_rng_per_thread = NULL; ///< Array of GSL RNG states, one per OpenMP thread.
 static int g_max_omp_threads_for_rng = 1; ///< Number of threads for which RNGs are allocated.
@@ -141,13 +105,13 @@ static int g_max_omp_threads_for_rng = 1; ///< Number of threads for which RNGs 
 // =========================================================================
 // PERSISTENT SORT BUFFER CONFIGURATION
 // =========================================================================
-// 
+//
 // The simulation exclusively uses a persistent global buffer (`g_sort_columns_buffer`)
-// for particle data transposition during sorting operations. This strategy 
+// for particle data transposition during sorting operations. This strategy
 // minimizes memory allocation/deallocation overhead.
 
 /** Global persistent buffer for particle data transposition during sorting. */
-static double **g_sort_columns_buffer = NULL; 
+static double **g_sort_columns_buffer = NULL;
 /** Number of particles the persistent buffer was allocated for; updated if npts changes. */
 static int g_sort_columns_buffer_npts = 0;
 
@@ -160,11 +124,11 @@ static gsl_interp_accel *g_nfw_enclosedmass_accel_for_force = NULL;
 // PARALLEL SORT ALGORITHM CONFIGURATION
 // =========================================================================
 // Constants controlling the behavior of parallel sorting algorithms.
-// These parameters tune the parallel sorting operations used when 
+// These parameters tune the parallel sorting operations used when
 // OpenMP is available, affecting the partitioning of data across threads
 // and the overlap required for correct merging of sorted sections.
 
-/** 
+/**
  * Default number of sections when OpenMP is unavailable or reports few threads.
  * Provides a baseline level of partitioning even in limited thread environments.
  */
@@ -182,7 +146,7 @@ static const int PARALLEL_SORT_SECTIONS_PER_THREAD = 2;
  */
 static const int PARALLEL_SORT_OVERLAP_DIVISOR = 8;
 
-/** 
+/**
  * Minimum required overlap between adjacent sort sections (in elements).
  * This ensures sufficient overlap for correct merging of sorted sections,
  * even with sparse data distributions and when calculated proportional
@@ -266,83 +230,6 @@ void get_suffixed_filename(const char *base_filename, int with_suffix, char *buf
 #ifndef MYBINIO_H
 #define MYBINIO_H
 #endif
-
-/**
- * @brief Writes a formatted message to the log file with timestamp and severity level.
- *
- * Parameters
- * ----------
- * level : const char*
- *     Severity level (e.g., "INFO", "WARNING", "ERROR").
- * format : const char*
- *     Printf-style format string.
- * ... :
- *     Variable arguments for the format string.
- *
- * Returns
- * -------
- * None
- *
- * @note Creates the "log" directory if it doesn't exist.
- * @warning Prints an error to stderr if the log file cannot be opened.
- *          Logging only occurs if the global `g_enable_logging` flag is set.
- * @see g_enable_logging
- */
-// Forward declaration of global logging flag
-extern int g_enable_logging;
-
-void log_message(const char *level, const char *format, ...)
-{
-    // Only write to log file if logging is enabled
-    if (g_enable_logging)
-    {
-        // Create log directory if it doesn't exist
-        struct stat st = {0};
-        if (stat("log", &st) == -1)
-        {
-#if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
-            mkdir("log"); // Windows
-#else
-            mkdir("log", 0755); // Unix-like systems
-#endif
-        }
-
-        // Always use a single log file regardless of file suffix
-        const char *log_filename = "log/nsphere.log";
-
-        FILE *logfile = fopen(log_filename, "a");
-        if (logfile)
-        {
-            time_t now;
-            time(&now);
-            char timestamp[64];
-            strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&now));
-
-            // Include file suffix in log entries if available
-            if (g_file_suffix[0] != '\0')
-            {
-                fprintf(logfile, "[%s] [%s] [%s] ", timestamp, level, g_file_suffix);
-            }
-            else
-            {
-                fprintf(logfile, "[%s] [%s] ", timestamp, level);
-            }
-
-            va_list args;
-            va_start(args, format);
-            vfprintf(logfile, format, args);
-            va_end(args);
-
-            fprintf(logfile, "\n");
-            fclose(logfile);
-        }
-        else
-        {
-            // Print an error message to stderr if the log file cannot be opened
-            fprintf(stderr, "Warning: Failed to open log file '%s'\n", log_filename);
-        }
-    }
-}
 
 /**
  * @brief Formats a byte count into a human-readable string with appropriate units.
@@ -450,9 +337,7 @@ int g_enable_logging = 0;    ///< Enable logging to file (controlled by `--log` 
 int g_enable_sidm_scattering = 0;    ///< Enable SIDM scattering physics (0=no, 1=yes). Default is OFF.
 int g_sidm_execution_mode = 1;       ///< SIDM execution mode: 0 for serial, 1 for parallel (default).
 long long g_total_sidm_scatters = 0; ///< Global counter for total SIDM scatters.
-static double g_sidm_kappa = 50.0;           ///< SIDM opacity kappa (cm^2/g), default 50.0.
-static int    g_sidm_kappa_provided = 0;     ///< Flag: 1 if `--sidm-kappa` was given by the user.
-static int *g_particle_scatter_state = NULL; ///< Tracks recent scatter history for Adams-Bashforth integrator state reset. Indexed by original particle ID. 0=normal AB, 1=just scattered (use AB1-like step), 2=one step after scatter (use AB2-like step).
+int g_sidm_kappa_provided = 0;     ///< Flag: 1 if `--sidm-kappa` was given by the user.
 
 // Seed Management Globals
 static unsigned long int g_master_seed = 0;         ///< Master seed for the simulation, if provided.
@@ -460,11 +345,12 @@ static unsigned long int g_initial_cond_seed = 0;   ///< Seed used for generatin
 static unsigned long int g_sidm_seed = 0;           ///< Seed used for SIDM calculations.
 static int g_master_seed_provided = 0;              ///< Flag: 1 if `--master-seed` was given by the user.
 static int g_initial_cond_seed_provided = 0;        ///< Flag: 1 if `--init-cond-seed` was given by the user.
-static int g_sidm_seed_provided = 0;                ///< Flag: 1 if `--sidm-seed` was given by the user.
+int g_sidm_seed_provided = 0;                ///< Flag: 1 if `--sidm-seed` was given by the user.
+
 static int g_attempt_load_seeds = 0;                ///< Flag: 1 if we should try to load seeds from files if not provided.
 
 static const char* g_initial_cond_seed_filename_base = "data/last_initial_seed"; ///< Base name for IC seed file.
-static const char* g_sidm_seed_filename_base = "data/last_sidm_seed";             ///< Base name for SIDM seed file.
+const char* g_sidm_seed_filename_base = "data/last_sidm_seed";             ///< Base name for SIDM seed file.
 
 // Profile parameter macros used by profile variables
 #define RC 100.0                  ///< Core radius in kpc.
@@ -1450,11 +1336,11 @@ static void errorAndExit(const char *msg, const char *arg, const char *prog)
 
 /**
  * @brief Compact data structure for particle properties used in sorting and analysis.
- * @details Contains essential physical properties (radial position, velocity, 
+ * @details Contains essential physical properties (radial position, velocity,
  *          angular momentum) and tracking metadata (rank, original index) for each
  *          particle in the simulation. Used extensively for sorting, file I/O, and
  *          data analysis operations.
- * 
+ *
  * @note Uses compact `float` types for physical quantities to reduce memory usage
  *       when processing large particle counts.
  * @note The `rank` field is assigned during radial sorting, while `original_index`
@@ -2704,7 +2590,7 @@ int fprintf_bin(FILE *fp, const char *format, ...)
         if (*p == '%')
         {
             p++; // Move past '%'
-            
+
             // Skip format modifiers until we find a type specifier
             while (*p && !strchr("dfge", *p) && !(*p == 'l'))
             {
@@ -2775,7 +2661,7 @@ int fscanf_bin(FILE *fp, const char *format, ...)
         if (*p == '%')
         {
             p++; // Move past '%'
-            
+
             // Skip format modifiers until we reach a type specifier
             while (*p && !strchr("dfge", *p) && !(*p == 'l'))
             {
@@ -2942,16 +2828,16 @@ static void reassign_orig_ids_with_rank(double *orig_ids, int n)
         fprintf(stderr, "Error: Memory allocation failed in reassign_orig_ids_with_rank\n");
         exit(1);
     }
-    
+
     // Step 1: Copy original IDs to temporary array
     for (int i = 0; i < n; i++)
     {
         temp[i] = orig_ids[i];
     }
-    
+
     // Step 2: Sort temporary array to establish rank order
     qsort(temp, n, sizeof(double), double_cmp);
-    
+
     // Step 3: Find rank of each original ID using binary search
     for (int i = 0; i < n; i++)
     {
@@ -2978,7 +2864,7 @@ static void reassign_orig_ids_with_rank(double *orig_ids, int n)
             // Use insertion point as fallback if exact match not found
             rank = low;
         }
-        
+
         // Step 4: Replace original ID with its rank
         orig_ids[i] = (double)rank;
     }
@@ -3291,8 +3177,8 @@ void direct_gaussian_convolution(
         for (int j = 0; j < grid_size; j++)
         {
             double dlog_r = log_r_grid[i] - log_r_grid[j];
-            double kernel = (sigma_log > 1e-15) ? 
-                (kernel_norm_factor * exp(-0.5 * dlog_r * dlog_r * sig_sq_inv)) : 
+            double kernel = (sigma_log > 1e-15) ?
+                (kernel_norm_factor * exp(-0.5 * dlog_r * dlog_r * sig_sq_inv)) :
                 ((i == j) ? 1.0 : 0.0); // Delta function if sigma=0
 
             sum += density_grid[j] * kernel;
@@ -3656,7 +3542,7 @@ static int find_last_processed_snapshot(int *snapshot_steps, int noutsnaps)
  *          3. Executes the selected integration method for trajectory evolution
  *          4. Outputs data products (particle states, phase diagrams, energy tracking)
  *          5. Handles restart/resume functionality when requested
- *          
+ *
  * Parameters
  * ----------
  * argc : int
@@ -3686,7 +3572,7 @@ int compare_by_rr(const void *a, const void *b);
 
 /**
  * @brief Check if an array is strictly monotonically increasing.
- * 
+ *
  * @param arr Array to check
  * @param n Number of elements
  * @param name Name of the array for debug messages
@@ -3696,7 +3582,7 @@ static int check_strict_monotonicity(const double *arr, int n, const char *name)
     int i;
     for (i = 1; i < n; i++) {
         if (arr[i] <= arr[i-1]) {
-            fprintf(stderr, "MONOTONICITY_CHECK FAILED for '%s': arr[%d]=%.17e <= arr[%d]=%.17e\n", 
+            fprintf(stderr, "MONOTONICITY_CHECK FAILED for '%s': arr[%d]=%.17e <= arr[%d]=%.17e\n",
                        name, i, arr[i], i-1, arr[i-1]);
             fflush(stderr);
             // Print a few surrounding values for context
@@ -3712,14 +3598,14 @@ static int check_strict_monotonicity(const double *arr, int n, const char *name)
 
 /**
  * @brief Handles the SIDM scattering phase for a single timestep.
- * @details Checks if SIDM is enabled and if not in a bootstrap phase that should skip SIDM. 
- *          If proceeding, it resets particle scatter flags, selects serial or parallel execution 
- *          based on `g_sidm_execution_mode`, calls the appropriate core scattering function 
- *          (`perform_sidm_scattering_serial` or `perform_sidm_scattering_parallel`), 
+ * @details Checks if SIDM is enabled and if not in a bootstrap phase that should skip SIDM.
+ *          If proceeding, it resets particle scatter flags, selects serial or parallel execution
+ *          based on `g_sidm_execution_mode`, calls the appropriate core scattering function
+ *          (`perform_sidm_scattering_serial` or `perform_sidm_scattering_parallel`),
  *          updates the global total scatter count, and logs debug information if scatters occurred
  *          and debugging is enabled. The core scattering functions are responsible for updating
  *          the `g_particle_scatter_state` flags for particles that underwent scattering.
- * 
+ *
  * @param particles         [in,out] The main particle data array: `particles[component][current_sorted_index]`.
  *                              Modified in-place with post-scattering velocities/angular momenta.
  * @param npts              [in] Total number of particles.
@@ -3731,13 +3617,13 @@ static int check_strict_monotonicity(const double *arr, int n, const char *name)
  * @param bootstrap_phase_active [in] Flag (0 or 1) indicating if a bootstrap phase (e.g., for Adams-Bashforth)
  *                               is active. If 1, SIDM scattering is skipped for this step.
  * @note This function modifies the `particles` array in-place.
- * @note It uses global variables: `g_enable_sidm_scattering`, `g_sidm_execution_mode`, 
+ * @note It uses global variables: `g_enable_sidm_scattering`, `g_sidm_execution_mode`,
  *       `g_rng_per_thread`, `g_max_omp_threads_for_rng`, `g_rng`, `g_total_sidm_scatters`,
  *       `g_active_halo_mass`, `g_doDebug`, and `g_particle_scatter_state`.
  */
-static void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time, 
-                             double active_profile_rc, int current_method_display_num, 
-                             int bootstrap_phase_active) 
+void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time,
+                             double active_profile_rc, int current_method_display_num,
+                             int bootstrap_phase_active)
 {
     if (!g_enable_sidm_scattering || bootstrap_phase_active) {
         return; // Skip SIDM if disabled or in a bootstrap phase that should skip SIDM
@@ -3748,8 +3634,8 @@ static void handle_sidm_step(double **particles, int npts, double dt, double cur
     if (g_sidm_execution_mode == 1) { // Parallel
         #ifdef _OPENMP
             if (g_rng_per_thread != NULL && g_max_omp_threads_for_rng > 0) {
-                perform_sidm_scattering_parallel(particles, npts, dt, current_sim_time, 
-                                               g_rng_per_thread, g_max_omp_threads_for_rng, 
+                perform_sidm_scattering_parallel(particles, npts, dt, current_sim_time,
+                                               g_rng_per_thread, g_max_omp_threads_for_rng,
                                                &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
             } else {
                 log_message("ERROR", "SIDM Parallel mode selected but per-thread RNGs not available. Skipping SIDM for step.");
@@ -3777,11 +3663,11 @@ static void handle_sidm_step(double **particles, int npts, double dt, double cur
             Nscatters_in_this_step = 0;
         }
     }
-    
+
     g_total_sidm_scatters += Nscatters_in_this_step;
-    
+
     if (Nscatters_in_this_step > 0 && g_doDebug) {
-        log_message("DEBUG", "Method %d Step: %lld SIDM scatters this step, %lld total", 
+        log_message("DEBUG", "Method %d Step: %lld SIDM scatters this step, %lld total",
                     current_method_display_num, Nscatters_in_this_step, g_total_sidm_scatters);
     }
 }
@@ -3829,21 +3715,21 @@ long long get_available_disk_space(const char *path) {
  */
 int prompt_yes_no(const char *prompt) {
     int response;
-    
+
     while (1) {
         printf("%s [y/N]: ", prompt);
         fflush(stdout);
-        
+
         // Read entire line
         char buffer[256];
         if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
             // EOF or error - treat as 'N'
             return 0;
         }
-        
+
         // Check first character
         response = buffer[0];
-        
+
         if (response == 'y' || response == 'Y') {
             return 1;
         } else if (response == 'n' || response == 'N' || response == '\n') {
@@ -3876,7 +3762,7 @@ int prompt_yes_no(const char *prompt) {
  *          9. Writes final summary plots and theoretical profiles.
  *          10. Cleans up allocated resources.
  *          Handles restart/resume functionality by checking for existing data products.
- * 
+ *
  * @param argc [in] Standard argument count from the command line.
  * @param argv [in] Standard array of argument strings from the command line.
  * @return int Exit code: 0 for successful execution, non-zero for errors.
@@ -3905,7 +3791,7 @@ printf("  \n");
     // Set OpenMP to use maximum available thread parallelism
     omp_set_num_threads(max_threads);
 
-    printf("OpenMP Status: ENABLED (%d logical processors, using %d threads)\n", 
+    printf("OpenMP Status: ENABLED (%d logical processors, using %d threads)\n",
            num_processors, max_threads);
     printf("\n\n");
 
@@ -3918,7 +3804,7 @@ printf("  \n");
     printf("For better performance, please install OpenMP and recompile with -fopenmp flag.\n\n\n");
 
     log_message("WARNING", "OpenMP not available - running in single-threaded mode");
-    
+
     // Check if --help flag is used (don't delay in that case)
     int help_requested = 0;
     for (int i = 1; i < argc; i++) {
@@ -3927,7 +3813,7 @@ printf("  \n");
             break;
         }
     }
-    
+
     // Add a delay to ensure the warning is noticed, but only when not showing help
     if (!help_requested) {
         printf("Continuing in single-threaded mode");
@@ -4468,10 +4354,10 @@ printf("  \n");
 
     // Set the single g_active_halo_mass for N-body forces and tdyn from the finalized g_halo_mass_param
     g_active_halo_mass = g_halo_mass_param;
-    
+
     /** @note Display final parameter values used for the simulation run. */
     printf("Parameter values requested:\n\n");
-    
+
     printf("  Number of Particles:          %d\n", npts);
     printf("  Number of Time Steps:         %d\n", Ntimes);
     printf("  Number of Dynamical Times:    %d\n", tfinal_factor);
@@ -4501,7 +4387,7 @@ printf("  \n");
     printf("  SIDM Scattering:              %s\n", g_enable_sidm_scattering ? "Enabled via --sidm" : "Disabled (Default)");
     printf("  SIDM Execution Mode:          %s\n", g_sidm_execution_mode == 1 ? "Parallel (Default)" : "Serial");
     printf("  SIDM Opacity Kappa:           %.1f cm^2/g (Default: 50.0, User set: %s)\n", g_sidm_kappa, g_sidm_kappa_provided ? "Yes" : "No");
-    
+
     printf("  Initial Conditions Profile:   %s\n", g_use_nfw_profile ? "NFW-like with Cutoff" : "Cored Plummer-like");
     if (g_use_nfw_profile) {
         printf("    NFW Profile Scale Radius (IC): %.3f kpc (NFW Default: %.2f, User set via --scale-radius: %s)\n", g_nfw_profile_rc, RC_NFW_DEFAULT, g_scale_radius_param_provided ? "Yes" : "No");
@@ -4514,13 +4400,13 @@ printf("  \n");
         printf("    Cored Profile Halo Mass (IC): %.3e Msun (Cored Default: %.2e, User set via --halo-mass: %s)\n", g_cored_profile_halo_mass, HALO_MASS, g_halo_mass_param_provided ? "Yes" : "No");
     }
     printf("    Profile Cutoff Factor:      %.1f (CmdLine/Default: %.1f, User set: %s)\n", g_cutoff_factor_param, (g_use_nfw_profile ? CUTOFF_FACTOR_NFW_DEFAULT : CUTOFF_FACTOR_CORED_DEFAULT), g_cutoff_factor_param_provided ? "Yes" : "No");
-    
+
     if (g_use_nfw_profile) {
         printf("    NFW Profile Falloff Factor (C): %.1f (NFW Default: %.1f, User set via --falloff-factor: %s)\n", g_nfw_profile_falloff_factor, FALLOFF_FACTOR_NFW_DEFAULT, g_falloff_factor_param_provided ? "Yes" : "No");
     }
     // This g_active_halo_mass is now correctly set from g_halo_mass_param which reflects the chosen profile's mass
     printf("  N-body Active Halo Mass (tdyn): %.3e Msun\n", g_active_halo_mass);
-    
+
     /** @note Display logging status based on g_enable_logging flag. */
     if (g_enable_logging)
     {
@@ -4771,7 +4657,7 @@ printf("  \n");
     double result, error;               ///< GSL integration results
     double calE;                        ///< Energy value for calculations
     gsl_integration_workspace *w = NULL; ///< GSL integration workspace
-    
+
     // Common spline objects and accelerators
     gsl_spline *splinemass = NULL;      ///< Spline for mass profile M(r)
     gsl_interp_accel *enclosedmass = NULL; ///< Accelerator for mass spline
@@ -4781,7 +4667,7 @@ printf("  \n");
     gsl_interp_accel *rofPsiinterp = NULL; ///< Accelerator for r(Psi) spline
     gsl_interp *g_main_fofEinterp = NULL;  ///< Main f(E) interpolator
     gsl_interp_accel *g_main_fofEacc = NULL; ///< Accelerator for f(E)
-    
+
     // Common data arrays
     double *radius = NULL;              ///< Radial grid points
     double *mass = NULL;                ///< Mass values at radial points
@@ -4790,17 +4676,17 @@ printf("  \n");
     double *Evalues = NULL;             ///< Energy grid points
     double *innerintegrandvalues = NULL; ///< f(E) integrand values
     double *radius_monotonic_grid_nfw = NULL; ///< Monotonic radial grid for NFW calculations
-    
+
     // Key scalar values
     double Psimin = 0.0;                ///< Minimum potential (at rmax)
     double Psimax = 0.0;                ///< Maximum potential (at r=0)
     double rmax = 0.0;                  ///< Maximum radius for profile calculations
     int num_points = 0;                 ///< Number of points for spline interpolation
-    
+
     // File handling
     char fname[256];                    ///< Buffer for file names
     FILE *fp;                           ///< File pointer for data output
-    
+
     /**
      * @brief Allocate main particle data array before profile selection.
      * @details This ensures both NFW and Cored pathways use the same particles array.
@@ -4817,7 +4703,7 @@ printf("  \n");
             CLEAN_EXIT(1);
         }
     }
-    
+
     /**
      * @brief Initialize random number generator for particle generation.
      * @details Sets up the GSL Random Number Generator environment and allocates
@@ -4831,7 +4717,7 @@ printf("  \n");
         fprintf(stderr, "Error allocating GSL RNG.\n");
         CLEAN_EXIT(1);
     }
-    
+
     // Seed the global g_rng (used for ICs and Serial SIDM)
     gsl_rng_set(g_rng, g_initial_cond_seed);       // Use the determined IC seed for g_rng
     log_message("INFO", "Global g_rng (intended primarily for IC generation) seeded with %lu", g_initial_cond_seed);
@@ -4851,7 +4737,7 @@ printf("  \n");
     }
 
     const gsl_rng_type *T_rng_thread = gsl_rng_default;
-    
+
     for (int i_rng = 0; i_rng < g_max_omp_threads_for_rng; ++i_rng) {
         g_rng_per_thread[i_rng] = gsl_rng_alloc(T_rng_thread);
         if (g_rng_per_thread[i_rng] == NULL) {
@@ -4863,7 +4749,7 @@ printf("  \n");
         gsl_rng_set(g_rng_per_thread[i_rng], g_sidm_seed + (unsigned long int)i_rng);
     }
     log_message("INFO", "Initialized %d per-thread GSL RNGs (for SIDM) using base SIDM seed %lu", g_max_omp_threads_for_rng, g_sidm_seed);
-    
+
     if (g_use_nfw_profile) {
         log_message("INFO", "Starting IC generation using NFW-like profile pathway.");
         log_message("INFO", "Generating Initial Conditions using NFW-like profile with its specific numerics...");
@@ -4896,7 +4782,7 @@ printf("  \n");
                         log_message("ERROR", "Failed to allocate GSL workspace for NFW diagnostic");
                         continue;
                     }
-                    
+
                     double result_diag, error_diag;
                     double normalization_diag;
 
@@ -4950,8 +4836,8 @@ printf("  \n");
                         free(radius_diag_arr);
                         continue;
                     }
-                    
-                    mass_diag_arr[0] = 0.0; 
+
+                    mass_diag_arr[0] = 0.0;
                     radius_diag_arr[0] = 0.0;
                     for (int k = 1; k < num_points_diag; k++) {
                         double r_k = (double)k * rmax_diag / (num_points_diag - 1.0);
@@ -5015,8 +4901,8 @@ printf("  \n");
                     Psiinterp_diag = gsl_interp_accel_alloc();
                     splinePsi_diag = gsl_spline_alloc(gsl_interp_cspline, num_points_diag);
                     gsl_spline_init(splinePsi_diag, radius_diag_arr, Psivalues_diag_arr, num_points_diag);
-                    
-                    
+
+
                     // Write potential profile diagnostic file
                     char diag_fname_psi[256];
                     char diag_base_psi[128];
@@ -5034,7 +4920,7 @@ printf("  \n");
                     } else {
                         log_message("ERROR", "Failed to open diagnostic file: %s", diag_fname_psi);
                     }
-                    
+
                     // --- 4. r(Psi) spline for NFW Diagnostic ---
                     struct RrPsiPair *temp_pairs_npsi_nfw_diag = (struct RrPsiPair *)malloc(num_points_diag * sizeof(struct RrPsiPair));
                     if(!temp_pairs_npsi_nfw_diag) {
@@ -5076,9 +4962,9 @@ printf("  \n");
                         goto cleanup_diag_iteration;
                     }
 
-                    Evalues_diag_arr[0] = Psimin_diag; 
+                    Evalues_diag_arr[0] = Psimin_diag;
                     innerintegrandvalues_diag_arr[0] = 0.0;
-                    gsl_function F_fE_nfw_diag; 
+                    gsl_function F_fE_nfw_diag;
                     F_fE_nfw_diag.function = &fEintegrand_nfw;
 
                     for (int k = 1; k <= num_points_diag; k++) {
@@ -5097,8 +4983,8 @@ printf("  \n");
                         F_fE_nfw_diag.params = &params_fE_nfw_diag;
                         double t_upper_diag = sqrt(fmax(0.0, calE_diag - Psimin_diag));
                         double t_lower_diag = (t_upper_diag > 1e-9) ? t_upper_diag / 1.0e4 : 0.0;
-                        if (t_lower_diag >= t_upper_diag - 1e-12) { 
-                            result_diag = 0.0; 
+                        if (t_lower_diag >= t_upper_diag - 1e-12) {
+                            result_diag = 0.0;
                         } else {
                             gsl_integration_qag(&F_fE_nfw_diag, t_lower_diag, t_upper_diag, 1e-8, 1e-8,
                                                 Nintegration_diag, GSL_INTEG_GAUSS61, w_diag, &result_diag, &error_diag);
@@ -5113,7 +4999,7 @@ printf("  \n");
                         goto cleanup_diag_iteration;
                     }
                     gsl_interp_init(fofEinterp_diag, Evalues_diag_arr, innerintegrandvalues_diag_arr, num_points_diag + 1);
-                    
+
                     // Write f(E) diagnostic file
                     char diag_fname_fofe[256];
                     char diag_base_fofe[128];
@@ -5152,12 +5038,12 @@ printf("  \n");
                             current_diag_rc, nfw_params_diag[2], current_diag_falloff_C,
                             Psimin_diag, Psimax_diag
                         };
-                        
+
                         for (int k_int = 0; k_int < num_points_diag; k_int++) {
                             double t_diag_int = sqrt(fmax(0.0, calE_for_integrand - Psimin_diag)) * ((double)k_int) / ((double)num_points_diag);
                             fprintf_bin(fp_diag_int, "%f %f\n", t_diag_int, fEintegrand_nfw(t_diag_int, &params_int_nfw));
                         }
-                        
+
                         fclose(fp_diag_int);
                         log_message("DEBUG", "Wrote diagnostic file: %s", diag_fname_integrand);
                     } else {
@@ -5227,7 +5113,7 @@ printf("  \n");
                             double drhodr_val_k = drhodr_profile_nfwcutoff(rr_k, current_diag_rc, nfw_params_diag[2], current_diag_falloff_C);
                             double Menc_k = gsl_spline_eval(splinemass_diag, rr_k, enclosedmass_diag);
                             double dPsidr_mag_k = (G_CONST * Menc_k) / (rr_k * rr_k);
-                            
+
                             if (fabs(dPsidr_mag_k) > 1e-30) {
                                 double Psi_val_k = evaluatespline(splinePsi_diag, Psiinterp_diag, rr_k);
                                 double drho_dPsi_val_k = drhodr_val_k / dPsidr_mag_k;
@@ -5239,7 +5125,7 @@ printf("  \n");
                     } else {
                         log_message("ERROR", "Failed to open diagnostic file: %s", diag_fname_drhodpsi);
                     }
-                    
+
                     log_message("DEBUG", "Finished diagnostic iteration %d, spline_base=%d", Nintegration_diag, Nspline_diag_base);
 
                     // --- Cleanup for NFW Diagnostic Iteration ---
@@ -5253,12 +5139,12 @@ cleanup_diag_iteration:
                     if(rofPsiinterp_diag) gsl_interp_accel_free(rofPsiinterp_diag);
                     if(fofEinterp_diag) gsl_interp_free(fofEinterp_diag);
                     if(fofEacc_diag) gsl_interp_accel_free(fofEacc_diag);
-                    free(mass_diag_arr); 
-                    free(radius_diag_arr); 
+                    free(mass_diag_arr);
+                    free(radius_diag_arr);
                     free(radius_for_rofPsi_diag_arr);
-                    free(Psivalues_diag_arr); 
+                    free(Psivalues_diag_arr);
                     free(nPsivalues_diag_arr);
-                    free(Evalues_diag_arr); 
+                    free(Evalues_diag_arr);
                     free(innerintegrandvalues_diag_arr);
                 } // end Nspline_diag_base loop
             } // end Nintegration_diag loop
@@ -5266,13 +5152,13 @@ cleanup_diag_iteration:
         } // end if(g_doDebug) for NFW diagnostic loop
 
         // NFW PROFILE IC GENERATION PATHWAY
-        
+
         /**
          * @brief NFW-specific theoretical calculation for initial conditions.
          * @details Calculates mass profile, potential, and distribution function
          *          for the NFW-like profile with power-law cutoff.
          */
-        
+
         // Re-establish main NFW calc parameters for the main calculation
         double current_profile_rc = g_nfw_profile_rc;
         double current_profile_halo_mass = g_nfw_profile_halo_mass;
@@ -5282,51 +5168,51 @@ cleanup_diag_iteration:
         num_points = 100000; // Main NFW calculation's num_points
         int num_maxv2f = 1000; // Resolution for velocity envelope calculation only
         rmax = current_profile_rmax_norm_factor * current_profile_rc; // Main NFW rmax
-        
+
         // Local variables for NFW pathway
         double nfw_result, nfw_error;
         double nfw_calE;
         int i_nfw;
-        
+
         // Set NFW-specific parameters from generalized profile parameters
         g_nfw_profile_rc = g_scale_radius_param;
         g_nfw_profile_halo_mass = g_halo_mass_param;
         g_nfw_profile_rmax_norm_factor = g_cutoff_factor_param;
-        
+
         // Update current_profile_* variables with new values
         current_profile_rc = g_nfw_profile_rc;
         current_profile_halo_mass = g_nfw_profile_halo_mass;
         current_profile_rmax_norm_factor = g_nfw_profile_rmax_norm_factor;
         current_profile_falloff_C = g_nfw_profile_falloff_factor;
-        
+
         // Set numerical parameters for NFW
         num_points = 100000;  // Conservative default for NFW
         rmax = current_profile_rmax_norm_factor * current_profile_rc;
-        
+
         // Allocate GSL workspace
         w = gsl_integration_workspace_alloc(1000);
         if (!w) {
             fprintf(stderr, "NFW_PATH: Failed to allocate GSL workspace\n");
             CLEAN_EXIT(1);
         }
-        
+
         // Prepare mass integrand function
         gsl_function F_nfw_calc;
         F_nfw_calc.function = &massintegrand_profile_nfwcutoff;
-        
+
         // Prepare parameters for NFW mass integrand: [rc, halo_mass, nt_nfw, falloff_factor]
         double nfw_params[4]; // Parameters for NFW mass integrand function
         nfw_params[0] = current_profile_rc;
         nfw_params[1] = current_profile_halo_mass; // Target total halo mass
-        nfw_params[2] = 1.0; // Initial guess for nt_nfw normalization scaler  
+        nfw_params[2] = 1.0; // Initial guess for nt_nfw normalization scaler
         nfw_params[3] = current_profile_falloff_C; // Falloff transition factor C
         F_nfw_calc.params = nfw_params;
-        
+
         // Calculate normalization for NFW profile
-        int status_norm = gsl_integration_qag(&F_nfw_calc, 0.0, rmax, 1e-12, 1e-12, 1000, 
+        int status_norm = gsl_integration_qag(&F_nfw_calc, 0.0, rmax, 1e-12, 1e-12, 1000,
                             GSL_INTEG_GAUSS51, w, &nfw_result, &nfw_error);
         normalization = nfw_result;
-        
+
         if (g_doDebug) {
             log_message("DEBUG", "Initial normalization integral (int r^2 * rho_guess dr):");
             log_message("DEBUG", "  rmax_for_norm_integral = %.3e kpc (factor=%.1f * rc=%.3f)", rmax, current_profile_rmax_norm_factor, current_profile_rc);
@@ -5335,15 +5221,15 @@ cleanup_diag_iteration:
             log_message("DEBUG", "  Raw norm_integral_error_est = %.6e", nfw_error);
             log_message("DEBUG", "  Final 'normalization' variable = %.6e", normalization);
         }
-        
+
         if (normalization <= 1e-30) {
             fprintf(stderr, "NFW_PATH: Normalization is zero or negative (%.3e). Exiting.\n", normalization);
             CLEAN_EXIT(1);
         }
-        
+
         // Update nt_nfw with proper normalization
         nfw_params[2] = current_profile_halo_mass / (4.0 * M_PI * normalization);
-        
+
         if (g_doDebug) {
             log_message("DEBUG", "Calculated nt_nfw (density scale factor):");
             log_message("DEBUG", "  current_profile_halo_mass (target M_total) = %.3e Msun", current_profile_halo_mass);
@@ -5352,10 +5238,10 @@ cleanup_diag_iteration:
                 log_message("WARNING", "nt_nfw is NaN, Inf, or extremely small/large: %.6e", nfw_params[2]);
             }
         }
-        
+
         log_message("INFO", "NFW Profile: RC=%.3f kpc, Halo Mass=%.3e Msun, Rmax_norm_calc=%.3f kpc, nt_nfw_scaler=%.6e",
                current_profile_rc, current_profile_halo_mass, rmax, nfw_params[2]);
-        
+
         /**
          * @brief Calculate mass profile M(r) for NFW.
          */
@@ -5366,23 +5252,23 @@ cleanup_diag_iteration:
             fprintf(stderr, "NFW_PATH: Failed to allocate mass/radius arrays\n");
             CLEAN_EXIT(1);
         }
-        
+
         mass[0] = 0.0;
         radius[0] = 0.0;                                  // For the y-values of r(Psi) spline later
         radius_monotonic_grid_nfw[0] = 0.0;             // For x-axes of M(r), Psi(r), maxv2f(r)
-        
-        
+
+
         for (i_nfw = 1; i_nfw < num_points; i_nfw++) {
             double r_current = (double)i_nfw * rmax / (num_points - 1);
             if (i_nfw == num_points - 1) r_current = rmax; // Ensure exact endpoint
-            
+
             gsl_integration_qag(&F_nfw_calc, 0.0, r_current, 1e-12, 1e-12,
                                 1000, GSL_INTEG_GAUSS51, w, &nfw_result, &nfw_error);
             mass[i_nfw] = 4.0 * M_PI * nfw_result;
             radius[i_nfw] = r_current; // This 'radius' array will be sorted with nPsivalues
             radius_monotonic_grid_nfw[i_nfw] = r_current; // This 'radius_monotonic_grid_nfw' stays sorted by r
         }
-        
+
         if (g_doDebug) {
             log_message("DEBUG", "M(r) spline data summary (num_points=%d):", num_points);
             log_message("DEBUG", "  Target M_total for sampling = %.3e Msun", current_profile_halo_mass);
@@ -5396,7 +5282,7 @@ cleanup_diag_iteration:
             }
             log_message("DEBUG", "End of M(r) data summary.");
         }
-        
+
         // Create mass spline
         enclosedmass = gsl_interp_accel_alloc();
         splinemass = gsl_spline_alloc(gsl_interp_cspline, num_points);
@@ -5405,7 +5291,7 @@ cleanup_diag_iteration:
             CLEAN_EXIT(1);
         }
         gsl_spline_init(splinemass, radius_monotonic_grid_nfw, mass, num_points);
-        
+
         // Write generic mass profile for plotting script
         if (g_doDebug) {
             fp = fopen("data/massprofile.dat", "wb");
@@ -5417,7 +5303,7 @@ cleanup_diag_iteration:
                 fclose(fp);
             }
         }
-        
+
         /**
          * @brief Calculate gravitational potential Psi(r) for NFW.
          */
@@ -5427,20 +5313,20 @@ cleanup_diag_iteration:
             fprintf(stderr, "NFW_PATH: Failed to allocate Psi arrays\n");
             CLEAN_EXIT(1);
         }
-        
+
         // Prepare Psiintegrand parameters for NFW
         Psiintegrand_params psi_params_nfw;
         psi_params_nfw.massintegrand_func = &massintegrand_profile_nfwcutoff;
         psi_params_nfw.params_for_massintegrand = nfw_params;
-        
+
         gsl_function F_for_psi_nfw;
         F_for_psi_nfw.function = &Psiintegrand;
         F_for_psi_nfw.params = &psi_params_nfw;
-        
+
         for (i_nfw = 0; i_nfw < num_points; i_nfw++) {
             double r_current = radius[i_nfw];
             double r1_psi = fmax(r_current, current_profile_rc / 1000000.0);
-            
+
             gsl_integration_qagiu(&F_for_psi_nfw, r1_psi, 1e-12, 1e-12,
                                   1000, w, &nfw_result, &nfw_error);
             double first_term_psi = G_CONST * gsl_spline_eval(splinemass, r1_psi, enclosedmass) / r1_psi;
@@ -5449,7 +5335,7 @@ cleanup_diag_iteration:
             Psivalues[i_nfw] = (first_term_psi + second_term_psi);
             nPsivalues[i_nfw] = -Psivalues[i_nfw];
         }
-        
+
         if (g_doDebug) {
             log_message("DEBUG", "Psi(r) and r(Psi) spline data summary (num_points=%d):", num_points);
             if (num_points > 1) {
@@ -5461,7 +5347,7 @@ cleanup_diag_iteration:
             }
             log_message("DEBUG", "End of Psi(r) data summary.");
         }
-        
+
         // Create Psi splines
         Psiinterp = gsl_interp_accel_alloc();
         splinePsi = gsl_spline_alloc(gsl_interp_cspline, num_points);
@@ -5470,7 +5356,7 @@ cleanup_diag_iteration:
             CLEAN_EXIT(1);
         }
         gsl_spline_init(splinePsi, radius_monotonic_grid_nfw, Psivalues, num_points);
-        
+
         // Write generic Psi profile for plotting script
         if (g_doDebug) {
             fp = fopen("data/Psiprofile.dat", "wb");
@@ -5482,7 +5368,7 @@ cleanup_diag_iteration:
                 fclose(fp);
             }
         }
-        
+
         // Create r(Psi) spline
         rofPsiinterp = gsl_interp_accel_alloc();
         splinerofPsi = gsl_spline_alloc(gsl_interp_cspline, num_points);
@@ -5490,7 +5376,7 @@ cleanup_diag_iteration:
             fprintf(stderr, "NFW_PATH: Failed to allocate r(Psi) spline\n");
             CLEAN_EXIT(1);
         }
-        
+
         // Use temporary copies for r(Psi) spline to preserve the original radius grid
         double *nPsivalues_for_rPsi_spline = (double *)malloc(num_points * sizeof(double));
         double *radius_values_for_rPsi_spline = (double *)malloc(num_points * sizeof(double));
@@ -5522,7 +5408,7 @@ cleanup_diag_iteration:
                 }
             }
         }
-        
+
         // Debug check for nPsivalues_for_rPsi_spline monotonicity
         if (g_doDebug) {
             int mono_violations_npsi = 0;
@@ -5538,47 +5424,47 @@ cleanup_diag_iteration:
 
         // Initialize splinerofPsi with the sorted temporary arrays
         gsl_spline_init(splinerofPsi, nPsivalues_for_rPsi_spline, radius_values_for_rPsi_spline, num_points);
-        
+
         // Free the temporary sorted copies
         free(nPsivalues_for_rPsi_spline);
         free(radius_values_for_rPsi_spline);
-        
+
         /**
          * @brief Calculate f(E) distribution function for NFW using Eddington's formula.
          */
         Psimin = Psivalues[num_points - 1];
         Psimax = Psivalues[0];
-        
+
         if (g_doDebug) {
             log_message("DEBUG", "Potential range for I(E) calculation: Psimin=%.6e, Psimax=%.6e", Psimin, Psimax);
             log_message("DEBUG", "Continuing with I(E) calculation.");
         }
-        
+
         if (Psimax <= Psimin) {
-            fprintf(stderr, "NFW_PATH: Potential not monotonic (Psimax=%.3e <= Psimin=%.3e)\n", 
+            fprintf(stderr, "NFW_PATH: Potential not monotonic (Psimax=%.3e <= Psimin=%.3e)\n",
                     Psimax, Psimin);
             CLEAN_EXIT(1);
         }
-        
+
         innerintegrandvalues = (double *)malloc((num_points + 1) * sizeof(double));
         Evalues = (double *)malloc((num_points + 1) * sizeof(double));
         if (!innerintegrandvalues || !Evalues) {
             fprintf(stderr, "NFW_PATH: Failed to allocate f(E) arrays\n");
             CLEAN_EXIT(1);
         }
-        
+
         // NFW uses conservative tolerance for f(E) integral
         F_nfw_calc.function = &fEintegrand_nfw;
-        
+
         innerintegrandvalues[0] = 0.0;
         Evalues[0] = Psimin;
-        
+
         // GSL integration status tracking
         int status_fE_nfw_local;
-        
+
         for (i_nfw = 1; i_nfw <= num_points; i_nfw++) {
             nfw_calE = Psimin + (Psimax - Psimin) * ((double)i_nfw) / ((double)num_points);
-            
+
             // Enforce strict monotonicity for Evalues
             if (i_nfw > 0 && nfw_calE <= Evalues[i_nfw-1]) {
                 // If current nfw_calE is not strictly greater than previous, add a tiny increment.
@@ -5598,9 +5484,9 @@ cleanup_diag_iteration:
                             nfw_calE, previous_E);
                 }
             }
-            
+
             // Create NFW-specific parameter structure
-            
+
             fE_integrand_params_NFW_t params_for_fE_integrand_nfw = {
                 nfw_calE,               // E_current_shell
                 splinerofPsi,           // spline_r_of_Psi (this is r_of_nPsi from nPsivalues)
@@ -5615,19 +5501,19 @@ cleanup_diag_iteration:
                 Psimax                  // Psimax_global
             };
             F_nfw_calc.params = &params_for_fE_integrand_nfw;
-            
+
             double E_current_shell = nfw_calE; // E for which I(E) is being computed
 
             // Integration will be over t_prime = sqrt(E_shell - Psi_true)
             // As Psi_true goes from Psimin_global to E_shell, t_prime goes from sqrt(E_shell - Psimin_global) down to 0.
             // So, integrate t_prime from 0 to sqrt(E_shell - Psimin_global).
-            
+
             double t_integration_upper_bound = sqrt(fmax(0.0, E_current_shell - Psimin));
             double t_integration_lower_bound;
 
             if (t_integration_upper_bound < 1e-9) { // If E_current_shell is very close to Psimin (or below)
                 t_integration_lower_bound = 0.0;
-                t_integration_upper_bound = 0.0; 
+                t_integration_upper_bound = 0.0;
             } else {
                 // Set a very small, but strictly positive, lower bound relative to the upper bound,
                 // or an absolute small number if t_upper_bound is itself very small.
@@ -5635,7 +5521,7 @@ cleanup_diag_iteration:
                 // The term 1/sqrt(E-Psi) in d(rho)/d(Psi) / sqrt(E-Psi) becomes 1/t when Psi = E-t^2.
                 // Our fEintegrand_nfw is 2 * d(rho)/d(Psi), so it does not have this explicit 1/t.
                 // Using t_upper_bound / 1.0e4 scaling for numerical consistency.
-                t_integration_lower_bound = t_integration_upper_bound / 1.0e4; 
+                t_integration_lower_bound = t_integration_upper_bound / 1.0e4;
                 // If t_integration_lower_bound becomes extremely small (e.g. < DBL_MIN), GSL might treat it as zero.
                 // Ensure it's at least some representable small positive number if t_upper_bound is positive.
                 if (t_integration_lower_bound == 0.0 && t_integration_upper_bound > 0.0) {
@@ -5643,13 +5529,13 @@ cleanup_diag_iteration:
                     if (t_integration_lower_bound == 0.0) t_integration_lower_bound = 1e-20; // Absolute floor
                 }
             }
-            
+
             // Ensure lower bound is strictly less than upper bound for GSL
             if (t_integration_lower_bound >= t_integration_upper_bound - 1e-12) { // Adjusted epsilon
                 t_integration_upper_bound = 0.0; // Force zero integration range
                 t_integration_lower_bound = 0.0;
             }
-            
+
             if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) ) {
                 log_message("DEBUG", "I(E) integral setup: E_shell=%.3e, Psimin=%.3e, integrating fEintegrand_nfw(t) from t_low=%.3e to t_high=%.3e",
                        E_current_shell, Psimin, t_integration_lower_bound, t_integration_upper_bound);
@@ -5657,7 +5543,7 @@ cleanup_diag_iteration:
 
             if (t_integration_upper_bound <= t_integration_lower_bound + 1e-10) { // If range is zero or too small
                 nfw_result = 0.0;
-                status_fE_nfw_local = GSL_SUCCESS; 
+                status_fE_nfw_local = GSL_SUCCESS;
                  if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) ) {
                     log_message("DEBUG", "NFEFE_INTEGRAL_SETUP: Skipping t-integration, range invalid/tiny (t_high=%.3e, t_low=%.3e)", t_integration_upper_bound, t_integration_lower_bound);
                  }
@@ -5665,18 +5551,18 @@ cleanup_diag_iteration:
                 status_fE_nfw_local = gsl_integration_qag(&F_nfw_calc, t_integration_lower_bound, t_integration_upper_bound,
                                     1e-8, 1e-8, 1000, GSL_INTEG_GAUSS61, // Using conservative GSL tolerances
                                     w, &nfw_result, &nfw_error);
-                                    
+
                 if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) ) {
                     log_message("DEBUG", "NFEFE_INTEGRAL_RESULT: I(E=%.3e) = %.6e, error=%.3e, status=%s",
-                           E_current_shell, nfw_result, nfw_error, 
+                           E_current_shell, nfw_result, nfw_error,
                            (status_fE_nfw_local == GSL_SUCCESS) ? "SUCCESS" : "ERROR");
                 }
             }
             innerintegrandvalues[i_nfw] = nfw_result;
             Evalues[i_nfw] = nfw_calE;
         }
-        
-        
+
+
         // Create f(E) interpolation using cspline interpolation for NFW (smoother dI/dE)
         g_main_fofEinterp = gsl_interp_alloc(gsl_interp_cspline, num_points + 1);
         g_main_fofEacc = gsl_interp_accel_alloc();
@@ -5706,14 +5592,14 @@ cleanup_diag_iteration:
             }
         }
         // END ADDED BLOCK
-        
+
         gsl_interp_init(g_main_fofEinterp, Evalues, innerintegrandvalues, num_points + 1);
-        
+
         gsl_integration_workspace_free(w);
         w = NULL;
-        
+
         log_message("INFO", "NFW theoretical calculation for IC splines complete.");
-        
+
         /**
          * @brief NFW Sample Generator - Generate particle positions and velocities.
          * @details Uses rejection sampling with the NFW density profile and f(E) distribution.
@@ -5727,13 +5613,13 @@ cleanup_diag_iteration:
                 log_message("INFO", "NFW IC Gen: Initial particle count before stripping: %d", npts_initial);
             }
             log_message("INFO", "NFW IC Gen: Generating %d initial particle positions and velocities...", npts_initial);
-            
+
             // Print overall Psimin, Psimax for NFW path once
             if (npts_initial > 0) { // Avoid printing if no particles
                 if (Psimax <= Psimin) {
                 }
             }
-            
+
             /**
              * @brief Allocate memory for the particle data array.
              * @details 2D array particles[5][npts_initial] where:
@@ -5752,7 +5638,7 @@ cleanup_diag_iteration:
                     CLEAN_EXIT(1);
                 }
             }
-            
+
             /**
              * @brief Calculate maximum velocity squared at each radius for rejection sampling.
              */
@@ -5762,9 +5648,9 @@ cleanup_diag_iteration:
                 fprintf(stderr, "NFW_PATH: Failed to allocate maxv2f arrays\n");
                 CLEAN_EXIT(1);
             }
-            
+
             double nfw_vel, nfw_ratio, nfw_Psir, nfw_mu, nfw_maxv, nfw_maxvalue;
-            
+
             // Create spline for r(M) - radius as function of enclosed mass
             gsl_interp_accel *rofMaccel_nfw = gsl_interp_accel_alloc();
             gsl_spline *splinerofM_nfw = gsl_spline_alloc(gsl_interp_cspline, num_points);
@@ -5778,9 +5664,9 @@ cleanup_diag_iteration:
             log_message("DEBUG", "Checking mass array for strict monotonicity (size: %d)", num_points);
             // 'mass' array has num_points elements. Loop up to num_points-2 to check mass[chk+1] vs mass[chk].
             if (num_points >= 2) { // Need at least 2 points to check monotonicity
-                for (int chk_m = 0; chk_m < num_points - 1; ++chk_m) { 
+                for (int chk_m = 0; chk_m < num_points - 1; ++chk_m) {
                     if (!(mass[chk_m+1] > mass[chk_m])) {
-                        if (monotonicity_violations_mass_spline < 20) { 
+                        if (monotonicity_violations_mass_spline < 20) {
                             fprintf(stderr, "  Mass array monotonicity violation: mass[%d]=%.17e >= mass[%d]=%.17e (Diff: %.3e)\n",
                                    chk_m, mass[chk_m], chk_m+1, mass[chk_m+1], mass[chk_m+1] - mass[chk_m]);
                         }
@@ -5798,7 +5684,7 @@ cleanup_diag_iteration:
         // END ADDED DIAGNOSTIC BLOCK
 
         gsl_spline_init(splinerofM_nfw, mass, radius, num_points);
-            
+
             // Calculate max v^2 * f(E) at each radius
             radius_maxv2f_nfw[0] = 0.0;
             for (int i_r_nfw = 1; i_r_nfw < num_maxv2f; i_r_nfw++) {
@@ -5807,16 +5693,16 @@ cleanup_diag_iteration:
                 radius_maxv2f_nfw[i_r_nfw] = r_maxv2f;
                 nfw_Psir = evaluatespline(splinePsi, Psiinterp, r_maxv2f);
                 nfw_maxv = sqrt(2.0 * (nfw_Psir - Psimin));
-                
+
                 // Find maximum of v^2 * dI/dE over velocity range
                 for (int j_v_nfw = 1; j_v_nfw < num_maxv2f - 2; j_v_nfw++) {
                     nfw_vel = nfw_maxv * ((double)j_v_nfw) / ((double)num_maxv2f);
                     double E_test_nfw = nfw_Psir - 0.5 * nfw_vel * nfw_vel;
                     double currentvalue_nfw = 0.0;
-                    
+
                     if (E_test_nfw >= Psimin && E_test_nfw <= Psimax) {
-                        currentvalue_nfw = nfw_vel * nfw_vel * 
-                            fabs(gsl_interp_eval_deriv(g_main_fofEinterp, Evalues, 
+                        currentvalue_nfw = nfw_vel * nfw_vel *
+                            fabs(gsl_interp_eval_deriv(g_main_fofEinterp, Evalues,
                                                        innerintegrandvalues, E_test_nfw, g_main_fofEacc));
                     }
                     if (isfinite(currentvalue_nfw) && currentvalue_nfw > nfw_maxvalue) {
@@ -5825,7 +5711,7 @@ cleanup_diag_iteration:
                 }
                 maxv2f_nfw[i_r_nfw] = nfw_maxvalue;
             }
-            
+
             // Extrapolate for r=0
             if (num_maxv2f >= 3) {
                 maxv2f_nfw[0] = 2.0 * maxv2f_nfw[1] - maxv2f_nfw[2];
@@ -5833,7 +5719,7 @@ cleanup_diag_iteration:
             } else {
                 maxv2f_nfw[0] = maxv2f_nfw[1];
             }
-            
+
             // Create spline for max v^2 * f(E)
             gsl_interp_accel *maxv2faccel_nfw = gsl_interp_accel_alloc();
             gsl_spline *splinemaxv2f_nfw = gsl_spline_alloc(gsl_interp_cspline, num_maxv2f);
@@ -5847,7 +5733,7 @@ cleanup_diag_iteration:
             log_message("DEBUG", "Checking radius array for strict monotonicity (size: %d)", num_points);
             // 'radius' array has num_points elements. Loop up to num_points-2.
             if (num_points >= 2) {
-                for (int chk_r = 0; chk_r < num_points - 1; ++chk_r) { 
+                for (int chk_r = 0; chk_r < num_points - 1; ++chk_r) {
                     if (!(radius[chk_r+1] > radius[chk_r])) {
                         if (monotonicity_violations_rad_spline < 20) {
                             fprintf(stderr, "  Radius array monotonicity violation: radius[%d]=%.17e >= radius[%d]=%.17e (Diff: %.3e)\n",
@@ -5867,7 +5753,7 @@ cleanup_diag_iteration:
         // END ADDED DIAGNOSTIC BLOCK
 
         gsl_spline_init(splinemaxv2f_nfw, radius_maxv2f_nfw, maxv2f_nfw, num_maxv2f);
-            
+
             /**
              * @brief Generate particles using rejection sampling.
              */
@@ -5875,18 +5761,18 @@ cleanup_diag_iteration:
                 if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) { // Log for first few & periodically
                     fflush(stdout);
                 }
-                
+
                 // Sample radius from mass distribution
                 double mass_frac_sample_nfw = gsl_rng_uniform(g_rng) * 0.999999;
                 double mass_sample_nfw = mass_frac_sample_nfw * current_profile_halo_mass;
                 particles[0][k_nfw] = evaluatespline(splinerofM_nfw, rofMaccel_nfw, mass_sample_nfw);
-                
+
                 if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) {
                 }
-                
+
                 nfw_maxvalue = evaluatespline(splinemaxv2f_nfw, maxv2faccel_nfw, particles[0][k_nfw]);
                 nfw_Psir = evaluatespline(splinePsi, Psiinterp, particles[0][k_nfw]);
-                
+
                 // Check for problematic values
                 if (!isfinite(nfw_Psir)) {
                     if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) {
@@ -5898,7 +5784,7 @@ cleanup_diag_iteration:
                     particles[3][k_nfw] = (double)k_nfw;
                     continue;
                 }
-                
+
                 if (nfw_Psir <= Psimin + 1e-9 * fabs(Psimin)) { // Check if Psir is too close to Psimin
                     if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) {
                     }
@@ -5909,50 +5795,50 @@ cleanup_diag_iteration:
                     if (!isfinite(nfw_maxv) || nfw_maxv < 1e-9) {
                         particles[1][k_nfw] = 0.0;
                     } else {
-                        
+
                         if (!isfinite(nfw_maxvalue) || nfw_maxvalue <= 1e-30) { // If envelope is effectively zero
                             particles[1][k_nfw] = 0.0;
                         } else {
                             // Velocity Rejection Sampling Loop
                             int vflag_nfw = 0;
                             int v_trials_nfw = 0;
-                    
+
                     while (vflag_nfw == 0 && v_trials_nfw < 20000) {
                         v_trials_nfw++;
                         nfw_vel = gsl_rng_uniform(g_rng) * nfw_maxv;
                         double E_test_nfw = nfw_Psir - 0.5 * nfw_vel * nfw_vel;
                         double target_func_val_nfw = 0.0;
-                        
+
                         double deriv_val_dIdE = 0.0;
                         if (E_test_nfw >= Psimin - 1e-9*fabs(Psimin) && E_test_nfw <= Psimax + 1e-9*fabs(Psimax)) { // Looser check for spline domain
-                            deriv_val_dIdE = gsl_interp_eval_deriv(g_main_fofEinterp, Evalues, 
+                            deriv_val_dIdE = gsl_interp_eval_deriv(g_main_fofEinterp, Evalues,
                                                                    innerintegrandvalues, E_test_nfw, g_main_fofEacc);
                         }
-                        
+
                         // Add diagnostic for dI/dE values
                         if (g_doDebug && v_trials_nfw <= 2 && k_nfw < 5) { // Only for very first few trials of first few particles
                         }
-                        
+
                         target_func_val_nfw = nfw_vel * nfw_vel * fabs(deriv_val_dIdE);
                         if (!isfinite(target_func_val_nfw) || target_func_val_nfw < 0) target_func_val_nfw = 0.0; // Ensure non-negative
-                        
+
                         nfw_ratio = target_func_val_nfw / nfw_maxvalue; // maxvalue should be >0 here
                         if (nfw_ratio < 0) nfw_ratio = 0;
                         if (nfw_ratio > 1.001) { // If ratio is slightly > 1 due to numerics
                             nfw_ratio = 1.0;
                         }
-                        
+
                         if ((k_nfw < 2 && v_trials_nfw < 5) || (v_trials_nfw % 5000 == 0 && v_trials_nfw > 0) ) {
                         }
-                        
+
                         // Enhanced high trial count diagnostics
                         if (g_doDebug && (v_trials_nfw % 4000 == 0 && v_trials_nfw > 0)) {
                         }
-                        
+
                         // Diagnostic for zero dI/dE in valid energy range
                         if (g_doDebug && fabs(deriv_val_dIdE) < 1e-20 && (E_test_nfw > Psimin + 1e-6*fabs(Psimin) && E_test_nfw < Psimax - 1e-6*fabs(Psimax)) && (v_trials_nfw % 100 == 0) && v_trials_nfw > 0 && k_nfw < 100) {
                         }
-                        
+
                         if (gsl_rng_uniform(g_rng) < nfw_ratio) {
                             particles[1][k_nfw] = nfw_vel;
                             vflag_nfw = 1;
@@ -5964,7 +5850,7 @@ cleanup_diag_iteration:
                         } // End else (maxvalue_envelope is finite and positive)
                     } // End else (maxv is finite and positive)
                 } // End else (Psir > Psimin)
-                
+
                 // Sample angular momentum direction
                 nfw_mu = 2.0 * gsl_rng_uniform(g_rng) - 1.0;
                 // Ensure L is non-negative and well-defined even if particles[1][k_nfw] (velocity magnitude) is 0
@@ -5975,11 +5861,11 @@ cleanup_diag_iteration:
                 particles[2][k_nfw] = L_val_nfw;
                 particles[3][k_nfw] = (double)k_nfw; // Particle ID
                 particles[4][k_nfw] = nfw_mu;        // Orientation
-                
+
                 if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) {
                 }
             }
-            
+
             // Clean up NFW sample generator allocations
             gsl_spline_free(splinerofM_nfw);
             gsl_interp_accel_free(rofMaccel_nfw);
@@ -5987,7 +5873,7 @@ cleanup_diag_iteration:
             gsl_interp_accel_free(maxv2faccel_nfw);
             free(maxv2f_nfw);
             free(radius_maxv2f_nfw);
-            
+
             log_message("INFO", "NFW IC Gen: Successfully generated %d particles.", npts_initial);
         } // End NFW sample generator
 
@@ -6084,11 +5970,11 @@ cleanup_diag_iteration:
                 Psiintegrand_params psi_params_diag;
                 psi_params_diag.massintegrand_func = &massintegrand;
                 psi_params_diag.params_for_massintegrand = NULL;
-                
+
                 gsl_function F_for_psi_diag;
                 F_for_psi_diag.function = &Psiintegrand;
                 F_for_psi_diag.params = &psi_params_diag;
-                
+
                 for (i = 0; i < num_points; i++)
                 {
                     double r = (double)i * rmax / ((double)num_points);
@@ -6319,7 +6205,7 @@ cleanup_diag_iteration:
      *          Generates primary output files like `massprofile<suffix>.dat`, `Psiprofile<suffix>.dat`, `f_of_E<suffix>.dat`.
      */
     double r;
-    
+
     /** @brief Allocate workspace for GSL integration operations. */
     w = gsl_integration_workspace_alloc(1000);
 
@@ -6347,10 +6233,10 @@ cleanup_diag_iteration:
     /** @brief Create mass interpolation spline for M(r). */
     enclosedmass = gsl_interp_accel_alloc();
     splinemass = gsl_spline_alloc(gsl_interp_cspline, num_points);
-    if (!check_strict_monotonicity(radius, num_points, "radius (main splinemass)")) { 
+    if (!check_strict_monotonicity(radius, num_points, "radius (main splinemass)")) {
         fprintf(stderr, "CRITICAL: radius array not monotonic for main splinemass\n");
         fflush(stderr);
-        CLEAN_EXIT(1); 
+        CLEAN_EXIT(1);
     }
     gsl_spline_init(splinemass, radius, mass, num_points);
     double rlow = radius[0];
@@ -6386,11 +6272,11 @@ cleanup_diag_iteration:
     Psiintegrand_params psi_params_cored;
     psi_params_cored.massintegrand_func = &massintegrand;
     psi_params_cored.params_for_massintegrand = NULL;
-    
+
     gsl_function F_for_psi_cored;
     F_for_psi_cored.function = &Psiintegrand;
     F_for_psi_cored.params = &psi_params_cored;
-    
+
     for (i = 0; i < num_points; i++)
     {
         double r = (double)i * rmax / ((double)num_points);
@@ -6405,10 +6291,10 @@ cleanup_diag_iteration:
     /** @brief Create potential interpolation spline for Psi(r). */
     Psiinterp = gsl_interp_accel_alloc();
     splinePsi = gsl_spline_alloc(gsl_interp_cspline, num_points);
-    if (!check_strict_monotonicity(radius, num_points, "radius (main splinePsi)")) { 
+    if (!check_strict_monotonicity(radius, num_points, "radius (main splinePsi)")) {
         fprintf(stderr, "CRITICAL: radius array not monotonic for main splinePsi\n");
         fflush(stderr);
-        CLEAN_EXIT(1); 
+        CLEAN_EXIT(1);
     }
     gsl_spline_init(splinePsi, radius, Psivalues, num_points);
 
@@ -6430,7 +6316,7 @@ cleanup_diag_iteration:
     /** @brief Create inverse spline r(Psi) for radius lookup from potential. */
     rofPsiinterp = gsl_interp_accel_alloc();
     splinerofPsi = gsl_spline_alloc(gsl_interp_cspline, num_points);
-    
+
     gsl_spline_init(splinerofPsi, nPsivalues, radius, num_points);
 
     /** @brief Calculate distribution function f(E) using Eddington's formula. */
@@ -6552,7 +6438,7 @@ cleanup_diag_iteration:
     } else {
         log_message("INFO", "Using user-provided SIDM seed: %lu", g_sidm_seed);
     }
-    
+
     // If --readinit is used, we should generally use a specified/loaded SIDM seed
     // or a newly generated one, NOT one derived from IC seed, as ICs are fixed.
     if (doReadInit && !g_sidm_seed_provided && !g_master_seed_provided && !g_attempt_load_seeds) {
@@ -6574,7 +6460,7 @@ cleanup_diag_iteration:
         // Create link/copy
         char linkname_ic[512];
         snprintf(linkname_ic, sizeof(linkname_ic), "%s.dat", g_initial_cond_seed_filename_base); // e.g. data/last_initial_seed.dat
-        
+
         // Platform-dependent link/copy code (similar to lastparams.dat)
         #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
             // Windows: use copy
@@ -6607,7 +6493,7 @@ cleanup_diag_iteration:
         // Create link/copy
         char linkname_sidm[512];
         snprintf(linkname_sidm, sizeof(linkname_sidm), "%s.dat", g_sidm_seed_filename_base); // e.g. data/last_sidm_seed.dat
-        
+
         // Platform-dependent link/copy code
         #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
             // Windows: use copy
@@ -6806,7 +6692,7 @@ cleanup_diag_iteration:
             }
             /** @note Copy only the first `npts` elements (innermost after sort). */
             memcpy(final_particles[i], particles[i], npts * sizeof(double));
-            
+
             /** @note Free original oversized array and update `particles[i]` pointer. */
             free(particles[i]);                // Free the original oversized array
             particles[i] = final_particles[i]; // particles[i] now points to the smaller array
@@ -6918,7 +6804,7 @@ cleanup_diag_iteration:
     for (int k = 0; k <= 20; k++) print_steps[k] = (int)floor(k * 0.05 * Ntimes); // Calculate steps for progress output
 
     /** @brief Flag to determine if simulation phase can be skipped. */
-    int skip_simulation = 0; 
+    int skip_simulation = 0;
 
     /** @brief Set up simulation tracking variables. */
 
@@ -7177,7 +7063,7 @@ cleanup_diag_iteration:
                 printf("Restart mode: Found existing all_particle_data file '%s' (%s).\n",
                        apd_filename, human_size);
                 skip_simulation = 1;
-                
+
                 /** @brief Display appropriate message based on particle count comparison. */
                 if (npts == npts_initial) {
                     printf("Skipping simulation phase and proceeding to post-processing. "
@@ -7220,13 +7106,13 @@ cleanup_diag_iteration:
         }
         fclose(fapd); // Close immediately, file is now ready for appending.
         printf("Initialized empty file for all particle data: %s\n", apd_filename);
-        
+
         // Calculate and display expected file size
         long long expected_size = (long long)total_writes * (long long)npts * 16LL; // 16 bytes per particle record
         double size_gb = expected_size / (1024.0 * 1024.0 * 1024.0);
         double size_mb = expected_size / (1024.0 * 1024.0);
         double size_kb = expected_size / 1024.0;
-        
+
         if (size_gb >= 1.0) {
             printf("All particle data file requires: %.1f GB (%lld bytes)\n", size_gb, expected_size);
         } else if (size_mb >= 1.0) {
@@ -7236,7 +7122,7 @@ cleanup_diag_iteration:
         } else {
             printf("All particle data file requires: %lld bytes\n", expected_size);
         }
-        
+
         // Calculate and display expected snapshot file sizes
         // Each snapshot has 2 files: unsorted (28 bytes/particle) and sorted (32 bytes/particle)
         long long snapshot_size = (long long)npts * (28LL + 32LL); // Total per snapshot pair
@@ -7244,7 +7130,7 @@ cleanup_diag_iteration:
         double snap_size_gb = total_snapshot_size / (1024.0 * 1024.0 * 1024.0);
         double snap_size_mb = total_snapshot_size / (1024.0 * 1024.0);
         double snap_size_kb = total_snapshot_size / 1024.0;
-        
+
         printf("%d time snapshot files will require: ", noutsnaps);
         if (snap_size_gb >= 1.0) {
             printf("%.1f GB (%lld bytes)\n", snap_size_gb, total_snapshot_size);
@@ -7255,13 +7141,13 @@ cleanup_diag_iteration:
         } else {
             printf("%lld bytes\n", total_snapshot_size);
         }
-        
+
         // Calculate and display total disk space
         long long total_disk_space = expected_size + total_snapshot_size;
         double total_gb = total_disk_space / (1024.0 * 1024.0 * 1024.0);
         double total_mb = total_disk_space / (1024.0 * 1024.0);
         double total_kb = total_disk_space / 1024.0;
-        
+
         printf("Total disk space required: ");
         if (total_gb >= 1.0) {
             printf("%.1f GB (%lld bytes)\n", total_gb, total_disk_space);
@@ -7272,14 +7158,14 @@ cleanup_diag_iteration:
         } else {
             printf("%lld bytes\n", total_disk_space);
         }
-        
+
         // Check available disk space
         long long available_space = get_available_disk_space("data/");
         if (available_space > 0) {
             double avail_gb = available_space / (1024.0 * 1024.0 * 1024.0);
             double avail_mb = available_space / (1024.0 * 1024.0);
             double avail_kb = available_space / 1024.0;
-            
+
             printf("Available disk space: ");
             if (avail_gb >= 1.0) {
                 printf("%.1f GB (%lld bytes)\n", avail_gb, available_space);
@@ -7290,10 +7176,10 @@ cleanup_diag_iteration:
             } else {
                 printf("%lld bytes\n", available_space);
             }
-            
+
             // Check if we're within 5% of total available or insufficient
             double usage_after = (double)(available_space - total_disk_space) / (double)available_space;
-            
+
             if (available_space < total_disk_space) {
                 // Insufficient space
                 fprintf(stderr, "\nError: Insufficient disk space!\n");
@@ -7303,12 +7189,12 @@ cleanup_diag_iteration:
                 CLEAN_EXIT(1);
             } else if (usage_after < 0.05) {
                 // Within 5% of capacity after simulation
-                printf("\nWarning: Simulation will use %.1f%% of available disk space!\n", 
+                printf("\nWarning: Simulation will use %.1f%% of available disk space!\n",
                        (100.0 * total_disk_space / available_space));
-                printf("After simulation: %.1f GB free (%.1f%% remaining)\n", 
+                printf("After simulation: %.1f GB free (%.1f%% remaining)\n",
                        (available_space - total_disk_space) / (1024.0 * 1024.0 * 1024.0),
                        usage_after * 100.0);
-                
+
                 if (!prompt_yes_no("Continue")) {
                     printf("Aborting simulation.\n");
                     CLEAN_EXIT(0);
@@ -7321,9 +7207,9 @@ cleanup_diag_iteration:
                 CLEAN_EXIT(0);
             }
         }
-        
+
         printf("\n");
-        
+
         /** @brief Display initial simulation progress. */
         printf("0%% complete, timestep 0/%d, time=0.0000 Myr, elapsed=0.00 s\n", Ntimes);
     }
@@ -7743,7 +7629,7 @@ cleanup_diag_iteration:
                 /**
                  * @brief Hybrid integration with adaptive method selection.
                  * @details Uses Levi-Civita regularization for close encounters (r < r_crit)
-                 *          and standard leapfrog otherwise. Radius threshold r_crit is 
+                 *          and standard leapfrog otherwise. Radius threshold r_crit is
                  *          dynamically calculated for each particle.
                  */
 
@@ -8358,7 +8244,7 @@ cleanup_diag_iteration:
                                     double current_r_mini = particles[0][i_part];
                                     double current_vrad_mini = particles[1][i_part];
                                     double current_ell_mini = particles[2][i_part]; // Angular momentum (constant)
-                                    
+
                                     // Perform NUM_MINI_SUBSTEPS_BOOTSTRAP mini-steps
                                     for (int m = 0; m < NUM_MINI_SUBSTEPS_BOOTSTRAP; m++)
                                     {
@@ -8366,12 +8252,12 @@ cleanup_diag_iteration:
                                         double drdt_m = current_vrad_mini;
                                         double force_m = gravitational_force(current_r_mini, i_part, npts, G_CONST, g_active_halo_mass);
                                         double dvdt_m = force_m + effective_angular_force(current_r_mini, current_ell_mini);
-                                        
+
                                         // Euler update for this mini-step
                                         current_r_mini += dt_mini * drdt_m;
                                         current_vrad_mini += dt_mini * dvdt_m;
                                     }
-                                    
+
                                     // After all mini-steps, update the main particles array
                                     particles[0][i_part] = current_r_mini;
                                     particles[1][i_part] = current_vrad_mini;
@@ -8637,7 +8523,7 @@ cleanup_diag_iteration:
                                     if (snapIndex < noutsnaps) // Ensure snapIndex is valid
                                     {
                                         int debug_id = DEBUG_PARTICLE_ID;
-                                        
+
                                         // Retrieve current state for debug particle from block arrays
                                         float r_valF = R_block[block_index_apd * npts + debug_id];
                                         float v_valF = Vrad_block[block_index_apd * npts + debug_id];
@@ -8645,18 +8531,18 @@ cleanup_diag_iteration:
                                         double r_val = (double)r_valF;
                                         double v_val = (double)v_valF;
                                         double l_val = (double)l_valF;
-                                        
+
                                         // Evaluate theoretical potential using original spline
                                         double psi_val = 0.0;
                                         if (r_val >= 0.0 && r_val <= rmax)
                                         {
                                             psi_val = evaluatespline(splinePsi, Psiinterp, r_val) * VEL_CONV_SQ;
                                         }
-                                        
+
                                         // Calculate approximate energy E = Psi - KE
                                         double E_approx = psi_val - 0.5 * (v_val * v_val + (l_val * l_val) / (r_val * r_val));
                                         double sim_time = time;
-                                        
+
                                         // Store the approximate energy for comparison
                                         store_debug_approxE(snapIndex, E_approx, sim_time);
                                     }
@@ -8737,7 +8623,7 @@ cleanup_diag_iteration:
 
     // Write theoretical profiles (profile-specific formulas)
     char suffixed_filename[256];
-    
+
     if (g_use_nfw_profile) {
         /**
          * @brief Write final theoretical NFW profile characteristics to .dat files.
@@ -8763,8 +8649,8 @@ cleanup_diag_iteration:
                  fprintf_bin(fp, "%f %f\n", radius[num_points-1], gsl_spline_eval(splinemass, radius[num_points-1], enclosedmass));
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final NFW mass profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final NFW mass profile", suffixed_filename);
         }
 
         // Write NFW theoretical potential profile
@@ -8780,8 +8666,8 @@ cleanup_diag_iteration:
                  fprintf_bin(fp, "%f %f\n", radius[num_points-1], evaluatespline(splinePsi, Psiinterp, radius[num_points-1]));
              }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final NFW Psi profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final NFW Psi profile", suffixed_filename);
         }
 
         // Write NFW theoretical density profile
@@ -8790,23 +8676,23 @@ cleanup_diag_iteration:
         if (fp) {
             double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * M_PI * normalization);
             for (i = 0; i < num_points; i++) {
-                double rr = radius[i]; 
+                double rr = radius[i];
                 double rs_k = rr / g_nfw_profile_rc;
-                double term_s_k = rs_k + 0.01; 
+                double term_s_k = rs_k + 0.01;
                 if (term_s_k <= 1e-9) term_s_k = 1e-9;
                 double term_n_k = (1.0 + rs_k) * (1.0 + rs_k);
                 double term_c_base_k = rs_k / g_nfw_profile_falloff_factor;
                 double term_c_k = 1.0 + pow(term_c_base_k, 10.0);
                 double rho_shape_k = (term_s_k < 1e-9 || term_n_k < 1e-9 || term_c_k < 1e-9) ? 0.0 : (1.0 / (term_s_k * term_n_k * term_c_k));
-                if (rr < 1e-6 && term_s_k < 1e-3 && rho_shape_k == 0.0) { 
+                if (rr < 1e-6 && term_s_k < 1e-3 && rho_shape_k == 0.0) {
                    rho_shape_k = 1.0 / (term_s_k * term_n_k * term_c_k);
                 }
                 double rho_r_k = nt_nfw_scaler_final * rho_shape_k;
                 fprintf_bin(fp, "%f %f\n", rr, rho_r_k);
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final NFW density profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final NFW density profile", suffixed_filename);
         }
 
         // Write NFW theoretical dPsi/dr profile
@@ -8816,14 +8702,14 @@ cleanup_diag_iteration:
             for (i = 0; i < num_points; i++) {
                 double rr = radius[i];
                 if (rr > 0.0) {
-                    double Menc = gsl_spline_eval(splinemass, rr, enclosedmass); 
+                    double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
                     double dpsidr = -(G_CONST * Menc) / (rr * rr);
                     fprintf_bin(fp, "%f %f\n", rr, dpsidr);
                 }
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final NFW dpsi/dr profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final NFW dpsi/dr profile", suffixed_filename);
         }
 
         // Write NFW theoretical drho/dPsi profile
@@ -8837,19 +8723,19 @@ cleanup_diag_iteration:
 
                 // Use NFW derivative function
                 double drhodr_val_k = drhodr_profile_nfwcutoff(rr, g_nfw_profile_rc, nt_nfw_scaler_final, g_nfw_profile_falloff_factor);
-                
+
                 double Menc_k = gsl_spline_eval(splinemass, rr, enclosedmass);
-                double dPsidr_mag_k = (G_CONST * Menc_k) / (rr * rr); 
-                
+                double dPsidr_mag_k = (G_CONST * Menc_k) / (rr * rr);
+
                 if (fabs(dPsidr_mag_k) > 1e-30) {
                     double Psi_val_k = evaluatespline(splinePsi, Psiinterp, rr);
-                    double drho_dPsi_val_k = drhodr_val_k / dPsidr_mag_k; 
+                    double drho_dPsi_val_k = drhodr_val_k / dPsidr_mag_k;
                     fprintf_bin(fp, "%f %f\n", Psi_val_k, drho_dPsi_val_k);
                 }
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final NFW drho/dpsi profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final NFW drho/dpsi profile", suffixed_filename);
         }
 
         // Write NFW theoretical f(E) profile
@@ -8876,8 +8762,8 @@ cleanup_diag_iteration:
                 fprintf_bin(fp, "%f %f\n", E, fE);
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final NFW f(E) profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final NFW f(E) profile", suffixed_filename);
         }
 
         // Write NFW distribution function at a fixed radius if simulation was run
@@ -8910,8 +8796,8 @@ cleanup_diag_iteration:
                     fprintf_bin(fp, "%f %f\n", vtest, fEval);
                 }
                 fclose(fp);
-            } else { 
-                log_message("ERROR", "Failed to open %s for final NFW df_fixed_radius", suffixed_filename); 
+            } else {
+                log_message("ERROR", "Failed to open %s for final NFW df_fixed_radius", suffixed_filename);
             }
         }
 
@@ -8940,8 +8826,8 @@ cleanup_diag_iteration:
                  fprintf_bin(fp, "%f %f\n", radius[num_points-1], gsl_spline_eval(splinemass, radius[num_points-1], enclosedmass));
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final cored mass profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final cored mass profile", suffixed_filename);
         }
 
         // Write Cored theoretical potential profile
@@ -8957,8 +8843,8 @@ cleanup_diag_iteration:
                  fprintf_bin(fp, "%f %f\n", radius[num_points-1], evaluatespline(splinePsi, Psiinterp, radius[num_points-1]));
              }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final cored Psi profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final cored Psi profile", suffixed_filename);
         }
 
         // Write Cored theoretical density profile
@@ -8971,8 +8857,8 @@ cleanup_diag_iteration:
                 fprintf_bin(fp, "%f %f\n", rr, rho_r);
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final cored density profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final cored density profile", suffixed_filename);
         }
 
         // Write Cored theoretical dPsi/dr profile
@@ -8988,8 +8874,8 @@ cleanup_diag_iteration:
                 }
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final cored dpsi/dr profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final cored dpsi/dr profile", suffixed_filename);
         }
 
         // Write Cored theoretical drho/dPsi profile
@@ -9009,8 +8895,8 @@ cleanup_diag_iteration:
                 }
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final cored drho/dpsi profile", suffixed_filename); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final cored drho/dpsi profile", suffixed_filename);
         }
 
         // Write theoretical f(E) profile
@@ -9037,8 +8923,8 @@ cleanup_diag_iteration:
                 fprintf_bin(fp, "%f %f\n", E, fE);
             }
             fclose(fp);
-        } else { 
-            log_message("ERROR", "Failed to open %s for final f(E) profile (%s)", suffixed_filename, g_use_nfw_profile ? "NFW" : "Cored"); 
+        } else {
+            log_message("ERROR", "Failed to open %s for final f(E) profile (%s)", suffixed_filename, g_use_nfw_profile ? "NFW" : "Cored");
         }
 
         // Write distribution function at a fixed radius if simulation was run
@@ -9071,8 +8957,8 @@ cleanup_diag_iteration:
                     fprintf_bin(fp, "%f %f\n", vtest, fEval);
                 }
                 fclose(fp);
-            } else { 
-                log_message("ERROR", "Failed to open %s for final df_fixed_radius (%s)", suffixed_filename, g_use_nfw_profile ? "NFW" : "Cored"); 
+            } else {
+                log_message("ERROR", "Failed to open %s for final df_fixed_radius (%s)", suffixed_filename, g_use_nfw_profile ? "NFW" : "Cored");
             }
         }
     }
@@ -9141,7 +9027,7 @@ cleanup_diag_iteration:
 
     // Log the calculated ranges
     if (g_enable_logging) {
-        log_message("INFO", "2D Histogram dynamic ranges: r=[0, %.1f] kpc, v=[0, %.1f] km/s", 
+        log_message("INFO", "2D Histogram dynamic ranges: r=[0, %.1f] kpc, v=[0, %.1f] km/s",
                     max_r_all, max_v_all);
     }
 
@@ -9491,7 +9377,7 @@ cleanup_diag_iteration:
                         }
                         else
                         {
-                            log_message("ERROR", "Thread %d: Index %zu out of bounds (%zu) in ordered copy for snapshot %d", 
+                            log_message("ERROR", "Thread %d: Index %zu out of bounds (%zu) in ordered copy for snapshot %d",
                                         omp_get_thread_num(), (size_t)(s * npts + ii), total_outsnaps_size, snap);
                             break;
                         }
@@ -9574,7 +9460,7 @@ cleanup_diag_iteration:
 
                 // Handle potential NaN values before assigning to struct
                 if (rad_val != rad_val) { // Check for NaN (safe with fast-math)
-                    log_message("WARNING", "Thread %d: NaN radius at index %d for snapshot %d, replaced with 0", 
+                    log_message("WARNING", "Thread %d: NaN radius at index %d for snapshot %d, replaced with 0",
                                 omp_get_thread_num(), ii, snap);
                     rad_val = 0.0f;
                 }
@@ -9591,7 +9477,7 @@ cleanup_diag_iteration:
             memcpy(partarr, local_partarr, npts * sizeof(struct PartData));
             free(local_partarr);
 
-            log_message("INFO", "Thread %d: Sorting partarr by radius for snapshot %d", 
+            log_message("INFO", "Thread %d: Sorting partarr by radius for snapshot %d",
                         omp_get_thread_num(), snap);
 
             // Sort particle data by radius for snapshot processing
@@ -9683,7 +9569,7 @@ cleanup_diag_iteration:
             }
 
             /** @brief Set fixed bin width for density calculation using the first processed snapshot. */
-            log_message("INFO", "Thread %d: Checking fixed bin width for snapshot %d", 
+            log_message("INFO", "Thread %d: Checking fixed bin width for snapshot %d",
                         omp_get_thread_num(), snap);
             if (s == start_index) // Only calculate on the first snapshot processed in this run
             {
@@ -9693,7 +9579,7 @@ cleanup_diag_iteration:
                 // Use the maximum radius found in this first snapshot
                 double r_max_first = R_sorted[npts - 1];
                 if (r_max_first <= 0 || num_bins_fixed <= 0) {
-                    log_message("ERROR", "Thread %d: Invalid r_max (%f) or bins (%d) for fixed_bin_width calc", 
+                    log_message("ERROR", "Thread %d: Invalid r_max (%f) or bins (%d) for fixed_bin_width calc",
                                 omp_get_thread_num(), r_max_first, num_bins_fixed);
                     // Set a default or handle error
                     fixed_bin_width = 1.0;
@@ -9753,10 +9639,10 @@ cleanup_diag_iteration:
                     // Allocate arrays to hold strictly monotonic radius/mass data
                     R_filtered = malloc(npts * sizeof(double));
                     Mass_filtered = malloc(npts * sizeof(double));
-                    if (!R_filtered || !Mass_filtered) { 
-                        log_message("ERROR", "Thread %d: Failed to allocate filtered arrays for snapshot %d", 
+                    if (!R_filtered || !Mass_filtered) {
+                        log_message("ERROR", "Thread %d: Failed to allocate filtered arrays for snapshot %d",
                             omp_get_thread_num(), snap);
-                        continue; 
+                        continue;
                     }
 
                     // Copy only the points that maintain strict monotonicity
@@ -9787,11 +9673,11 @@ cleanup_diag_iteration:
                 if (decimated_size <= 0) decimated_size = 1; // Ensure at least one point
                 double *R_decimated = malloc(decimated_size * sizeof(double));
                 double *Mass_decimated = malloc(decimated_size * sizeof(double));
-                if (!R_decimated || !Mass_decimated) { 
-                    log_message("ERROR", "Thread %d: Failed to allocate decimated arrays for snapshot %d", 
+                if (!R_decimated || !Mass_decimated) {
+                    log_message("ERROR", "Thread %d: Failed to allocate decimated arrays for snapshot %d",
                         omp_get_thread_num(), snap);
                     if (r_violations > 0) { free(R_filtered); free(Mass_filtered); }
-                    continue; 
+                    continue;
                 }
 
                 if (filtered_count <= decimated_size)
@@ -9823,7 +9709,7 @@ cleanup_diag_iteration:
                     ((min_r_check != min_r_check) || !(fabs(min_r_check) <= DBL_MAX)) || // Check !isfinite(min_r_check)
                     ((max_r_check != max_r_check) || !(fabs(max_r_check) <= DBL_MAX))    // Check !isfinite(max_r_check)
                    ) {
-                    log_message("ERROR", "Thread %d: Invalid radius range [%f, %f] with %d points after decimation for snapshot %d", 
+                    log_message("ERROR", "Thread %d: Invalid radius range [%f, %f] with %d points after decimation for snapshot %d",
                                 omp_get_thread_num(), min_r_check, max_r_check, decimated_size, snap);
                     free(R_decimated); free(Mass_decimated);
                     if (r_violations > 0) { free(R_filtered); free(Mass_filtered); } // Free if allocated
@@ -9847,8 +9733,8 @@ cleanup_diag_iteration:
                 double *log_r_grid = malloc(grid_size * sizeof(double));
                 double *mass_grid = malloc(grid_size * sizeof(double));
                 double *density_grid = malloc(grid_size * sizeof(double));
-                if (!r_grid || !log_r_grid || !mass_grid || !density_grid) { 
-                    log_message("ERROR", "Thread %d: Failed to allocate grid arrays for snapshot %d", 
+                if (!r_grid || !log_r_grid || !mass_grid || !density_grid) {
+                    log_message("ERROR", "Thread %d: Failed to allocate grid arrays for snapshot %d",
                         omp_get_thread_num(), snap);
                     // Free previously allocated resources
                     free(R_decimated); free(Mass_decimated);
@@ -9858,7 +9744,7 @@ cleanup_diag_iteration:
                     if (mass_grid) free(mass_grid);
                     if (density_grid) free(density_grid);
                     free(density_sorted); density_sorted = NULL;
-                    continue; 
+                    continue;
                 }
 
                 // Populate the log-spaced grid coordinates
@@ -9998,7 +9884,7 @@ cleanup_diag_iteration:
                 // Perform Gaussian convolution on the uniform density grid
                 if (!density_grid || !log_r_grid || !direct_grid_result)
                 {
-                    log_message("ERROR", "Thread %d: NULL arrays detected before gaussian_convolution for snapshot %d", 
+                    log_message("ERROR", "Thread %d: NULL arrays detected before gaussian_convolution for snapshot %d",
                                 omp_get_thread_num(), snap);
                     // Clean up resources
                     if (density_grid) free(density_grid);
@@ -10702,7 +10588,7 @@ double massintegrand_profile_nfwcutoff(double r, void *params) {
     if (rc_param <= 0) { // Avoid division by zero if rc is invalid
         return 0.0;
     }
-    
+
     double rs = r / rc_param; // r normalized by scale radius
 
     // Calculate the structural part of the density profile (unscaled by nt_nfw)
@@ -10726,7 +10612,7 @@ double massintegrand_profile_nfwcutoff(double r, void *params) {
 
     // Apply the overall density scaling factor
     double physical_density = nt_nfw_scaler * density_shape;
-    
+
     return r * r * physical_density;
 }
 
@@ -10753,7 +10639,7 @@ double drhodr_profile_nfwcutoff(double r, double rc_param, double nt_nfw_scaler,
     const double N_cutoff_power = 10.0;
 
     if (rc_param <= 0) return 0.0;
-    
+
     double rs = r / rc_param;
 
     //rho_shape(rs) = 1.0 / ( (rs+eps) * (1+rs)^2 * (1+(rs/C)^N) )
@@ -10778,7 +10664,7 @@ double drhodr_profile_nfwcutoff(double r, double rc_param, double nt_nfw_scaler,
     // d/drs (rs+eps) = 1
     // d/drs (1+rs)^2 = 2*(1+rs)
     // d/drs (1+(rs/C)^N) = N * (rs/C)^(N-1) * (1/C)
-    
+
     double d_log_term_s_d_rs = 1.0 / term_s;
     double d_log_term_n_d_rs = 2.0 / (1.0 + rs);
     double d_log_term_c_d_rs = (N_cutoff_power / C_cutoff_factor) * pow(term_c_base, N_cutoff_power - 1.0) / term_c;
@@ -10789,11 +10675,11 @@ double drhodr_profile_nfwcutoff(double r, double rc_param, double nt_nfw_scaler,
     // d(rho_shape)/dr = d(rho_shape)/d(rs) * d(rs)/dr = d(rho_shape)/d(rs) * (1/rc_param)
     // d(log(rho_shape))/d(rs) = - (d_log_term_s_d_rs + d_log_term_n_d_rs + d_log_term_c_d_rs)
     // d(rho_shape)/d(rs) = rho_shape * d(log(rho_shape))/d(rs)
-    
+
     double d_rho_shape_d_rs = -density_shape_val * (d_log_term_s_d_rs + d_log_term_n_d_rs + d_log_term_c_d_rs);
     double drho_dr = nt_nfw_scaler * d_rho_shape_d_rs / rc_param;
 
-    
+
     return drho_dr;
 }
 
@@ -10949,7 +10835,7 @@ double fEintegrand_nfw(double t_integration_var, void *params) {
     if (Psi_true_at_r < p_nfw->Psimin_global - 1e-7*fabs(p_nfw->Psimin_global) || Psi_true_at_r > p_nfw->Psimax_global + 1e-7*fabs(p_nfw->Psimax_global)) {
          return 0.0;
     }
-    
+
     // Get radius r from Psi_true_at_r. Spline p->spline_r_of_Psi expects -Psi_true as input.
     double r_val;
     double spline_x_input_rPsi = -Psi_true_at_r; // Input for r_of_Psi spline
@@ -10958,13 +10844,13 @@ double fEintegrand_nfw(double t_integration_var, void *params) {
 
     if (spline_x_input_rPsi < spline_rPsi_x_min) spline_x_input_rPsi = spline_rPsi_x_min;
     if (spline_x_input_rPsi > spline_rPsi_x_max) spline_x_input_rPsi = spline_rPsi_x_max;
-        
-    r_val = gsl_spline_eval(p_nfw->spline_r_of_Psi, spline_x_input_rPsi, p_nfw->accel_r_of_Psi); 
+
+    r_val = gsl_spline_eval(p_nfw->spline_r_of_Psi, spline_x_input_rPsi, p_nfw->accel_r_of_Psi);
 
 
     // If radius is non-physical (negative or zero), the integrand is ill-defined or zero.
     if (r_val <= 1e-10) { // Using a slightly larger epsilon than machine precision for safety
-        return 0.0; 
+        return 0.0;
     }
     // No more flooring of r_val here; use it as is if positive, or return 0 if not.
 
@@ -10974,7 +10860,7 @@ double fEintegrand_nfw(double t_integration_var, void *params) {
     // Calculate dPsi_true/dr = G * M(r_val) / r_val^2 (magnitude)
     double M_at_r_val = gsl_spline_eval(p_nfw->spline_M_of_r, r_val, p_nfw->accel_M_of_r);
     if (M_at_r_val < 0) M_at_r_val = 0; // Mass must be non-negative
-    
+
     // Calculate dPsi_true/dr = G * M(r_val) / r_val^2 (magnitude)
     // Since r_val > 1e-10, division by r_val^2 is safe
     double dPsi_dr_mag = p_nfw->const_G_universal * M_at_r_val / (r_val * r_val);
@@ -10987,14 +10873,14 @@ double fEintegrand_nfw(double t_integration_var, void *params) {
     // Sign convention: Assume Psi is defined such that dPsi/dr is positive (potential less negative further out).
     // drho/dr is negative. So drho/dPsi is negative.
     // The quantity 2 * drho/dPsi is typically what appears in one form of Eddington's.
-    double drho_dPsi_val = drho_dr_val / dPsi_dr_mag; 
-    // As per ANFIS.1 and subsequent findings, for I(E) to be increasing, 
+    double drho_dPsi_val = drho_dr_val / dPsi_dr_mag;
+    // As per ANFIS.1 and subsequent findings, for I(E) to be increasing,
     // the integrand 2*d(rho)/d(Psi_true) needs to be positive.
     // Since drho_dPsi_val = (drho/dr) / (dPsi/dr_mag) is (negative/positive) = negative,
     // we need to flip the sign.
     double integrand_value = -2.0 * drho_dPsi_val;
 
-    
+
     if (!isfinite(integrand_value)) {
         if (g_doDebug) fprintf(stderr, "Warning: NFW fEintegrand (refactored) returning non-finite value for t_in=%.3e, E_shell=%.3e\n", t_integration_var, E_shell);
         return 0.0; // Return 0 for non-finite cases
@@ -11127,7 +11013,7 @@ static void insertion_sort_sub(double **columns, int start, int end)
 /**
  * @brief Parallel implementation of insertion sort algorithm optimized for particle sorting.
  *
- * @details Uses multiple OpenMP threads to sort sections of particle data in parallel, 
+ * @details Uses multiple OpenMP threads to sort sections of particle data in parallel,
  * followed by seam-fixing operations to ensure global ordering. Includes dynamic section
  * calculation and optimized overlap sizing based on chunk characteristics.
  *
@@ -11139,9 +11025,9 @@ void insertion_parallel_sort(double **columns, int n)
     // Dynamically determine number of sections based on runtime threads and constants.
     int active_num_sort_sections;
     #ifdef _OPENMP
-        int n_runtime_threads = omp_get_max_threads(); 
+        int n_runtime_threads = omp_get_max_threads();
         if (n_runtime_threads <= 0) n_runtime_threads = 1;
-        active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD; 
+        active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD;
         active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD;
         if (active_num_sort_sections <= 0) active_num_sort_sections = PARALLEL_SORT_DEFAULT_SECTIONS;
     #else
@@ -11150,7 +11036,7 @@ void insertion_parallel_sort(double **columns, int n)
 
     // Ensure a reasonable number of sections
     if (active_num_sort_sections < 1) active_num_sort_sections = 1;
-    if (n > 0 && active_num_sort_sections > n) active_num_sort_sections = n; 
+    if (n > 0 && active_num_sort_sections > n) active_num_sort_sections = n;
     // Optional: Add a hard cap for maximum sections if desired, e.g.:
     // if (active_num_sort_sections > 96) active_num_sort_sections = 96;
 
@@ -11189,7 +11075,7 @@ void insertion_parallel_sort(double **columns, int n)
     }
 
     // Calculate minChunkSize based on actual chunk distribution using active_num_sort_sections
-    int minChunkSize = n; 
+    int minChunkSize = n;
     if (active_num_sort_sections > 0 && n > 0 && endIdx && startIdx) { // Check endIdx/startIdx validity
         minChunkSize = (endIdx[0] - startIdx[0] + 1);
         for (int c = 1; c < active_num_sort_sections; c++) {
@@ -11201,11 +11087,11 @@ void insertion_parallel_sort(double **columns, int n)
 
     int overlapSize;
     if (n <= 1 || active_num_sort_sections <= 1 || minChunkSize <= 0) {
-        overlapSize = 0; 
+        overlapSize = 0;
     } else {
         int proportional_overlap = minChunkSize / PARALLEL_SORT_OVERLAP_DIVISOR;
         if (proportional_overlap == 0 && minChunkSize > 0) {
-            proportional_overlap = 1; 
+            proportional_overlap = 1;
         }
 
         // Ensure overlap is at least the minimum required for correctness,
@@ -11224,10 +11110,10 @@ void insertion_parallel_sort(double **columns, int n)
         if (overlapSize > max_permissible_relative_overlap && minChunkSize > 1) {
             overlapSize = max_permissible_relative_overlap;
         }
-        
+
         // If, after all logic, overlap is 0 but we have multiple sections and data, ensure minimal overlap.
         if (overlapSize == 0 && minChunkSize > 0 && active_num_sort_sections > 1) {
-             overlapSize = 1; 
+             overlapSize = 1;
         }
     }
     if (overlapSize < 0) overlapSize = 0; // Final safety check
@@ -11242,7 +11128,7 @@ void insertion_parallel_sort(double **columns, int n)
     #endif
     {
         printf("[NSPHERE_IS_PARALLEL_DEBUG] N=%d, Sections=%d, MinChunkSz=%d, OverlapSize=%d (Using DIV:%d, MIN_CORRECT:%d)\n",
-               n, active_num_sort_sections, minChunkSize, overlapSize, 
+               n, active_num_sort_sections, minChunkSize, overlapSize,
                PARALLEL_SORT_OVERLAP_DIVISOR, PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP);
         fflush(stdout);
     }
@@ -11289,7 +11175,7 @@ void insertion_parallel_sort(double **columns, int n)
 /**
  * @brief Parallel implementation of quadsort algorithm optimized for particle sorting.
  *
- * @details Uses multiple OpenMP threads to sort sections of particle data in parallel, 
+ * @details Uses multiple OpenMP threads to sort sections of particle data in parallel,
  * followed by seam-fixing operations to ensure global ordering. Includes dynamic section
  * calculation and optimized overlap sizing based on chunk characteristics.
  *
@@ -11301,9 +11187,9 @@ void quadsort_parallel_sort(double **columns, int n)
     // Dynamically determine number of sections based on runtime threads and constants.
     int active_num_sort_sections;
     #ifdef _OPENMP
-        int n_runtime_threads = omp_get_max_threads(); 
+        int n_runtime_threads = omp_get_max_threads();
         if (n_runtime_threads <= 0) n_runtime_threads = 1;
-        active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD; 
+        active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD;
         active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD;
         if (active_num_sort_sections <= 0) active_num_sort_sections = PARALLEL_SORT_DEFAULT_SECTIONS;
     #else
@@ -11312,7 +11198,7 @@ void quadsort_parallel_sort(double **columns, int n)
 
     // Ensure a reasonable number of sections
     if (active_num_sort_sections < 1) active_num_sort_sections = 1;
-    if (n > 0 && active_num_sort_sections > n) active_num_sort_sections = n; 
+    if (n > 0 && active_num_sort_sections > n) active_num_sort_sections = n;
     // Optional: Add a hard cap for maximum sections if desired, e.g.:
     // if (active_num_sort_sections > 96) active_num_sort_sections = 96;
 
@@ -11351,7 +11237,7 @@ void quadsort_parallel_sort(double **columns, int n)
     }
 
     // Calculate minChunkSize based on actual chunk distribution using active_num_sort_sections
-    int minChunkSize = n; 
+    int minChunkSize = n;
     if (active_num_sort_sections > 0 && n > 0 && endIdx && startIdx) { // Check endIdx/startIdx validity
         minChunkSize = (endIdx[0] - startIdx[0] + 1);
         for (int c = 1; c < active_num_sort_sections; c++) {
@@ -11363,11 +11249,11 @@ void quadsort_parallel_sort(double **columns, int n)
 
     int overlapSize;
     if (n <= 1 || active_num_sort_sections <= 1 || minChunkSize <= 0) {
-        overlapSize = 0; 
+        overlapSize = 0;
     } else {
         int proportional_overlap = minChunkSize / PARALLEL_SORT_OVERLAP_DIVISOR;
         if (proportional_overlap == 0 && minChunkSize > 0) {
-            proportional_overlap = 1; 
+            proportional_overlap = 1;
         }
 
         // Ensure overlap is at least the minimum required for correctness,
@@ -11386,10 +11272,10 @@ void quadsort_parallel_sort(double **columns, int n)
         if (overlapSize > max_permissible_relative_overlap && minChunkSize > 1) {
             overlapSize = max_permissible_relative_overlap;
         }
-        
+
         // If, after all logic, overlap is 0 but we have multiple sections and data, ensure minimal overlap.
         if (overlapSize == 0 && minChunkSize > 0 && active_num_sort_sections > 1) {
-             overlapSize = 1; 
+             overlapSize = 1;
         }
     }
     if (overlapSize < 0) overlapSize = 0; // Final safety check
@@ -11404,7 +11290,7 @@ void quadsort_parallel_sort(double **columns, int n)
     #endif
     {
         printf("[NSPHERE_QS_PARALLEL_DEBUG] N=%d, Sections=%d, MinChunkSz=%d, OverlapSize=%d (Using DIV:%d, MIN_CORRECT:%d)\n",
-               n, active_num_sort_sections, minChunkSize, overlapSize, 
+               n, active_num_sort_sections, minChunkSize, overlapSize,
                PARALLEL_SORT_OVERLAP_DIVISOR, PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP);
         fflush(stdout);
     }
@@ -11503,15 +11389,15 @@ void verify_sort_results(double **columns, int n, const char *label)
 /**
  * @brief Sorts particle data using the specified sorting algorithm.
  * @details Performs a three-phase particle sorting operation:
- *   1. Memory allocation and data transposition to column-major format 
+ *   1. Memory allocation and data transposition to column-major format
  *   2. Application of the selected sorting algorithm
  *   3. Reverse transposition of sorted data and memory cleanup
- * 
+ *
  * The function uses per-call local buffer allocation for transposing data.
  *
  * @param particles 2D array of particle data to be sorted [component][particle]
  * @param npts Number of particles to sort
- * @param sortAlg Sorting algorithm to use ("quadsort", "quadsort_parallel", 
+ * @param sortAlg Sorting algorithm to use ("quadsort", "quadsort_parallel",
  *               "insertion", or "insertion_parallel")
  */
 void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
@@ -11528,7 +11414,7 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
      * Persistent buffer allocation strategy.
      * Uses a global buffer to reduce allocation overhead across multiple sort operations.
      */
-    
+
     // Allocate or reallocate only if needed
     if (g_sort_columns_buffer == NULL || g_sort_columns_buffer_npts != npts) {
         // Free existing buffer if size has changed
@@ -11545,11 +11431,11 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
             fprintf(stderr, "ERROR: Malloc failed for g_sort_columns_buffer in sort_particles_with_alg\n");
             CLEAN_EXIT(1);
         }
-        
+
         // Allocate sub-arrays for each particle's components
         for (int i = 0; i < npts; i++) {
             g_sort_columns_buffer[i] = (double *)malloc(5 * sizeof(double));
-            if (!g_sort_columns_buffer[i]) { 
+            if (!g_sort_columns_buffer[i]) {
                 fprintf(stderr, "ERROR: Malloc failed for g_sort_columns_buffer[%d] in sort_particles_with_alg\n", i);
                 // Clean up partial allocation
                 for(int k=0; k<i; ++k) free(g_sort_columns_buffer[k]);
@@ -11762,598 +11648,4 @@ void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts)
     }
 
     free(pairs);
-}
-
-/**
- * @brief Constructs a three-dimensional vector from its Cartesian components.
- * @details This utility function initializes a `threevector` structure with the
- *          provided x, y, and z components. It serves as a convenient constructor.
- *
- * @param x [in] The x-component of the vector.
- * @param y [in] The y-component of the vector.
- * @param z [in] The z-component of the vector.
- * @return threevector An initialized `threevector` structure.
- */
-threevector make_threevector(double x, double y, double z) {
-    return (threevector){x, y, z};
-}
-
-/**
- * @brief Computes the scalar dot product of two three-dimensional vectors.
- * @details Calculates \f$X \cdot Y = X_x Y_x + X_y Y_y + X_z Y_z\f$.
- *          The dot product is a measure of the projection of one vector onto another
- *          and is used in various physics calculations, such as determining the
- *          magnitude squared of a vector (\f$V \cdot V = |V|^2\f$) or the angle between vectors.
- *
- * @param X [in] The first threevector operand.
- * @param Y [in] The second threevector operand.
- * @return double The scalar result of the dot product \f$X \cdot Y\f$.
- */
-double dotproduct(threevector X, threevector Y) {
-  return X.x * Y.x + X.y * Y.y + X.z * Y.z;
-}
-
-/**
- * @brief Computes the vector cross product of two three-dimensional vectors.
- * @details Calculates \f$Z = X \times Y\f$, where \f$X = (X_x, X_y, X_z)\f$ and \f$Y = (Y_x, Y_y, Y_z)\f$.
- *          The components of the resulting vector \f$Z\f$ are determined by:
- *          \f$Z_x = X_y Y_z - X_z Y_y\f$
- *          \f$Z_y = X_z Y_x - X_x Y_z\f$
- *          \f$Z_z = X_x Y_y - X_y Y_x\f$
- *          This follows the standard right-hand rule for vector cross products.
- *
- * @param X [in] The first threevector operand.
- * @param Y [in] The second threevector operand.
- * @return threevector The resulting vector \f$Z = X \times Y\f$.
- */
-threevector crossproduct(threevector X, threevector Y) {
-    threevector Z;
-    Z.x = X.y * Y.z - X.z * Y.y;
-    Z.y = X.z * Y.x - X.x * Y.z;
-    Z.z = X.x * Y.y - X.y * Y.x;
-    return Z;
-}
-
-/**
- * @brief Calculates self-interacting dark matter (SIDM) scattering cross-section.
- * @details Implements a velocity-independent cross-section model where the opacity
- *          \f$\sigma/m = \kappa\f$ is constant. The default value for \f$\kappa\f$ is
- *          taken from the global variable `g_sidm_kappa`. The total cross-section
- *          \f$\sigma\f$ then scales with the individual particle mass, \f$m_{particle}\f$, which is
- *          derived from the total `halo_mass_for_calc` and the number of particles `npts`.
- *          The function includes necessary unit conversions to return the cross-section
- *          in simulation units (kpc²).
- *
- *          Unit Conversion Detail:
- *          \f$\kappa\f$ (cm²/g) \f$\times m_{particle}\f$ (Msun) \f$\rightarrow \sigma\f$ (kpc²)
- *          The conversion factor used is \f$2.089 \times 10^{-10} \text{ (kpc}^2 \text{ Msun}^{-1}) / (\text{cm}^2 \text{ g}^{-1})\f$,
- *          derived from \f$(1.989 \times 10^{33} \text{ g/Msun}) / (3.086 \times 10^{21} \text{ cm/kpc})^2\f$.
- *
- * @param vrel                 [in] Relative velocity between particles (kpc/Myr). Currently unused as
- *                             the implemented model is velocity-independent. Marked with `__attribute__((unused))`.
- * @param npts                 [in] Total number of simulation particles, used for calculating \f$m_{particle}\f$.
- * @param halo_mass_for_calc [in] Total halo mass (Msun) for the active profile, used for \f$m_{particle}\f$.
- * @param rc_for_calc          [in] Scale radius (kpc) of the active profile. Currently unused in this
- *                             velocity-independent cross-section model. Marked with `__attribute__((unused))`.
- * @return double Total scattering cross-section \f$\sigma\f$ in kpc². Returns 0.0 if `npts` or
- *                the calculated `particle_mass_Msun` is non-positive to prevent errors.
- */
-double sigmatotal(double vrel __attribute__((unused)), int npts, double halo_mass_for_calc, double rc_for_calc __attribute__((unused))) {
-  double kappa = g_sidm_kappa; // Self-interaction opacity parameter (cm²/g)
-  // Ensure npts is positive to prevent division by zero or negative particle mass
-  if (npts <= 0) {
-    return 0.0;
-  }
-  double particle_mass_Msun = halo_mass_for_calc / ((double)npts);
-  if (particle_mass_Msun <= 0) {
-    return 0.0;
-  }
-  return 2.089e-10 * kappa * particle_mass_Msun; // Cross-section (kpc²)
-}
-
-/**
- * @brief Executes self-interacting dark matter (SIDM) scattering for one simulation timestep (Serial version).
- * @details Implements a serial SIDM scattering algorithm. For each particle `i` (the primary scatterer),
- *          it considers up to `nscat` (typically 10) subsequent particles in the array as potential
- *          scattering partners. (The `particles` array is assumed to be sorted by radius, so these
- *          are spatially nearby neighbors).
- *          The algorithm proceeds as follows for each primary particle `i`:
- *          1. Constructs 3D velocity for particle `i`, assigning a random azimuthal angle to its perpendicular component.
- *          2. For each of the `nscat` potential partners `m`:
- *             a. Constructs 3D velocity for partner `m` (assuming a fixed azimuthal orientation for simplicity).
- *             b. Calculates relative velocity \f$v_{rel}\f$ and interaction rate \f$\Gamma_m = \sigma(v_{rel}) v_{rel}\f$.
- *             c. Accumulates total interaction rate \f$\Gamma_{tot} = \sum \Gamma_m\f$.
- *          3. Estimates local particle number density using a shell volume. The shell is defined by particle `i`
- *             and an outer radius typically determined by particle `i + nscat + 1`.
- *          4. Calculates the total scattering probability for particle `i` in timestep `dt`: \f$P_{scatter} \approx \Gamma_{tot} \times (0.5 \times dt / \text{Volume}_{shell})\f$.
- *             The 0.5 factor accounts for double counting pairs.
- *          5. A random number is drawn. If it's less than \f$P_{scatter}\f$, a scatter occurs:
- *             a. One partner `m_scatter` is stochastically chosen from the `nscat` candidates, weighted by their individual \f$\Gamma_m\f$.
- *             b. Isotropic scattering is performed in the center-of-mass frame of the pair \f$(i, m_{scatter})\f$.
- *             c. The 3D velocities of both particles are updated.
- *             d. New radial velocities and angular momenta are calculated from the updated 3D velocities
- *                and stored back into the `particles` array, modifying it in-place.
- *             e. The `g_particle_scatter_state` flags are set for the scattered particles.
- *          The total number of scattering events in this timestep is accumulated.
- *
- * @param particles             [in,out] Main particle data array: `particles[component][current_sorted_index]`.
- *                              Modified in-place with post-scattering velocities/angular momenta.
- * @param npts                  [in] Total number of simulation particles.
- * @param dt                    [in] Integration timestep (Myr).
- * @param current_time          [in] Current simulation time (Myr). Marked `unused` but available.
- * @param rng                   [in] GSL random number generator instance for all stochastic processes.
- * @param Nscatter_total_step   [out] Pointer to a long long to accumulate total scattering events this timestep.
- * @param halo_mass_for_sidm    [in] Total halo mass (Msun) for the active profile, passed to `sigmatotal`.
- * @param rc_for_sidm           [in] Scale radius (kpc) for the active profile, passed to `sigmatotal`.
- */
-void perform_sidm_scattering_serial(double **particles, int npts, double dt, double current_time __attribute__((unused)), gsl_rng *rng, long long *Nscatter_total_step, double halo_mass_for_sidm __attribute__((unused)), double rc_for_sidm __attribute__((unused))) {
-    long long Nscatters_this_call = 0;
-    int i;
-
-    // Iterate through each particle as potential scatterer
-    for (i = 0; i < npts - 1; i++) {
-        int nscat = 10; // Consider 10 nearest neighbors as scattering candidates
-        if (npts - 1 - i < nscat) {
-            nscat = npts - 1 - i; // Limit to available particles
-        }
-        if (nscat <= 0) continue;
-
-        double partialprobability[nscat + 1]; // Interaction rates for each candidate
-        double probability_sum_term = 0.0;   // Total interaction rate sum
-
-        // Construct 3D velocity vector for primary particle
-        // Random azimuthal orientation for transverse velocity component
-        double phii = 2.0 * PI * gsl_rng_uniform(rng);
-        double Viperp = particles[2][i] / particles[0][i]; // v_perp = L/r
-        threevector Vi = make_threevector(Viperp * cos(phii), Viperp * sin(phii), particles[1][i]);
-
-        // Calculate interaction rates with neighboring particles
-        for (int m = 1; m <= nscat; m++) {
-            int partner_idx = i + m;
-
-            // Construct 3D velocity for scattering partner
-            // Assumes fixed azimuthal alignment for partner particle
-            double Vmperp = particles[2][partner_idx] / particles[0][partner_idx];
-            threevector Vm = make_threevector(Vmperp, 0.0, particles[1][partner_idx]);
-
-            threevector Vrel_vec = make_threevector(Vi.x - Vm.x, Vi.y - Vm.y, Vi.z - Vm.z);
-            double vrel_val = sqrt(dotproduct(Vrel_vec, Vrel_vec));
-
-            // Calculate interaction rate: σ × v_rel
-            partialprobability[m] = sigmatotal(vrel_val, npts, halo_mass_for_sidm, rc_for_sidm) * vrel_val;
-            probability_sum_term += partialprobability[m];
-        }
-
-        // Determine the outer radius of the shell containing these nscat neighbors
-        // Option 1 (Consistent): Shell defined by the nscat-th summed neighbor
-        // Option 2 (Current): Shell defined by the (nscat+1)-th particle
-        int use_nscat_plus_1_for_shell = 1; // Set to 1 for current method, 0 for alternative
-        int outer_shell_particle_idx_for_vol;
-
-        if (use_nscat_plus_1_for_shell) {
-            outer_shell_particle_idx_for_vol = i + nscat + 1;
-        } else {
-            outer_shell_particle_idx_for_vol = i + nscat;
-        }
-
-        // Ensure the chosen outer index is within bounds
-        if (outer_shell_particle_idx_for_vol >= npts) {
-            // If out of bounds, try to use the last available particle as the boundary
-            if (i + nscat < npts) {
-                outer_shell_particle_idx_for_vol = i + nscat;
-            } else {
-                // No valid shell can be formed
-                probability_sum_term = 0.0; // Force no scatter, skip probability calculation
-            }
-        }
-        
-        double radius_diff = 0.0;
-        // Calculate radius_diff only if there's a chance to scatter and a valid shell
-        if (probability_sum_term > 1e-30 && (outer_shell_particle_idx_for_vol > i)) {
-            radius_diff = particles[0][outer_shell_particle_idx_for_vol] - particles[0][i];
-        } else {
-            probability_sum_term = 0.0; // Ensure no scatter if shell is invalid
-        }
-
-        double probability = 0.0;
-        if (radius_diff > 1e-15 && particles[0][i] > 1e-15 && probability_sum_term > 1e-30) {
-            // Calculate scattering probability using shell volume approximation
-            probability = probability_sum_term * (0.5) * dt / (4.0 * PI * sqr(particles[0][i]) * radius_diff);
-        }
-
-        // Stochastic scattering determination
-        if (gsl_rng_uniform(rng) < probability) {
-            Nscatters_this_call++;
-            int m_scatter = 1; // Default to first neighbor
-
-            // Weighted selection among multiple neighbors
-            if (nscat > 1 && probability_sum_term > 1e-15) {
-                double cumulative_prob[nscat + 1];
-                cumulative_prob[0] = 0.0;
-                for (int k = 1; k <= nscat; k++) {
-                    cumulative_prob[k] = (k > 1 ? cumulative_prob[k - 1] : 0.0) + partialprobability[k] / probability_sum_term;
-                }
-                if (nscat > 0) cumulative_prob[nscat] = 1.0;
-
-                double random_select = gsl_rng_uniform(rng);
-                m_scatter = 1;
-                // Select partner based on cumulative probability distribution
-                while (m_scatter < nscat && random_select > cumulative_prob[m_scatter]) {
-                    m_scatter++;
-                }
-            }
-
-            int actual_partner_idx = i + m_scatter;
-            if (actual_partner_idx >= npts) {
-                Nscatters_this_call--;
-                continue;
-            }
-
-            // Reconstruct velocities for selected scattering pair
-            double Vmperp_scatter = particles[2][actual_partner_idx] / particles[0][actual_partner_idx];
-            threevector Vm_scatter = make_threevector(Vmperp_scatter, 0.0, particles[1][actual_partner_idx]);
-            threevector Vrel_scatter_vec = make_threevector(Vi.x - Vm_scatter.x, Vi.y - Vm_scatter.y, Vi.z - Vm_scatter.z);
-            double vrel_scatter_val = sqrt(dotproduct(Vrel_scatter_vec, Vrel_scatter_vec));
-
-            if (vrel_scatter_val < 1e-15) {
-                Nscatters_this_call--;
-                continue;
-            }
-
-            // Generate isotropic scattering angles in center-of-mass frame
-            double costheta = 2.0 * gsl_rng_uniform(rng) - 1.0;
-            double sintheta = sqrt(fmax(0.0, 1.0 - costheta * costheta));
-            double phif_scatter = 2.0 * PI * gsl_rng_uniform(rng);
-            double cf = cos(phif_scatter);
-            double sf = sin(phif_scatter);
-
-            // Construct orthonormal coordinate system for scattering transformation
-            threevector nhat0, nhat1, nhat2, nhatref;
-            nhat0 = make_threevector(Vrel_scatter_vec.x / vrel_scatter_val, Vrel_scatter_vec.y / vrel_scatter_val, Vrel_scatter_vec.z / vrel_scatter_val);
-
-            if (fabs(nhat0.z) < 0.999) {
-                nhatref = make_threevector(0.0, 0.0, 1.0);
-            } else {
-                nhatref = make_threevector(1.0, 0.0, 0.0);
-            }
-
-            nhat1 = crossproduct(nhat0, nhatref);
-            double normnhat1 = sqrt(dotproduct(nhat1, nhat1));
-            if (normnhat1 < 1e-15) {
-                // Fallback for parallel vectors
-                if (fabs(nhat0.x) < 0.999) {
-                    nhatref = make_threevector(1.0, 0.0, 0.0);
-                } else {
-                    nhatref = make_threevector(0.0, 1.0, 0.0);
-                }
-                nhat1 = crossproduct(nhat0, nhatref);
-                normnhat1 = sqrt(dotproduct(nhat1, nhat1));
-                if (normnhat1 < 1e-15) {
-                     Nscatters_this_call--; continue;
-                }
-            }
-            nhat1 = make_threevector(nhat1.x / normnhat1, nhat1.y / normnhat1, nhat1.z / normnhat1);
-            nhat2 = crossproduct(nhat0, nhat1);
-
-            // Transform scattered velocities from CM frame to lab frame
-            threevector nhat_perp_rotated = make_threevector(nhat1.x * cf + nhat2.x * sf, nhat1.y * cf + nhat2.y * sf, nhat1.z * cf + nhat2.z * sf);
-            threevector V_rel_final_half = make_threevector(
-                (vrel_scatter_val / 2.0) * (costheta * nhat0.x + sintheta * nhat_perp_rotated.x),
-                (vrel_scatter_val / 2.0) * (costheta * nhat0.y + sintheta * nhat_perp_rotated.y),
-                (vrel_scatter_val / 2.0) * (costheta * nhat0.z + sintheta * nhat_perp_rotated.z)
-            );
-            threevector V_cm = make_threevector((Vi.x + Vm_scatter.x) / 2.0, (Vi.y + Vm_scatter.y) / 2.0, (Vi.z + Vm_scatter.z) / 2.0);
-            
-            threevector Vifinal_vec = make_threevector(V_cm.x + V_rel_final_half.x, V_cm.y + V_rel_final_half.y, V_cm.z + V_rel_final_half.z);
-            threevector Vmfinal_vec = make_threevector(V_cm.x - V_rel_final_half.x, V_cm.y - V_rel_final_half.y, V_cm.z - V_rel_final_half.z);
-
-            // Apply velocity changes to particle data arrays
-            particles[1][i] = Vifinal_vec.z;
-            particles[1][actual_partner_idx] = Vmfinal_vec.z;
-
-            double Vperp_i_final_mag = sqrt(sqr(Vifinal_vec.x) + sqr(Vifinal_vec.y));
-            double Vperp_m_final_mag = sqrt(sqr(Vmfinal_vec.x) + sqr(Vmfinal_vec.y));
-
-            particles[2][i] = particles[0][i] * Vperp_i_final_mag; // Update angular momentum
-            particles[2][actual_partner_idx] = particles[0][actual_partner_idx] * Vperp_m_final_mag;
-
-            // Mark both scattered particles in case it is needed elsewhere
-            int orig_id1 = (int)particles[3][i];
-            int orig_id2 = (int)particles[3][actual_partner_idx];
-            if (orig_id1 >= 0 && orig_id1 < npts) g_particle_scatter_state[orig_id1] = 1;
-            if (orig_id2 >= 0 && orig_id2 < npts) g_particle_scatter_state[orig_id2] = 1;
-        }
-    }
-
-    *Nscatter_total_step = Nscatters_this_call;
-}
-
-/**
- * @brief Comparison function for `qsort` to order `ScatterEvent` structures.
- * @details Sorts an array of `ScatterEvent` structures primarily by the first particle's
- *          original index (`i`) in ascending order. If two events have the same primary
- *          particle index `i`, they are then secondarily sorted by the partner's offset
- *          (`m_offset`) in ascending order. This ensures a deterministic (and efficient
- *          for potential cache effects) order when applying buffered scatter updates to
- *          the main particle array, preventing race conditions or non-deterministic outcomes
- *          if multiple scatters involve the same primary particle.
- *
- * @param a [in] Pointer to the first `ScatterEvent` structure.
- * @param b [in] Pointer to the second `ScatterEvent` structure.
- * @return int - An integer less than, equal to, or greater than zero if the first
- *               argument is considered to be respectively less than, equal to,
- *               or greater than the second.
- */
-static int compare_scatter_events(const void *a, const void *b) {
-    const ScatterEvent *event_a = (const ScatterEvent *)a;
-    const ScatterEvent *event_b = (const ScatterEvent *)b;
-
-    if (event_a->i < event_b->i) return -1;
-    if (event_a->i > event_b->i) return 1;
-    // If i is the same, sort by m_offset
-    if (event_a->m_offset < event_b->m_offset) return -1;
-    if (event_a->m_offset > event_b->m_offset) return 1;
-    return 0;
-}
-
-/**
- * @brief Performs SIDM scattering calculations for one timestep using OpenMP for parallelism.
- * @details This function implements a two-phase parallel algorithm for SIDM scattering:
- *          Phase 1 (Parallel Particle Evaluation):
- *            - The main particle loop (over `i`) is parallelized using OpenMP.
- *            - Each thread processes its assigned subset of primary particles (`i`).
- *            - For each particle `i`, it considers `nscat` neighbors (by sorted rank) as potential scattering partners.
- *            - Interaction rates and total scattering probability for particle `i` with its neighbors
- *              are calculated using a shell volume approximation for local density.
- *            - A per-thread GSL RNG (`local_rng` from `rng_per_thread_list`) is used for all
- *              stochastic decisions (scatter occurrence, partner selection, scattering angles).
- *            - If a scatter occurs for particle `i` with a chosen partner `i+m_scatter`, the
- *              resulting final 3D velocities for both particles are computed.
- *            - These outcomes (indices `i`, `m_offset`, and final velocities) are stored in a
- *              `ScatterEvent` structure and added to a dynamically resizing global buffer
- *              (`global_scatter_results`) under an OpenMP critical section to ensure thread-safe appending.
- *          Phase 2 (Serial Update from Buffered Results):
- *            - After the parallel loop completes, a single thread sorts the `global_scatter_results`
- *              (by primary particle index, then partner offset) to ensure deterministic application order.
- *            - It then iterates through the sorted scatter events and updates the main `particles`
- *              array (radial velocity `particles[1]` and angular momentum `particles[2]`) with the
- *              final post-scatter velocities.
- *            - Updates the `g_particle_scatter_state` flags for particles involved in scattering.
- *          The `particles` array is assumed to be sorted by radius prior to calling this function.
- *
- * @param particles             [in,out] Main particle data array: `particles[component][current_sorted_index]`.
- *                              Modified in-place with post-scattering velocities/angular momenta.
- * @param npts                  [in] Total number of particles.
- * @param dt                    [in] Simulation timestep (Myr), used in probability calculation.
- * @param current_time          [in] Current simulation time (Myr). Marked `unused` but available for future use.
- * @param rng_per_thread_list   [in] Array of GSL RNG states, one for each OpenMP thread.
- * @param num_threads_for_rng   [in] The number of allocated RNGs in `rng_per_thread_list` (should match max threads).
- * @param Nscatter_total_step   [out] Pointer to a long long to accumulate the total number of scatter events
- *                              that occurred in this timestep.
- * @param halo_mass_for_sidm    [in] Total halo mass (Msun) for the active profile, passed to `sigmatotal`.
- * @param rc_for_sidm           [in] Scale radius (kpc) for the active profile, passed to `sigmatotal`.
- */
-void perform_sidm_scattering_parallel(double **particles, int npts, double dt, double current_time __attribute__((unused)), gsl_rng **rng_per_thread_list, int num_threads_for_rng, long long *Nscatter_total_step, double halo_mass_for_sidm, double rc_for_sidm) {
-    long long Nscatters_this_call_atomic = 0; // Accumulated in parallel reduction
-
-    // Buffer for storing scattering event outcomes from all threads
-    ScatterEvent *global_scatter_results = NULL;
-    size_t global_results_count = 0;
-    size_t global_results_capacity = 0;
-    // Initial capacity can be a small fraction of npts, e.g., npts/100 or a fixed moderate number
-    // Adjust if typical scatter rates are known.
-    size_t initial_capacity = (npts > 1000) ? (npts / 100) : 100;
-    if (initial_capacity == 0) initial_capacity = 10; // Ensure non-zero for very small npts
-
-    global_scatter_results = (ScatterEvent *)malloc(initial_capacity * sizeof(ScatterEvent));
-    if (global_scatter_results == NULL) {
-        fprintf(stderr, "Error: Failed to allocate initial global_scatter_results buffer.\n");
-        // Don't CLEAN_EXIT here, try to proceed without SIDM for this step or log error
-        *Nscatter_total_step = 0;
-        return;
-    }
-    global_results_capacity = initial_capacity;
-
-    #pragma omp parallel reduction(+:Nscatters_this_call_atomic)
-    {
-        gsl_rng *local_rng = NULL; // Initialize to NULL
-        int thread_id_for_rng = 0;
-        #ifdef _OPENMP
-            thread_id_for_rng = omp_get_thread_num();
-        #endif
-
-        if (rng_per_thread_list != NULL && thread_id_for_rng < num_threads_for_rng && rng_per_thread_list[thread_id_for_rng] != NULL) {
-            local_rng = rng_per_thread_list[thread_id_for_rng];
-        } else {
-            // Critical issue: Per-thread RNG not available for an active thread.
-            // This should not happen if g_rng_per_thread is sized to omp_get_max_threads()
-            // and num_threads_for_rng passed to this function matches that.
-            // Proceeding with a shared g_rng would be unsafe and non-reproducible.
-            // For now, this thread will not perform scattering.
-            #pragma omp critical (rng_error_sidm_parallel)
-            {
-                fprintf(stderr, "CRITICAL SIDM WARNING: Thread %d has no valid per-thread RNG (num_threads_for_rng=%d). This thread will skip SIDM calculations.\n", thread_id_for_rng, num_threads_for_rng);
-                log_message("ERROR", "CRITICAL SIDM: Thread %d missing per-thread RNG.", thread_id_for_rng);
-            }
-            // To make this thread skip its iterations of the omp for loop:
-            // One way is to jump past the loop content for this thread.
-            // A cleaner way is to check local_rng before using it inside the loop.
-        }
-
-
-        /**
-         * Using schedule(static,1) to ensure deterministic assignment of particles
-         * to threads, which is crucial for run-to-run reproducibility of the
-         * parallel SIDM simulation when using per-thread RNGs seeded identically
-         * across runs (for a fixed number of threads).
-         */
-        #pragma omp for schedule(static,1)
-        for (int i = 0; i < npts - 1; i++) {
-            // Check if this thread has a valid RNG before proceeding
-            if (local_rng == NULL) {
-                continue; // This thread skips its assigned SIDM work
-            }
-            
-            int nscat = 10;
-            if (npts - 1 - i < nscat) nscat = npts - 1 - i;
-            if (nscat <= 0) continue;
-
-            double partialprobability[nscat + 1]; // Max nscat=10, stack is fine
-            double probability_sum_term = 0.0;
-
-            double phii = 2.0 * PI * gsl_rng_uniform(local_rng);
-            double Viperp = particles[2][i] / particles[0][i];
-            threevector Vi = make_threevector(Viperp * cos(phii), Viperp * sin(phii), particles[1][i]);
-
-            for (int m = 1; m <= nscat; m++) {
-                int partner_idx = i + m;
-                double Vmperp = particles[2][partner_idx] / particles[0][partner_idx];
-                threevector Vm = make_threevector(Vmperp, 0.0, particles[1][partner_idx]);
-                threevector Vrel_vec = make_threevector(Vi.x - Vm.x, Vi.y - Vm.y, Vi.z - Vm.z);
-                double vrel_val = sqrt(dotproduct(Vrel_vec, Vrel_vec));
-                partialprobability[m] = sigmatotal(vrel_val, npts, halo_mass_for_sidm, rc_for_sidm) * vrel_val;
-                probability_sum_term += partialprobability[m];
-            }
-
-            int use_nscat_plus_1_for_shell_par = 1; // Consistent with serial for now
-            int outer_shell_particle_idx_for_vol_par;
-            if (use_nscat_plus_1_for_shell_par) {
-                outer_shell_particle_idx_for_vol_par = i + nscat + 1;
-            } else {
-                outer_shell_particle_idx_for_vol_par = i + nscat;
-            }
-            if (outer_shell_particle_idx_for_vol_par >= npts) {
-                if (i + nscat < npts) outer_shell_particle_idx_for_vol_par = i + nscat;
-                else probability_sum_term = 0.0;
-            }
-
-            double radius_diff_par = 0.0;
-            if (probability_sum_term > 1e-30 && (outer_shell_particle_idx_for_vol_par > i) ) {
-                radius_diff_par = particles[0][outer_shell_particle_idx_for_vol_par] - particles[0][i];
-            } else {
-                probability_sum_term = 0.0;
-            }
-
-            double probability_par = 0.0;
-            if (radius_diff_par > 1e-15 && particles[0][i] > 1e-15 && probability_sum_term > 1e-30) {
-                probability_par = probability_sum_term * (0.5) * dt / (4.0 * PI * sqr(particles[0][i]) * radius_diff_par);
-            }
-
-            if (gsl_rng_uniform(local_rng) < probability_par) {
-                Nscatters_this_call_atomic++; // Atomically increment shared counter
-                int m_scatter = 1;
-                if (nscat > 1 && probability_sum_term > 1e-15) {
-                    double cumulative_prob[nscat + 1];
-                    cumulative_prob[0] = 0.0;
-                    for (int k_cs = 1; k_cs <= nscat; k_cs++) {
-                        cumulative_prob[k_cs] = (k_cs > 1 ? cumulative_prob[k_cs - 1] : 0.0) + partialprobability[k_cs] / probability_sum_term;
-                    }
-                    if (nscat > 0) cumulative_prob[nscat] = 1.0;
-                    double random_select = gsl_rng_uniform(local_rng);
-                    while (m_scatter < nscat && random_select > cumulative_prob[m_scatter]) {
-                        m_scatter++;
-                    }
-                }
-                int actual_partner_idx = i + m_scatter;
-                if (actual_partner_idx >= npts) continue; // Should be rare with nscat logic
-
-                double Vmperp_scatter = particles[2][actual_partner_idx] / particles[0][actual_partner_idx];
-                threevector Vm_scatter = make_threevector(Vmperp_scatter, 0.0, particles[1][actual_partner_idx]);
-                threevector Vrel_scatter_vec = make_threevector(Vi.x - Vm_scatter.x, Vi.y - Vm_scatter.y, Vi.z - Vm_scatter.z);
-                double vrel_scatter_val = sqrt(dotproduct(Vrel_scatter_vec, Vrel_scatter_vec));
-                if (vrel_scatter_val < 1e-15) continue;
-
-                double costheta = 2.0 * gsl_rng_uniform(local_rng) - 1.0;
-                double sintheta = sqrt(fmax(0.0, 1.0 - costheta*costheta));
-                double phif_scatter = 2.0 * PI * gsl_rng_uniform(local_rng);
-                double cf = cos(phif_scatter); double sf = sin(phif_scatter);
-                threevector nhat0, nhat1, nhat2, nhatref; // Orthonormal basis construction (as in serial)
-                nhat0 = make_threevector(Vrel_scatter_vec.x/vrel_scatter_val, Vrel_scatter_vec.y/vrel_scatter_val, Vrel_scatter_vec.z/vrel_scatter_val);
-                if (fabs(nhat0.z) < 0.999) nhatref = make_threevector(0.0,0.0,1.0); else nhatref = make_threevector(1.0,0.0,0.0);
-                nhat1 = crossproduct(nhat0,nhatref); double normnhat1 = sqrt(dotproduct(nhat1,nhat1));
-                if (normnhat1 < 1e-15) { if (fabs(nhat0.x) < 0.999) nhatref = make_threevector(1.0,0.0,0.0); else nhatref = make_threevector(0.0,1.0,0.0);
-                    nhat1 = crossproduct(nhat0,nhatref); normnhat1 = sqrt(dotproduct(nhat1,nhat1)); if (normnhat1 < 1e-15) continue; }
-                nhat1 = make_threevector(nhat1.x/normnhat1, nhat1.y/normnhat1, nhat1.z/normnhat1);
-                nhat2 = crossproduct(nhat0,nhat1);
-
-                threevector nhat_perp_rotated = make_threevector(nhat1.x*cf+nhat2.x*sf, nhat1.y*cf+nhat2.y*sf, nhat1.z*cf+nhat2.z*sf);
-                threevector V_rel_final_half = make_threevector( (vrel_scatter_val/2.0)*(costheta*nhat0.x+sintheta*nhat_perp_rotated.x), (vrel_scatter_val/2.0)*(costheta*nhat0.y+sintheta*nhat_perp_rotated.y), (vrel_scatter_val/2.0)*(costheta*nhat0.z+sintheta*nhat_perp_rotated.z) );
-                threevector V_cm = make_threevector( (Vi.x+Vm_scatter.x)/2.0, (Vi.y+Vm_scatter.y)/2.0, (Vi.z+Vm_scatter.z)/2.0 );
-                
-                ScatterEvent current_event;
-                current_event.i = i;
-                current_event.m_offset = m_scatter; // Store offset, not absolute index
-                current_event.Vifinal = make_threevector( V_cm.x+V_rel_final_half.x, V_cm.y+V_rel_final_half.y, V_cm.z+V_rel_final_half.z );
-                current_event.Vmfinal = make_threevector( V_cm.x-V_rel_final_half.x, V_cm.y-V_rel_final_half.y, V_cm.z-V_rel_final_half.z );
-
-                #pragma omp critical (add_scatter_result_sidm)
-                {
-                    if (global_results_count >= global_results_capacity) {
-                        size_t new_capacity = (global_results_capacity == 0) ? initial_capacity : global_results_capacity * 2;
-                         // Cap growth to avoid excessive memory if many scatters happen (unlikely but safe)
-                        if (new_capacity > (size_t)npts && global_results_capacity < (size_t)npts) new_capacity = (size_t)npts;
-                        
-                        ScatterEvent *new_results_buffer = (ScatterEvent *)realloc(global_scatter_results, new_capacity * sizeof(ScatterEvent));
-                        if (!new_results_buffer) {
-                            // This is a critical error if realloc fails.
-                            // For now, we'll just stop adding results, but ideally, log and potentially terminate.
-                             fprintf(stderr, "CRITICAL ERROR: Failed to reallocate global_scatter_results buffer in thread %d.\n", thread_id_for_rng);
-                            // To prevent further issues, we could try to signal other threads or exit.
-                            // This error means we are likely out of memory.
-                        } else {
-                            global_scatter_results = new_results_buffer;
-                            global_results_capacity = new_capacity;
-                        }
-                    }
-                    // Only add if capacity is sufficient (realloc might have failed)
-                    if (global_results_count < global_results_capacity) {
-                         global_scatter_results[global_results_count++] = current_event;
-                    }
-                } // end critical section
-            } // end if scatter occurs
-        } // end omp for loop over particles i
-    } // end parallel region
-
-    // Phase 2: Serial Update - Apply buffered scatter results
-    // Sort the collected scatter events to ensure deterministic application order
-    if (global_results_count > 1) {
-        qsort(global_scatter_results, global_results_count, sizeof(ScatterEvent), compare_scatter_events);
-    }
-    
-    // This part is done by a single thread after the parallel computation.
-    for (size_t k = 0; k < global_results_count; k++) {
-        int p_i = global_scatter_results[k].i;
-        int p_m_offset = global_scatter_results[k].m_offset;
-        int p_partner_idx = p_i + p_m_offset;
-
-        // Redundant check, but good for safety, especially if realloc failed silently for some threads
-        if (p_i < 0 || p_i >= npts || p_partner_idx < 0 || p_partner_idx >= npts || p_m_offset <= 0) {
-            // log_message("WARNING", "Skipping invalid scatter event from buffer: i=%d, partner_idx=%d, m_offset=%d", p_i, p_partner_idx, p_m_offset);
-            continue;
-        }
-
-        threevector Vifinal_upd = global_scatter_results[k].Vifinal;
-        threevector Vmfinal_upd = global_scatter_results[k].Vmfinal;
-
-        particles[1][p_i] = Vifinal_upd.z; // Update radial velocity for particle i
-        particles[1][p_partner_idx] = Vmfinal_upd.z; // Update radial velocity for partner
-
-        double Vperp_i_final_mag_upd = sqrt(sqr(Vifinal_upd.x) + sqr(Vifinal_upd.y));
-        double Vperp_m_final_mag_upd = sqrt(sqr(Vmfinal_upd.x) + sqr(Vmfinal_upd.y));
-
-        particles[2][p_i] = particles[0][p_i] * Vperp_i_final_mag_upd; // Update L for particle i
-        particles[2][p_partner_idx] = particles[0][p_partner_idx] * Vperp_m_final_mag_upd; // Update L for partner
-
-        // Mark both scattered particles in case it is needed elsewhere
-        int orig_id1 = (int)particles[3][p_i];
-        int orig_id2 = (int)particles[3][p_partner_idx];
-        if (orig_id1 >= 0 && orig_id1 < npts) g_particle_scatter_state[orig_id1] = 1;
-        if (orig_id2 >= 0 && orig_id2 < npts) g_particle_scatter_state[orig_id2] = 1;
-    }
-
-    if (global_scatter_results != NULL) {
-        free(global_scatter_results);
-    }
-
-    *Nscatter_total_step = Nscatters_this_call_atomic;
 }
