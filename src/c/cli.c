@@ -149,3 +149,43 @@ void errorAndExit(const char *msg, const char *arg, const char *prog)
      cleanup_all_particle_data();
      exit(1);
  }
+
+ /**
+  * @brief Prompts the user with a yes/no question and reads their response from stdin.
+  * @details Displays the given `prompt` string followed by "[y/N]: ".
+  *          Reads a line of input from the user.
+  *          - Returns 1 (yes) if the first character of the input is 'y' or 'Y'.
+  *          - Returns 0 (no) if the first character is 'n', 'N', or if the input is
+  *            an empty line (user just pressed Enter, defaulting to No).
+  *          - If any other input is received, the prompt is repeated.
+  *          Handles potential EOF or read errors by defaulting to No.
+  *
+  * @param prompt [in] The question/prompt message to display to the user.
+  * @return int 1 if the user confirms (yes), 0 otherwise (no/default).
+  */
+ int prompt_yes_no(const char *prompt) {
+     int response;
+
+     while (1) {
+         printf("%s [y/N]: ", prompt);
+         fflush(stdout);
+
+         // Read entire line
+         char buffer[256];
+         if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
+             // EOF or error - treat as 'N'
+             return 0;
+         }
+
+         // Check first character
+         response = buffer[0];
+
+         if (response == 'y' || response == 'Y') {
+             return 1;
+         } else if (response == 'n' || response == 'N' || response == '\n') {
+             // Empty line (just Enter) or explicit 'n'/'N'
+             return 0;
+         }
+         // Any other input repeats the prompt
+     }
+ }

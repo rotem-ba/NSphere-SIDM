@@ -20,5 +20,6 @@
 
 void printUsage(const char *prog);
 void errorAndExit(const char *msg, const char *arg, const char *prog);
+int prompt_yes_no(const char *prompt);
 
 #endif // CLI_H

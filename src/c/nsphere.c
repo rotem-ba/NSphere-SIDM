@@ -519,87 +519,6 @@ double evaluatespline(gsl_spline *spline, gsl_interp_accel *acc, double value);
  */
 double fEintegrand(double t, void *params);
 
-/**
- * @brief Comparison function for sorting LAndIndex structures by the `L` member (ascending).
- *
- * Parameters
- * ----------
- * a : const void*
- *     Pointer to the first LAndIndex structure.
- * b : const void*
- *     Pointer to the second LAndIndex structure.
- *
- * Returns
- * -------
- * int
- *     -1 if a->L < b->L, 1 if a->L > b->L, 0 if a->L == b->L.
- *
- * @see LAndIndex
- */
-int cmp_LAI(const void *a, const void *b);
-
-/**
- * @brief Checks if a given string represents a valid floating-point number.
- * @details Validates if the input string conforms to common floating-point number
- *          formats, including an optional leading sign ('+' or '-'), digits,
- *          at most one decimal point (if not in exponent part), and an optional
- *          exponent part (e.g., "e+10", "E-5").
- *          The function requires at least one digit to be present for a number to be
- *          considered valid (e.g., "." or "+." are not valid floats).
- *
- * @param str [in] The null-terminated string to check.
- * @return int 1 if the string is a valid float, 0 otherwise.
- */
-static int isFloat(const char *str)
-{
-    if (*str == '-' || *str == '+')
-    {
-        str++;
-    }
-    if (!*str)
-    {
-        return 0;
-    }
-
-    int has_digit = 0;
-    int has_decimal = 0;
-    int has_exponent = 0;
-
-    while (*str)
-    {
-        if (isdigit((unsigned char)*str))
-        {
-            has_digit = 1;
-        }
-        else if (*str == '.' && !has_decimal && !has_exponent)
-        {
-            has_decimal = 1;
-        }
-        else if ((*str == 'e' || *str == 'E') && !has_exponent && has_digit)
-        {
-            has_exponent = 1;
-            str++;
-            // Check for optional sign after exponent
-            if (*str == '-' || *str == '+')
-            {
-                str++;
-            }
-            if (!*str || !isdigit((unsigned char)*str))
-            {
-                return 0; // Exponent must have at least one digit
-            }
-            // Don't reset has_digit - we already have valid digits before exponent
-        }
-        else
-        {
-            return 0;
-        }
-        str++;
-    }
-
-    return has_digit;
-}
-
 // =========================================================================
 // PARTICLE I/O AND OPERATIONS
 // =========================================================================
@@ -1658,46 +1577,6 @@ long long get_available_disk_space(const char *path) {
         }
     #endif
     return -1;
-}
-
-/**
- * @brief Prompts the user with a yes/no question and reads their response from stdin.
- * @details Displays the given `prompt` string followed by "[y/N]: ".
- *          Reads a line of input from the user.
- *          - Returns 1 (yes) if the first character of the input is 'y' or 'Y'.
- *          - Returns 0 (no) if the first character is 'n', 'N', or if the input is
- *            an empty line (user just pressed Enter, defaulting to No).
- *          - If any other input is received, the prompt is repeated.
- *          Handles potential EOF or read errors by defaulting to No.
- *
- * @param prompt [in] The question/prompt message to display to the user.
- * @return int 1 if the user confirms (yes), 0 otherwise (no/default).
- */
-int prompt_yes_no(const char *prompt) {
-    int response;
-
-    while (1) {
-        printf("%s [y/N]: ", prompt);
-        fflush(stdout);
-
-        // Read entire line
-        char buffer[256];
-        if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
-            // EOF or error - treat as 'N'
-            return 0;
-        }
-
-        // Check first character
-        response = buffer[0];
-
-        if (response == 'y' || response == 'Y') {
-            return 1;
-        } else if (response == 'n' || response == 'N' || response == '\n') {
-            // Empty line (just Enter) or explicit 'n'/'N'
-            return 0;
-        }
-        // Any other input repeats the prompt
-    }
 }
 
 /**

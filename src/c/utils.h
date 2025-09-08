@@ -25,5 +25,6 @@
 #define cube(x) ((x) * (x) * (x))
 
 int isInteger(const char *str);
+int isFloat(const char *str);
 
 #endif // UTILS_H
