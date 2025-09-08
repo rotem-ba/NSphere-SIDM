@@ -271,5 +271,6 @@ extern char method_filename[32];      ///< Filename suffix for the integration m
 extern int display_sort;              ///< Sorting algorithm used (default 1 = Parallel Quadsort)
 extern int include_method_in_suffix;  ///< Boolean, include method string in output filenames (default 0 = don't show)
 extern char custom_tag[256];          ///< Tag added to output files (default: no custom tag)
+extern char filename_tag[512];        ///< Filename total tag
 
 #endif // GLOBALS_H

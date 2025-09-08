@@ -216,3 +216,4 @@ char method_filename[32] = "adp.leap.adp.levi";
 int display_sort = 1;
 int include_method_in_suffix = 0;
 char custom_tag[256] = {0};
+char filename_tag[512] = "";

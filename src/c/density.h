@@ -56,4 +56,6 @@
   double drhodr(double r);
   double massintegrand(double r, void *params __attribute__((unused)));
 
+  void set_global_density_params();
+
 #endif // DENSITY_H

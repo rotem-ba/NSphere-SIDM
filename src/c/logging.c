@@ -24,6 +24,7 @@
  #include <time.h>
  #include <sys/stat.h>
  #include "globals.h"
+ #include "particle_array_ops.h"
 
 /**
  * @brief Writes a formatted message to the log file with timestamp and severity level.
@@ -96,5 +97,75 @@ void log_message(const char *level, const char *format, ...)
             // Print an error message to stderr if the log file cannot be opened
             fprintf(stderr, "Warning: Failed to open log file '%s'\n", log_filename);
         }
+    }
+}
+
+/**
+ * @brief Display final parameter values used for the simulation run
+ */
+void print_input_parameters() {
+    printf("Parameter values requested:\n\n");
+    printf("  Number of Particles:          %d\n", npts);
+    printf("  Number of Time Steps:         %d\n", Ntimes);
+    printf("  Number of Dynamical Times:    %d\n", tfinal_factor);
+    printf("  Number of Output Snapshots:   %d\n", nout);
+    printf("  Steps Between Writes:         %d\n", dtwrite);
+    printf("  Tidal Stripping Fraction:     %.5f\n", tidal_fraction);
+    printf("  Integration Method:           %d (%s)\n", method_select, method_name);
+    printf("  Sorting Algorithm:            %d (%s)\n", display_sort, get_sort_description(g_defaultSortAlg));
+    // printf("  Filename Tag:                 %s\n", filename_tag[0] ? filename_tag : "[none]");
+    printf("  SIDM Scattering:              %s\n", g_enable_sidm_scattering ? "Enabled via --sidm" : "Disabled (Default)");
+    printf("  SIDM Execution Mode:          %s\n", g_sidm_execution_mode == 1 ? "Parallel (Default)" : "Serial");
+    printf("  SIDM Opacity Kappa:           %.1f cm^2/g (Default: 50.0, User set: %s)\n", g_sidm_kappa, g_sidm_kappa_provided ? "Yes" : "No");
+
+}
+
+/**
+ * @brief Display density parameters
+ */
+void print_density_params(){
+    printf("  Initial Conditions Profile:   %s\n", g_use_nfw_profile ? "NFW-like with Cutoff" : "Cored Plummer-like");
+    if (g_use_nfw_profile) {
+        printf("    NFW Profile Scale Radius (IC): %.3f kpc (NFW Default: %.2f, User set via --scale-radius: %s)\n", g_nfw_profile_rc, RC_NFW_DEFAULT, g_scale_radius_param_provided ? "Yes" : "No");
+    } else {
+        printf("    Cored Profile Scale Radius (IC): %.3f kpc (Cored Default: %.2f, User set via --scale-radius: %s)\n", g_cored_profile_rc, RC, g_scale_radius_param_provided ? "Yes" : "No");
+    }
+    if (g_use_nfw_profile) {
+        printf("    NFW Profile Halo Mass (IC): %.3e Msun (NFW Default: %.2e, User set via --halo-mass: %s)\n", g_nfw_profile_halo_mass, HALO_MASS_NFW, g_halo_mass_param_provided ? "Yes" : "No");
+    } else {
+        printf("    Cored Profile Halo Mass (IC): %.3e Msun (Cored Default: %.2e, User set via --halo-mass: %s)\n", g_cored_profile_halo_mass, HALO_MASS, g_halo_mass_param_provided ? "Yes" : "No");
+    }
+    printf("    Profile Cutoff Factor:      %.1f (CmdLine/Default: %.1f, User set: %s)\n", g_cutoff_factor_param, (g_use_nfw_profile ? CUTOFF_FACTOR_NFW_DEFAULT : CUTOFF_FACTOR_CORED_DEFAULT), g_cutoff_factor_param_provided ? "Yes" : "No");
+
+    if (g_use_nfw_profile) {
+        printf("    NFW Profile Falloff Factor (C): %.1f (NFW Default: %.1f, User set via --falloff-factor: %s)\n", g_nfw_profile_falloff_factor, FALLOFF_FACTOR_NFW_DEFAULT, g_falloff_factor_param_provided ? "Yes" : "No");
+    }
+    // This g_active_halo_mass is now correctly set from g_halo_mass_param which reflects the chosen profile's mass
+    printf("  N-body Active Halo Mass (tdyn): %.3e Msun\n", g_active_halo_mass);
+}
+
+/**
+ * @brief Display logging status based on g_enable_logging flag.
+ */
+void print_logging_status(){
+    if (g_enable_logging) {
+        printf("  Logging:                      Enabled (log/nsphere.log)\n\n");
+        log_message("INFO", "Simulation started with %d particles, %d timesteps, %d dynamical times", npts, Ntimes, tfinal_factor);
+    } else {
+        printf("  Logging:                      Disabled\n\n");
+    }
+}
+
+/**
+ * @brief Display check for SIDM + parallel mode without OpenMP.
+ */
+void print_SIDM_OpenMP_status(){
+    if (g_enable_sidm_scattering && g_sidm_execution_mode == 1) {
+        #ifndef _OPENMP
+            printf("Warning: SIDM parallel mode is enabled by default, but OpenMP is not available in this build.\n");
+            printf("         SIDM will run serially. Use '--sidm-mode serial' to suppress this warning.\n\n");
+            log_message("WARNING", "SIDM parallel mode requested but OpenMP not available, will run serially.");
+            g_sidm_execution_mode = 0; // Force serial if no OpenMP
+        #endif
     }
 }

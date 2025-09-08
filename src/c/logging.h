@@ -18,5 +18,9 @@
 #define LOGGING_H
 
 void log_message(const char *level, const char *format, ...);
+void print_input_parameters();
+void print_density_params();
+void print_logging_status();
+void print_SIDM_OpenMP_status();
 
 #endif // LOGGING_H

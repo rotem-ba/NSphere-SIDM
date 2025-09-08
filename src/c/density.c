@@ -18,7 +18,9 @@
  #include "globals.h"
  #include "utils.h"
  #include "exit.h"
+ #include "logging.h"
  #include <math.h>
+ #include <string.h>
 
  double fEintegrand(double t, void *params)
  {
@@ -100,3 +102,71 @@
      double startingprofile = 1.0 / cube((1.0 + sqr(r / g_cored_profile_rc)));
      return r * r * startingprofile;
  }
+
+ /**
+  * @brief Determine active profile type (NFW is default).
+  * @details Conforms the global tags to match the desired density.
+  */
+void set_global_density_params(){
+    if (g_profile_type_str_provided) {
+        if (strcmp(g_profile_type_str, "nfw") == 0) {
+            g_use_nfw_profile = 1;
+        } else if (strcmp(g_profile_type_str, "cored") == 0) {
+            g_use_nfw_profile = 0;
+        } else {
+            // Should have been caught by parser, but as a safeguard:
+            log_message("WARNING", "Unknown profile type '%s', defaulting to NFW.", g_profile_type_str);
+            g_use_nfw_profile = 1;
+        }
+    } else {
+        // Default to NFW if --profile flag was not provided
+        g_use_nfw_profile = 1;
+        strcpy(g_profile_type_str, "nfw"); // Update string for consistency in printouts
+    }
+
+    // Set up profile-specific parameters based on generalized flags and profile defaults
+    if (g_use_nfw_profile) {
+        // NFW Profile Path
+        // Halo Mass for NFW
+        if (g_halo_mass_param_provided) { // --halo-mass overrides NFW default
+            g_nfw_profile_halo_mass = g_halo_mass_param;
+        } else { // No --halo-mass, NFW uses its own default
+            g_nfw_profile_halo_mass = HALO_MASS_NFW;
+            g_halo_mass_param = g_nfw_profile_halo_mass; // Update general param to reflect NFW's choice
+        }
+        // Scale Radius for NFW
+        if (g_scale_radius_param_provided) { // --scale-radius overrides NFW default
+            g_nfw_profile_rc = g_scale_radius_param;
+        } else { // No --scale-radius, NFW uses its own default
+            g_nfw_profile_rc = RC_NFW_DEFAULT;
+            g_scale_radius_param = g_nfw_profile_rc; // Update general param to reflect NFW's choice
+        }
+        // Cutoff Factor for NFW
+        if (g_cutoff_factor_param_provided) { // --cutoff-factor overrides NFW default
+            g_nfw_profile_rmax_norm_factor = g_cutoff_factor_param;
+        } else { // No --cutoff-factor, NFW uses its own default
+            g_nfw_profile_rmax_norm_factor = CUTOFF_FACTOR_NFW_DEFAULT;
+            // g_cutoff_factor_param is NOT updated here by NFW default; it keeps its own (Cored's) default or user value.
+        }
+        // Falloff Factor for NFW
+        if (g_falloff_factor_param_provided) { // --falloff-factor overrides NFW default
+            g_nfw_profile_falloff_factor = g_falloff_factor_param;
+        } else { // No --falloff-factor, NFW uses its own default
+            g_nfw_profile_falloff_factor = FALLOFF_FACTOR_NFW_DEFAULT;
+            // Optionally, update g_falloff_factor_param if NFW is the overall default and no flag given
+            // For now, let g_falloff_factor_param keep its own default unless explicitly set by user
+        }
+    } else {
+        // Cored Profile Path
+        // Halo Mass for Cored (already defaults to HALO_MASS or takes from --halo-mass via g_halo_mass_param)
+        g_cored_profile_halo_mass = g_halo_mass_param;
+        // Scale Radius for Cored (already defaults to RC or takes from --scale-radius via g_scale_radius_param)
+        g_cored_profile_rc = g_scale_radius_param;
+        // Cutoff Factor for Cored (directly uses generalized or its (Cored's) default)
+        g_cored_profile_rmax_factor = g_cutoff_factor_param;
+    }
+
+    // Set the single g_active_halo_mass for N-body forces and tdyn from the finalized g_halo_mass_param
+    g_active_halo_mass = g_halo_mass_param;
+
+}

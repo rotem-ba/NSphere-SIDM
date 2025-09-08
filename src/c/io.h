@@ -50,4 +50,6 @@ void append_all_particle_data_chunk_to_file(const char *filename, int npts, int 
                                             float *Vrad_block);
 void retrieve_all_particle_snapshot(const char *filename, int snap, int npts, int block_size, float *L_out, int *Rank_out, float *R_out, float *Vrad_out);
 
+void compile_filename_tag();
+
 #endif // IO_H

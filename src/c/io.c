@@ -886,3 +886,22 @@
      free(tmpR);
      free(tmpV);
  }
+
+/**
+ * @brief Build the filename tag string based on options for display purposes
+ */
+void compile_filename_tag() {
+    if (custom_tag[0] != '\0')
+    {
+        strcat(filename_tag, custom_tag);
+    }
+
+    if (include_method_in_suffix)
+    {
+        if (filename_tag[0] != '\0')
+        {
+            strcat(filename_tag, "_");
+        }
+        strcat(filename_tag, method_filename);
+    }
+}
