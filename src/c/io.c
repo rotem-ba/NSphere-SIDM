@@ -19,6 +19,7 @@
  #include "exit.h"
  #include <string.h>
  #include <stdarg.h>
+ #include <sys/stat.h>
  #ifdef _WIN32
  #include <windows.h>
  #else
@@ -904,4 +905,184 @@ void compile_filename_tag() {
         }
         strcat(filename_tag, method_filename);
     }
+}
+
+/**
+ * @brief Create the 'init' directory if it doesn't exist.
+ */
+void mkdir_init(){
+    struct stat st_init = {0};
+    if (stat("init", &st_init) == -1)
+    {
+        #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
+            if (mkdir("init") != 0) {
+                 perror("Error creating init directory");
+                 // Decide if this is fatal - perhaps not if only writing
+            } else {
+                 log_message("INFO", "Created init/ directory.");
+            }
+        #else
+            if (mkdir("init", 0755) != 0) { // POSIX standard
+                 perror("Error creating init directory");
+                 // Decide if this is fatal
+            } else {
+                 log_message("INFO", "Created init/ directory.");
+            }
+        #endif
+    }
+}
+
+/**
+ * @brief Write current run parameters to `data/lastparams<suffix>.dat` and create a standard link `data/lastparams.dat`.
+ */
+int write_to_lastparams() {
+    char file_tag[512] = "";
+    if (custom_tag[0] != '\0')
+    {
+        strcat(file_tag, custom_tag);
+        if (include_method_in_suffix)
+        {
+            strcat(file_tag, "_");
+            strcat(file_tag, method_filename);
+        }
+    }
+    else if (include_method_in_suffix)
+    {
+        strcat(file_tag, method_filename);
+    }
+
+    /** @note Create filename with suffix for the specific run parameters file. */
+    char filename[512]; // Holds suffixed filename, e.g., data/lastparams_run1_100k_10k_5.dat
+    get_suffixed_filename("data/lastparams.dat", 1, filename, sizeof(filename));
+    printf("Saving parameters: %s\n", filename);
+
+    FILE *fp_params = fopen(filename, "w"); // Text mode for regular fprintf
+    if (!fp_params)
+    {
+        printf("Error: cannot open %s\n", filename);
+        return 1;
+    }
+
+    fprintf(fp_params, "%d %d %d %s\n", npts, Ntimes, tfinal_factor, file_tag);
+    fclose(fp_params);
+
+    /** @note Create a standard-named link `data/lastparams.dat` pointing to the
+             suffixed version for compatibility with scripts. Uses copy on Windows. */
+    char linkname[512] = "data/lastparams.dat"; // Standard name
+
+    /* Platform detection using standard predefined macros */
+#if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
+    /** @note Windows: Copy file content as symlinks can be unreliable or require special privileges. */
+    // Windows or Windows-like environment: create a direct file copy.
+        // Ensure compatibility with various Windows environments.
+
+    // Use lower-level file operations instead of system commands for better compatibility.
+    FILE *source, *dest;
+    source = fopen(filename, "rb");
+    if (!source)
+    {
+        printf("Warning: Failed to open source file %s for copying\n", filename);
+    }
+    else
+    {
+        dest = fopen(linkname, "wb");
+        if (!dest)
+        {
+            printf("Warning: Failed to create destination file %s\n", linkname);
+            fclose(source);
+        }
+        else
+        {
+            // Copy file content.
+            char buffer[4096];
+            size_t bytes_read;
+
+            while ((bytes_read = fread(buffer, 1, sizeof(buffer), source)) > 0)
+            {
+                fwrite(buffer, 1, bytes_read, dest);
+            }
+
+            fclose(dest);
+            fclose(source);
+
+            // Extract the basename for display purposes
+            const char *basename = strrchr(filename, '/');
+            basename = basename ? basename + 1 : filename; // Skip the '/' or use full name if no '/'
+
+            printf("Created link: %s -> %s\n\n", basename, linkname);
+        }
+    }
+#else
+    /** @note Unix: Create symbolic link from basename(filename) to 'linkname', fallback to copy. */
+        // Unix-like systems (Linux, macOS, etc.) and fallback for other platforms: use symbolic links.
+    char command[1024];
+
+    // First, remove any existing link or file.
+    snprintf(command, sizeof(command), "rm -f \"%s\" 2>/dev/null", linkname);
+    system(command);
+
+    // Then create the symbolic link - use the basename of the file, not the full path
+    // Extract the basename from filename
+    const char *basename = strrchr(filename, '/');
+    basename = basename ? basename + 1 : filename; // Skip the '/' or use full name if no '/'
+
+    snprintf(command, sizeof(command), "ln -s \"%s\" \"%s\"", basename, linkname);
+    if (system(command) != 0)
+    {
+        // If symbolic link fails, fall back to copying the file.
+        snprintf(command, sizeof(command), "cp \"%s\" \"%s\"", filename, linkname);
+        if (system(command) != 0)
+        {
+            printf("Warning: Failed to create link or copy %s to %s\n", filename, linkname);
+        }
+        else
+        {
+            printf("Created link: %s -> %s\n\n", filename, linkname);
+        }
+    }
+    else
+    {
+        printf("Created link: %s -> %s\n\n", filename, linkname);
+    }
+#endif
+return 0;
+}
+
+/**
+ * @brief Write trajectory data (radius, energy, angular momentum) for selected low-L particles.
+ * @details Outputs the time evolution of radius, relative energy, and angular momentum
+ *          for `nlowest` particles selected based on their initial angular momentum
+ *          (either lowest absolute L or closest to a reference L, per `use_closest_to_Lcompare`).
+ *          The specific particles are stored in the `chosen` array (by their original IDs).
+ *          Written to `lowest_l_trajectories.dat`.
+ */
+void write_low_l_particles(double dt, int nlowest, double **lowestL_r, double **lowestL_E, double **lowestL_L){
+    // Write trajectories for selected lowest-L particles if simulation was run
+    if (!skip_file_writes)
+    {
+        char suffixed_filename[256];
+        get_suffixed_filename("data/lowest_l_trajectories.dat", 1, suffixed_filename, sizeof(suffixed_filename));
+        FILE *fp_lowest = fopen(suffixed_filename, "wb"); // Binary mode for fprintf_bin
+        if (!fp_lowest)
+        {
+            fprintf(stderr, "Error: cannot open data/lowest_l_trajectories.dat\n");
+            CLEAN_EXIT(1);
+        }
+
+        // Write data for Ntimes steps:
+        for (int step = 0; step < Ntimes; step++)
+        {
+            double tval = step * dt;
+            fprintf_bin(fp_lowest, "%f", tval);
+            for (int p = 0; p < nlowest; p++)
+            {
+                double rr = lowestL_r[p][step];
+                double Ecur = lowestL_E[p][step];
+                double lcur = lowestL_L[p][step];
+                fprintf_bin(fp_lowest, " %f %f %f", rr, Ecur, lcur);
+            }
+            fprintf_bin(fp_lowest, "\n");
+        }
+        fclose(fp_lowest);
+    } // Close if (.skip_file_writes)
 }

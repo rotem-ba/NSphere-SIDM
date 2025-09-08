@@ -1,24 +1,19 @@
-/**
- * @brief Writes a formatted message to the log file with timestamp and severity level.
+/*
+ * Copyright 2025 Kris Sigurdson
  *
- * Parameters
- * ----------
- * level : const char*
- *     Severity level (e.g., "INFO", "WARNING", "ERROR").
- * format : const char*
- *     Printf-style format string.
- * ... :
- *     Variable arguments for the format string.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- * Returns
- * -------
- * None
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * @note Creates the "log" directory if it doesn't exist.
- * @warning Prints an error to stderr if the log file cannot be opened.
- *          Logging only occurs if the global `g_enable_logging` flag is set.
- * @see g_enable_logging
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+
  #include <stdio.h>
  #include <stdarg.h>
  #include <time.h>
