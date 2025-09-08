@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "dynamics.h"
+#include "gravitation_dynamics.h"
 #include <math.h>
 
 // =========================================================================

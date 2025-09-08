@@ -37,7 +37,7 @@
 #include "exit.h"
 #include "utils.h"
 #include "signal_processing.h"
-#include "dynamics.h"
+#include "gravitation_dynamics.h"
 #include "cli.h"
 #include "io.h"
 #include <float.h> // For DBL_MAX

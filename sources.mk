@@ -9,6 +9,6 @@ SOURCES = nsphere.c \
           exit.c \
           utils.c \
           signal_processing.c \
-          dynamics.c \
+          gravitation_dynamics.c \
           cli.c \
           io.c
