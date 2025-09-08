@@ -142,4 +142,72 @@ inline double effective_angular_force_rho_v(double rho, double ell)
     return (ell * ell) / (rho * rho * rho * rho);
 }
 
+/**
+ * @brief Calculates \f$d\rho/d\tau\f$, the derivative of the regularized coordinate \f$\rho\f$ with respect to fictitious time \f$\tau\f$.
+ * @details In Levi-Civita regularization, \f$d\rho/d\tau = \frac{1}{2} \rho v_{rad}\f$, where \f$\rho = \sqrt{r}\f$
+ *          and \f$v_{rad}\f$ is the radial velocity in physical units (though often represented as \f$v\f$ or \f$v_{\rho}\f$
+ *          in transformed equations of motion depending on the specific formulation).
+ *          This function implements this relationship.
+ *
+ * @param rhoVal [in] The current value of the regularized radial coordinate \f$\rho = \sqrt{r}\f$.
+ * @param vVal   [in] The current radial velocity \f$v_{rad}\f$ (kpc/Myr).
+ * @return double The value of \f$d\rho/d\tau\f$.
+ */
+inline double dRhoDtaufun(double rhoVal, double vVal)
+{
+    // dρ/dτ = 0.5 * ρ * v
+    return 0.5 * rhoVal * vVal;
+}
+
+/**
+ * @brief Calculates the total effective force per unit mass in Levi-Civita transformed coordinates.
+ * @details This function computes \f$F_{\rho}/m = (F_{grav,\rho} + F_{centrifugal,\rho})/m\f$,
+ *          where \f$F_{grav,\rho}\f$ is the gravitational force and \f$F_{centrifugal,\rho}\f$ is the
+ *          effective centrifugal force, both expressed in the regularized radial coordinate \f$\rho = \sqrt{r}\f$.
+ *          It calls `gravitational_force_rho_v` and `effective_angular_force_rho_v`.
+ *          This combined force is used in the equations of motion for Levi-Civita regularization.
+ *
+ * @param i          [in] Particle index (0 to npts-1), for rank in gravitational force calculation.
+ * @param npts       [in] Total number of particles.
+ * @param totalmass  [in] Total halo mass of the system (Msun) used for gravitational force.
+ * @param grav       [in] Gravitational constant G (simulation units).
+ * @param ell        [in] Angular momentum per unit mass (kpc^2/Myr).
+ * @param rhoVal     [in] Current value of the regularized radial coordinate \f$\rho = \sqrt{r}\f$.
+ * @return double    The total transformed force per unit mass \f$F_{\rho}/m\f$.
+ */
+inline double forceLCfun(int i, int npts, double totalmass, double grav, double ell, double rhoVal)
+{
+    double gravPart = gravitational_force_rho_v(rhoVal, i, npts, grav, totalmass);
+    double angPart = effective_angular_force_rho_v(rhoVal, ell);
+    return gravPart + angPart;
+}
+
+
+void doMicroLeapfrog(int i, int npts,double r_in, double v_in, double ell, double h, int N, int subSteps, double grav, double *r_out, double *v_out);
+void doAdaptiveFullLeap(
+    int i,               // Particle index for force computation
+    int npts,            // Total number of particles in simulation
+    double r_in,         // Initial radius at start of step
+    double v_in,         // Initial velocity at start of step
+    double ell,          // Angular momentum (conserved during integration)
+    double h,            // Full physical timestep size ΔT
+    double radius_tol,   // Convergence tolerance for radius
+    double velocity_tol, // Convergence tolerance for velocity
+    int max_subdiv,      // Maximum subdivision factor allowed
+    double grav,         // Gravitational constant (renamed from G to avoid macro collision)
+    int out_type,        // Result selection: 0=coarse, 1=fine, 2=Richardson extrapolation
+    double *r_out,       // Output parameter for final radius
+    double *v_out        // Output parameter for final velocity
+);
+void doLeviCivitaLeapfrog(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double grav, double *r_out, double *v_out);
+void doMicroLeviCivita(int i, int npts, double rho_in, double v_in, double t_in, int subSteps, double h_tau, double grav, double ell, double *rho_out,
+                       double *v_out, double *t_out);
+void doSingleTauStepAdaptiveLeviCivita(int i, int npts, double rho_in, double v_in, double t_in, double h_guess, double radius_tol, double velocity_tol,
+                                       int max_subdiv, double grav, double ell, int out_type, double *rho_out, double *v_out, double *t_out);
+void doAdaptiveFullLeviCivita(
+    int i, int npts, double r_in, double v_in, double ell,
+    double dt, // big step in physical time
+    int N_taumin, double radius_tol, double velocity_tol, int max_subdiv, double grav,
+    int out_type, // 0=coarse,1=fine,2=Richardson
+    double *r_out, double *v_out);
 #endif // DYNAMICS_H
