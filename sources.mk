@@ -10,5 +10,9 @@ SOURCES = nsphere.c \
           utils.c \
           signal_processing.c \
           gravitation_dynamics.c \
+          density.c \
+          density_nfw.c \
+          density_cored_plummer.c \
           cli.c \
-          io.c
+          io.c \
+          debug.c

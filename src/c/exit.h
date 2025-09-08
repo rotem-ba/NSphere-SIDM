@@ -60,5 +60,4 @@ void free_local_snap_arrays(void);
         }                                \
     } while (0)
 
-
 #endif // EXIT_H

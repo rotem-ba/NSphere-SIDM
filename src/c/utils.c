@@ -15,6 +15,8 @@
  */
 
 #include <ctype.h>
+#include <gsl/gsl_spline.h>
+#include <stdio.h>
 
 /**
  * @brief Checks if a given string represents a valid integer.
@@ -107,4 +109,62 @@ int isFloat(const char *str)
     }
 
     return has_digit;
+}
+
+/**
+ * @brief Safely evaluates a GSL spline at a given value with robust bounds checking.
+ * @details This function evaluates the provided GSL spline at the specified `value`.
+ *          It includes critical safety checks:
+ *          1. It verifies that the `spline` and accelerator `acc` pointers are not NULL.
+ *          2. It checks if the `value` is outside the defined range of the spline's x-values.
+ *             If `value` is out of bounds, it clamps `value` to the nearest valid boundary
+ *             (plus/minus a small MARGIN) before evaluation to prevent GSL domain errors.
+ *          This robust approach ensures that spline evaluations do not cause crashes due to
+ *          out-of-range inputs, which can occur due to floating-point inaccuracies or
+ *          unexpected data.
+ *
+ * @param spline [in] Pointer to the initialized GSL spline object.
+ * @param acc    [in] Pointer to the GSL interpolation accelerator associated with the spline.
+ * @param value  [in] The x-coordinate at which to evaluate the spline.
+ * @return double The interpolated y-value from the spline. Returns the boundary spline value
+ *                if `value` was clamped. Returns 0.0 if `spline` or `acc` is NULL (error logged).
+ */
+double evaluatespline(gsl_spline *spline, gsl_interp_accel *acc, double value)
+{
+    // NULL pointer safety check.
+    if (spline == NULL || acc == NULL)
+    {
+        fprintf(stderr, "Error: NULL pointer passed to evaluatespline (spline=%p, acc=%p)\n",
+                (void *)spline, (void *)acc);
+        return 0.0; // Return a default value instead of crashing.
+    }
+
+    // Get the actual min and max ranges of the spline from its data directly.
+    double x_min = spline->x[0];
+    double x_max = spline->x[spline->size - 1];
+
+    // Ensure the value is within the valid interpolation range with a small safety margin.
+    const double MARGIN = 1e-10; // Small safety margin.
+
+    if (value < x_min)
+    {
+#ifdef DEBUG_SPLINE
+        fprintf(stderr, "Warning: Spline interpolation value %g below minimum %g, clamping\n",
+                value, x_min);
+#endif
+        // Clamp to minimum with a tiny margin to stay inside the valid range.
+        return gsl_spline_eval(spline, x_min + MARGIN, acc);
+    }
+    else if (value > x_max)
+    {
+#ifdef DEBUG_SPLINE
+        fprintf(stderr, "Warning: Spline interpolation value %g above maximum %g, clamping\n",
+                value, x_max);
+#endif
+        // Clamp to maximum with a tiny margin to stay inside the valid range.
+        return gsl_spline_eval(spline, x_max - MARGIN, acc);
+    }
+
+    // Normal case - value is within range.
+    return gsl_spline_eval(spline, value, acc);
 }

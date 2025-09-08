@@ -106,6 +106,7 @@ int use_identity_gravity = 0;
 int debug_direct_convolution = 0;
 
 double g_active_halo_mass = HALO_MASS;
+double normalization; ///< Mass normalization factor for energy calculations. Calculated based on the integral of the density profile.
 
 /**
  * @brief Angular momentum selection configuration for particle filtering.

@@ -14,19 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef UTILS_H
-#define UTILS_H
-#include <gsl/gsl_spline.h>
+ #ifndef DENSITY_CORED_PLUMMER_H
+ #define DENSITY_CORED_PLUMMER_H
 
-/** @def imin(a, b) Minimum of two integer values. */
-#define imin(a, b) ((a) < (b) ? (a) : (b))
-/** @def sqr(x) Calculates the square of a value. */
-#define sqr(x) ((x) * (x))
-/** @def cube(x) Calculates the cube of a value. */
-#define cube(x) ((x) * (x) * (x))
+ #include "density.h"
 
-int isInteger(const char *str);
-int isFloat(const char *str);
-double evaluatespline(gsl_spline *spline, gsl_interp_accel *acc, double value);
+ double drhodr_cored_plummer(double r);
+ double massintegrand_cored_plummer(double r, void *params __attribute__((unused)));
 
-#endif // UTILS_H
+#endif // DENSITY_CORED_PLUMMER_H

@@ -159,6 +159,7 @@ extern int use_identity_gravity;
 extern int debug_direct_convolution;
 
 extern double g_active_halo_mass; ///< Active halo mass for N-body force calculations.
+extern double normalization; ///< Mass normalization factor for energy calculations. Calculated based on the integral of the density profile.
 
 /**
  * @brief Angular momentum selection configuration for particle filtering.
