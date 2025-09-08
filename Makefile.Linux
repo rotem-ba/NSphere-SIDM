@@ -86,7 +86,7 @@ PY_TARGETS_BIN = $(patsubst %.py,$(BIN_DIR)/%, $(notdir $(PY_SCRIPTS)))
 
 # Target configuration
 TARGET = nsphere
-SOURCES = nsphere.c logging.c sidm.c globals.c
+SOURCES = nsphere.c logging.c sidm.c globals.c particle_array_ops.c particle_data.c exit.c
 SRC = $(addprefix $(C_SRC_DIR)/, $(SOURCES))
 
 # ================================================================

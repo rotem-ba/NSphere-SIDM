@@ -18,6 +18,28 @@
 #define GLOBALS_H
 
 #include <gsl/gsl_rng.h>
+#include <gsl/gsl_spline.h>
+#include <gsl/gsl_interp.h>
+
+#ifdef _OPENMP
+#include <omp.h>
+#else
+// OpenMP function stubs when compiled without OpenMP
+// Use __attribute__((unused)) to prevent unused function warnings
+#include <sys/time.h>  /* For gettimeofday */
+static int __attribute__((unused)) omp_get_max_threads(void) { return 1; }
+static int __attribute__((unused)) omp_get_num_procs(void) { return 1; }
+static int __attribute__((unused)) omp_get_thread_num(void) { return 0; }
+static void __attribute__((unused)) omp_set_max_active_levels(int x) { (void)x; }
+static void __attribute__((unused)) omp_set_num_threads(int x) { (void)x; }
+static double __attribute__((unused)) omp_get_wtime(void) {
+    // Use higher precision time function for non-OpenMP builds
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+}
+#endif
+
 
 /**
  * @brief Global simulation feature flags.
@@ -47,7 +69,6 @@ extern unsigned long int g_sidm_seed;           ///< Seed used for SIDM calculat
 extern int g_master_seed_provided;              ///< Flag: 1 if `--master-seed` was given by the user.
 extern int g_initial_cond_seed_provided;        ///< Flag: 1 if `--init-cond-seed` was given by the user.
 extern int g_sidm_seed_provided;                ///< Flag: 1 if `--sidm-seed` was given by the user.
-
 extern int g_attempt_load_seeds;                ///< Flag: 1 if we should try to load seeds from files if not provided.
 
 extern const char* g_initial_cond_seed_filename_base;     ///< Base name for IC seed file.
@@ -126,11 +147,76 @@ extern double g_active_halo_mass; ///< Active halo mass for N-body force calcula
 extern int use_closest_to_Lcompare; ///< Mode selector (0 or 1).
 extern double Lcompare;          ///< Reference L value for closest-match mode (Mode 1).
 
-
-#endif // GLOBALS_H
-
 /* ========================================================================= */
 
 extern gsl_rng *g_rng; ///< GSL Random Number Generator state.
 extern gsl_rng **g_rng_per_thread; ///< Array of GSL RNG states, one per OpenMP thread.
 extern int g_max_omp_threads_for_rng; ///< Number of threads for which RNGs are allocated.
+
+// =========================================================================
+// SORTING ALGORITHM CONFIGURATION
+// =========================================================================
+///< Default sorting algorithm identifier string. Set based on command-line options.
+extern const char *g_defaultSortAlg;
+
+// =========================================================================
+// PERSISTENT SORT BUFFER CONFIGURATION
+// =========================================================================
+//
+// The simulation exclusively uses a persistent global buffer (`g_sort_columns_buffer`)
+// for particle data transposition during sorting operations. This strategy
+// minimizes memory allocation/deallocation overhead.
+
+/** Global persistent buffer for particle data transposition during sorting. */
+extern double **g_sort_columns_buffer;
+/** Number of particles the persistent buffer was allocated for; updated if npts changes. */
+extern int g_sort_columns_buffer_npts;
+
+/** Global NFW mass spline for force calculations. */
+extern gsl_spline *g_nfw_splinemass_for_force;
+/** Global NFW mass spline accelerator for force calculations. */
+extern gsl_interp_accel *g_nfw_enclosedmass_accel_for_force;
+
+// =========================================================================
+// PARALLEL SORT ALGORITHM CONFIGURATION
+// =========================================================================
+// Constants controlling the behavior of parallel sorting algorithms.
+// These parameters tune the parallel sorting operations used when
+// OpenMP is available, affecting the partitioning of data across threads
+// and the overlap required for correct merging of sorted sections.
+
+/**
+ * Default number of sections when OpenMP is unavailable or reports few threads.
+ * Provides a baseline level of partitioning even in limited thread environments.
+ */
+extern const int PARALLEL_SORT_DEFAULT_SECTIONS;
+
+/**
+ * Number of sort sections per OpenMP thread for workload distribution.
+ * Multiplier used to determine total section count from available threads.
+ */
+extern const int PARALLEL_SORT_SECTIONS_PER_THREAD;
+
+/**
+ * Divisor for calculating proportional overlap between sort sections.
+ * Overlap is calculated as chunk_size / OVERLAP_DIVISOR to scale with data size.
+ */
+extern const int PARALLEL_SORT_OVERLAP_DIVISOR;
+
+/**
+ * Minimum required overlap between adjacent sort sections (in elements).
+ * This ensures sufficient overlap for correct merging of sorted sections,
+ * even with sparse data distributions and when calculated proportional
+ * overlap would be too small.
+ */
+extern const int PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP;
+
+/**
+ * Minimum average chunk size threshold for parallel sort operation.
+ * If the calculated size of each chunk (total elements / number of sections)
+ * falls below this threshold, the algorithm reverts to serial sorting to
+ * avoid overhead from managing very small parallel tasks.
+ */
+extern const int PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD;
+
+#endif // GLOBALS_H

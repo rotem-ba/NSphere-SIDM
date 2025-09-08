@@ -20,6 +20,11 @@
 #include <gsl/gsl_rng.h>
 #include <math.h>
 
+// Utility macros
+#define sqr(x) ((x) * (x))
+#define fmax(a, b) ((a) > (b) ? (a) : (b))
+
+
 /**
  * @brief Three-dimensional vector structure for SIDM calculations.
  * @details Used for representing velocity vectors and performing vector operations
