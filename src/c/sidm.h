@@ -17,13 +17,10 @@
 #ifndef SIDM_H
 #define SIDM_H
 
+#include "globals.h"
+#include "utils.h"
 #include <gsl/gsl_rng.h>
 #include <math.h>
-
-// Utility macros
-#define sqr(x) ((x) * (x))
-#define fmax(a, b) ((a) > (b) ? (a) : (b))
-
 
 /**
  * @brief Three-dimensional vector structure for SIDM calculations.
@@ -47,11 +44,6 @@ typedef struct {
     threevector Vifinal;///< Final 3D velocity vector of particle i.
     threevector Vmfinal;///< Final 3D velocity vector of the partner particle.
 } ScatterEvent;
-
-// Mathematical constants
-#ifndef PI
-#define PI 3.14159265358979323846 ///< Mathematical constant Pi.
-#endif
 
 /**
  * @brief Global simulation feature flags.

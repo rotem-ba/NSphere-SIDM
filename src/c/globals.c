@@ -112,20 +112,6 @@ double g_cored_profile_rmax_factor = CUTOFF_FACTOR_CORED_DEFAULT;
  */
 int debug_direct_convolution = 0;
 
-// =========================================================================
-// PHYSICAL CONSTANTS AND ASTROPHYSICAL PARAMETERS
-// =========================================================================
-//
-// Core constants and unit conversion factors for astrophysical calculations
-#define PI 3.14159265358979323846 ///< Mathematical constant Pi.
-#define G_CONST 4.3e-6           ///< Newton's gravitational constant in kpc (km/sec)^2/Msun.
-/** @def sqr(x) Calculates the square of a value. */
-#define sqr(x) ((x) * (x))
-/** @def cube(x) Calculates the cube of a value. */
-#define cube(x) ((x) * (x) * (x))
-#define kmsec_to_kpcmyr 1.02271e-3 ///< Conversion factor: km/s to kpc/Myr.
-#define VEL_CONV_SQ (kmsec_to_kpcmyr * kmsec_to_kpcmyr) ///< Velocity conversion squared (kpc/Myr)^2 per (km/s)^2.
-
 double g_active_halo_mass = HALO_MASS;
 
 /**

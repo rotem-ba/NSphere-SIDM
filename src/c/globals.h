@@ -40,6 +40,16 @@ static double __attribute__((unused)) omp_get_wtime(void) {
 }
 #endif
 
+// =========================================================================
+// PHYSICAL CONSTANTS AND ASTROPHYSICAL PARAMETERS
+// =========================================================================
+//
+// Core constants and unit conversion factors for astrophysical calculations
+#define PI 3.14159265358979323846 ///< Mathematical constant Pi.
+#define G_CONST 4.3e-6           ///< Newton's gravitational constant in kpc (km/sec)^2/Msun.
+#define kmsec_to_kpcmyr 1.02271e-3 ///< Conversion factor: km/s to kpc/Myr.
+#define VEL_CONV_SQ (kmsec_to_kpcmyr * kmsec_to_kpcmyr) ///< Velocity conversion squared (kpc/Myr)^2 per (km/s)^2.
+
 
 /**
  * @brief Global simulation feature flags.

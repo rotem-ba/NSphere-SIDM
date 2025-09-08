@@ -36,6 +36,7 @@
 #include "logging.h"
 #include "particle_array_ops.h"
 #include "exit.h"
+#include "utils.h"
 #include <ctype.h>
 #include <fftw3.h>
 #include <float.h> // For DBL_MAX
@@ -200,9 +201,6 @@ void format_file_size(long size_in_bytes, char *buffer, size_t buffer_size)
 
 // --- Global Configuration and Macros ---
 
-/** @def imin(a, b) Minimum of two integer values. */
-#define imin(a, b) ((a) < (b) ? (a) : (b))
-
 /**
  * @brief Binary file I/O function declarations.
  * @details These functions provide platform-independent binary file I/O operations
@@ -230,20 +228,6 @@ int fscanf_bin(FILE *fp, const char *format, ...);
 #define IF_DYNPSI if (g_doDynPsi)
 #define IF_DYNRANK if (g_doDynRank)
 #define IF_ALL_PART if (g_doAllParticleData)
-
-// =========================================================================
-// PHYSICAL CONSTANTS AND ASTROPHYSICAL PARAMETERS
-// =========================================================================
-//
-// Core constants and unit conversion factors for astrophysical calculations
-#define PI 3.14159265358979323846 ///< Mathematical constant Pi.
-#define G_CONST 4.3e-6           ///< Newton's gravitational constant in kpc (km/sec)^2/Msun.
-/** @def sqr(x) Calculates the square of a value. */
-#define sqr(x) ((x) * (x))
-/** @def cube(x) Calculates the cube of a value. */
-#define cube(x) ((x) * (x) * (x))
-#define kmsec_to_kpcmyr 1.02271e-3 ///< Conversion factor: km/s to kpc/Myr.
-#define VEL_CONV_SQ (kmsec_to_kpcmyr * kmsec_to_kpcmyr) ///< Velocity conversion squared (kpc/Myr)^2 per (km/s)^2.
 
 /**
  * @brief Gravitational force calculation control flag.
@@ -831,37 +815,6 @@ double fEintegrand(double t, void *params);
 int cmp_LAI(const void *a, const void *b);
 
 /**
- * @brief Checks if a given string represents a valid integer.
- * @details Allows an optional leading '+' or '-' sign. Validates that all
- *          subsequent characters in the string are digits. Returns 0 (false)
- *          for empty strings, strings containing only a sign, or strings with
- *          non-digit characters after the optional sign.
- *
- * @param str [in] The null-terminated string to check.
- * @return int 1 if the string is a valid integer, 0 otherwise.
- */
-static int isInteger(const char *str)
-{
-    if (*str == '-' || *str == '+')
-    {
-        str++;
-    }
-    if (!*str)
-    {
-        return 0;
-    }
-    while (*str)
-    {
-        if (!isdigit((unsigned char)*str))
-        {
-            return 0;
-        }
-        str++;
-    }
-    return 1;
-}
-
-/**
  * @brief Checks if a given string represents a valid floating-point number.
  * @details Validates if the input string conforms to common floating-point number
  *          formats, including an optional leading sign ('+' or '-'), digits,
@@ -1055,20 +1008,8 @@ static void errorAndExit(const char *msg, const char *arg, const char *prog)
 }
 
 // =========================================================================
-// PARTICLE DATA STRUCTURES AND OPERATIONS
+// PARTICLE I/O AND OPERATIONS
 // =========================================================================
-
-/**
- * Sorts particle data in ascending order by radial position
- *
- * Performs a quick sort of the particle data structure array,
- * using the radial position as the primary sorting key.
- * Preserves the original indices to allow tracking particles across time steps.
- *
- * @param array  Array of particle data structures to be sorted
- * @param npts   Number of particles in the array
- */
-void sort_by_rad(struct PartData *array, int npts);
 
 /**
  * @brief Appends a block of full particle data to the specified output file.
@@ -10110,6 +10051,8 @@ cleanup_diag_iteration:
 
     return 0;
 } // End main function.
+
+// ======================================================== //
 
 /**
  * @brief GSL integrand \f$r^2 \rho_{shape}(r)\f$ for Cored Plummer-like profile mass calculation.
