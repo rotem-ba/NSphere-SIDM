@@ -164,3 +164,15 @@ void print_SIDM_OpenMP_status(){
         #endif
     }
 }
+
+/**
+ * @brief Display warning that OpenMP is not available
+ */
+void warn_no_OpenMP(){
+    /** @warning OpenMP section: Warns user when compiled without OpenMP support. */
+    printf("WARNING: OpenMP is NOT ENABLED in this build!\n");
+    printf("This will result in significantly reduced performance.\n");
+    printf("For better performance, please install OpenMP and recompile with -fopenmp flag.\n\n\n");
+
+    log_message("WARNING", "OpenMP not available - running in single-threaded mode");
+}

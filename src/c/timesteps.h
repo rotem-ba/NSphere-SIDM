@@ -14,14 +14,10 @@
  * limitations under the License.
  */
 
-#ifndef LOGGING_H
-#define LOGGING_H
 
-void log_message(const char *level, const char *format, ...);
-void print_input_parameters();
-void print_density_params();
-void print_logging_status();
-void print_SIDM_OpenMP_status();
-void warn_no_OpenMP();
+#ifndef TIMESTEPS_H
+#define TIMESTEPS_H
 
-#endif // LOGGING_H
+int adjust_ntimesteps(int Ntimes_initial, int nout, int dtwrite);
+
+#endif // TIMESTEPS_H

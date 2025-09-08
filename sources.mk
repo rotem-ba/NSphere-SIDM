@@ -15,4 +15,5 @@ SOURCES = nsphere.c \
           density_cored_plummer.c \
           cli.c \
           io.c \
-          debug.c
+          debug.c \
+          timesteps.c
