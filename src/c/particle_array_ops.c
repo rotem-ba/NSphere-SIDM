@@ -84,6 +84,28 @@ int compare_partdata_by_rad(const void *a, const void *b)
 }
 
 /**
+ * @brief Comparison function for qsort to sort RrPsiPair structures by the 'rr' member.
+ * @details Used to sort an array of RrPsiPair structures in ascending order
+ *          based on their radial (`rr`) component. This is primarily used when
+ *          preparing data for splines where the x-axis (e.g., radius or -Psi)
+ *          must be strictly monotonic.
+ *
+ * @param a Pointer to the first RrPsiPair structure.
+ * @param b Pointer to the second RrPsiPair structure.
+ * @return int -1 if pa->rr < pb->rr, 1 if pa->rr > pb->rr, 0 otherwise.
+ */
+int compare_by_rr(const void *a, const void *b)
+{
+    const struct RrPsiPair *pa = (const struct RrPsiPair *)a;
+    const struct RrPsiPair *pb = (const struct RrPsiPair *)b;
+    if (pa->rr < pb->rr)
+        return -1;
+    if (pa->rr > pb->rr)
+        return 1;
+    return 0;
+}
+
+/**
  * @brief Sorts an array of PartData structures by their radial position (`rad`).
  * @details Uses the standard library `qsort` function with `compare_partdata_by_rad`
  *          as the comparison function. Includes basic safety checks for NULL array
@@ -107,6 +129,31 @@ void sort_by_rad(struct PartData *array, int npts)
     }
 
     qsort(array, (size_t)npts, sizeof(struct PartData), compare_partdata_by_rad);
+}
+
+/**
+ * @brief Comparison function for sorting double values in ascending order.
+ * @details This function is designed to be used with `qsort` or other
+ *          standard library sorting functions that require a comparator.
+ *          It takes two void pointers, casts them to `const double*`,
+ *          dereferences them, and compares their values.
+ *
+ * @param a [in] Pointer to the first double value.
+ * @param b [in] Pointer to the second double value.
+ * @return int -1 if the first double is less than the second,
+ *              1 if the first double is greater than the second,
+ *              0 if they are equal.
+ */
+int double_cmp(const void *a, const void *b)
+{
+    double da = *(const double *)a;
+    double db = *(const double *)b;
+
+    if (da < db)
+        return -1;
+    if (da > db)
+        return 1;
+    return 0;
 }
 
 // =========================================================================
@@ -733,4 +780,58 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
 void sort_particles(double **particles, int npts)
 {
     sort_particles_with_alg(particles, npts, g_defaultSortAlg);
+}
+
+// =========================================================================
+// SPLINE DATA SORTING UTILITIES
+// =========================================================================
+//
+// Utility functions and structures for sorting spline data arrays.
+// Provides mechanisms to sort arrays used for GSL spline creation (like radius `r`
+// and potential `Psi`) while maintaining the correct correspondence between
+// paired values after sorting based on one of the arrays (typically radius).
+
+/**
+ * @brief Sorts radius and potential arrays in tandem, maintaining their correspondence.
+ * @details This function takes an array of radial coordinates (`rrA_spline`) and an
+ *          array of corresponding potential values (`psiAarr_spline`). It sorts
+ *          `rrA_spline` in ascending order and applies the identical swaps to
+ *          `psiAarr_spline`, ensuring that `psiAarr_spline[i]` still corresponds to
+ *          `rrA_spline[i]` after sorting. This is crucial for creating GSL splines
+ *          where the x-array must be strictly monotonic and the y-array must maintain
+ *          its pairing with the x-values. The arrays are assumed to have `npts + 1` elements,
+ *          indexed from 0 to `npts`.
+ *
+ * @param rrA_spline    [in,out] Array of radial coordinates to be sorted. Modified in-place.
+ * @param psiAarr_spline [in,out] Array of corresponding Psi values. Modified in-place in tandem with `rrA_spline`.
+ * @param npts          The number of points, typically meaning arrays are of size `npts + 1`.
+ */
+void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts)
+{
+    // Allocate temporary array of pairs
+    struct RrPsiPair *pairs = (struct RrPsiPair *)malloc((npts + 1) * sizeof(struct RrPsiPair));
+    if (!pairs)
+    {
+        perror("malloc failed in sort_rr_psi_arrays");
+        CLEAN_EXIT(EXIT_FAILURE);
+    }
+
+    // Populate the pairs array
+    for (int i = 0; i <= npts; i++)
+    {
+        pairs[i].rr = rrA_spline[i];
+        pairs[i].psi = psiAarr_spline[i];
+    }
+
+    // Sort the pairs based on the radius value
+    qsort(pairs, npts + 1, sizeof(struct RrPsiPair), compare_by_rr);
+
+    // Copy the sorted data back into the original arrays
+    for (int i = 0; i <= npts; i++)
+    {
+        rrA_spline[i] = pairs[i].rr;
+        psiAarr_spline[i] = pairs[i].psi;
+    }
+
+    free(pairs);
 }

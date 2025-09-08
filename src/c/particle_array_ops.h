@@ -37,15 +37,23 @@ struct PartData
     float angmom;       // Angular momentum
     int original_index; // Original position in array before sorting
 };
-
 typedef struct PartData PartData;
+
+struct RrPsiPair
+{
+    double rr;  ///< Radius value or x-axis value for sorting
+    double psi; ///< Corresponding potential value or y-axis value
+};
+typedef struct RrPsiPair RrPsiPair;
 
 int check_strict_monotonicity(const double *arr, int n, const char *name);
 
 int compare_partdata_by_rad(const void *a, const void *b);
 int compare_particles(const void *a, const void *b);
+int compare_by_rr(const void *a, const void *b);
 
 void sort_by_rad(struct PartData *array, int npts);
+int double_cmp(const void *a, const void *b);
 void insertion_sort(double **columns, int n);
 void stdlib_qsort_wrapper(double **columns, int n);
 void quadsort_wrapper(double **columns, int n);
@@ -57,5 +65,6 @@ void verify_sort_results(double **columns, int n, const char *label);
 void sort_particles_with_alg(double **particles, int npts, const char *sortAlg);
 void sort_particles(double **particles, int npts);
 
+void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts);
 
 #endif // PARTICLE_ARRAY_OPS_H
