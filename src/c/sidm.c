@@ -15,16 +15,34 @@
  */
 
 #include "sidm.h"
+#include "globals.h"
 #include "logging.h"
-#include <stdio.h>
 #include <math.h>
 #include <gsl/gsl_rng.h>
+#ifdef _OPENMP
+#include <omp.h>
+#else
+// OpenMP function stubs when compiled without OpenMP
+// Use __attribute__((unused)) to prevent unused function warnings
+#include <sys/time.h>  /* For gettimeofday */
+static int __attribute__((unused)) omp_get_max_threads(void) { return 1; }
+static int __attribute__((unused)) omp_get_num_procs(void) { return 1; }
+static int __attribute__((unused)) omp_get_thread_num(void) { return 0; }
+static void __attribute__((unused)) omp_set_max_active_levels(int x) { (void)x; }
+static void __attribute__((unused)) omp_set_num_threads(int x) { (void)x; }
+static double __attribute__((unused)) omp_get_wtime(void) {
+    // Use higher precision time function for non-OpenMP builds
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+}
+#endif
 
 extern int g_doDebug;
 
 // Global variable definitions
-double g_sidm_kappa = 50.0;                    ///< SIDM opacity kappa (cm^2/g), default 50.0.
-int *g_particle_scatter_state = NULL;          ///< Tracks recent scatter history for Adams-Bashforth integrator state reset.
+extern double g_sidm_kappa;
+extern int *g_particle_scatter_state;
 
 // Utility macros
 #define sqr(x) ((x) * (x))

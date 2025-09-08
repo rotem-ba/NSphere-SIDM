@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
+
 /**
  * @brief Global simulation feature flags.
  * @details These control various optional behaviors and optimizations
@@ -26,9 +28,14 @@ int g_doAllParticleData = 1; ///< Save complete particle evolution history (defa
 int g_doRestart = 0;         ///< Enable simulation restart from checkpoint.
 int skip_file_writes = 0;    ///< Skip file writes during simulation restart.
 int g_enable_logging = 0;    ///< Enable logging to file (controlled by `--log` flag).
-extern int g_enable_sidm_scattering;    ///< Enable SIDM scattering physics (0=no, 1=yes). Default is OFF.
-extern int g_sidm_execution_mode;       ///< SIDM execution mode: 0 for serial, 1 for parallel (default).
-extern long long g_total_sidm_scatters; ///< Global counter for total SIDM scatters.
+int g_enable_sidm_scattering = 0;    ///< Enable SIDM scattering physics (0=no, 1=yes). Default is OFF.
+int g_sidm_execution_mode = 1;       ///< SIDM execution mode: 0 for serial, 1 for parallel (default).
+long long g_total_sidm_scatters = 0; ///< Global counter for total SIDM scatters.
+int g_sidm_kappa_provided = 0;     ///< Flag: 1 if `--sidm-kappa` was given by the user.
+
+// Global variable definitions
+double g_sidm_kappa = 50.0;                    ///< SIDM opacity kappa (cm^2/g), default 50.0.
+int *g_particle_scatter_state = NULL;          ///< Tracks recent scatter history for Adams-Bashforth integrator state reset.
 
 // Seed Management Globals
 unsigned long int g_master_seed = 0;         ///< Master seed for the simulation, if provided.
@@ -36,10 +43,12 @@ unsigned long int g_initial_cond_seed = 0;   ///< Seed used for generating initi
 unsigned long int g_sidm_seed = 0;           ///< Seed used for SIDM calculations.
 int g_master_seed_provided = 0;              ///< Flag: 1 if `--master-seed` was given by the user.
 int g_initial_cond_seed_provided = 0;        ///< Flag: 1 if `--init-cond-seed` was given by the user.
+int g_sidm_seed_provided = 0;                ///< Flag: 1 if `--sidm-seed` was given by the user.
 
 int g_attempt_load_seeds = 0;                ///< Flag: 1 if we should try to load seeds from files if not provided.
 
 const char* g_initial_cond_seed_filename_base = "data/last_initial_seed"; ///< Base name for IC seed file.
+const char* g_sidm_seed_filename_base = "data/last_sidm_seed";             ///< Base name for SIDM seed file.
 
 // Profile parameter macros used by profile variables
 #define RC 100.0                  ///< Core radius in kpc.
@@ -103,3 +112,27 @@ double g_cored_profile_rmax_factor = CUTOFF_FACTOR_CORED_DEFAULT;   ///< Cored-p
  *          1 = Direct spatial convolution (more accurate but slower).
  */
 int debug_direct_convolution = 0;
+
+// =========================================================================
+// PHYSICAL CONSTANTS AND ASTROPHYSICAL PARAMETERS
+// =========================================================================
+//
+// Core constants and unit conversion factors for astrophysical calculations
+#define PI 3.14159265358979323846 ///< Mathematical constant Pi.
+#define G_CONST 4.3e-6           ///< Newton's gravitational constant in kpc (km/sec)^2/Msun.
+/** @def sqr(x) Calculates the square of a value. */
+#define sqr(x) ((x) * (x))
+/** @def cube(x) Calculates the cube of a value. */
+#define cube(x) ((x) * (x) * (x))
+#define kmsec_to_kpcmyr 1.02271e-3 ///< Conversion factor: km/s to kpc/Myr.
+#define VEL_CONV_SQ (kmsec_to_kpcmyr * kmsec_to_kpcmyr) ///< Velocity conversion squared (kpc/Myr)^2 per (km/s)^2.
+
+double g_active_halo_mass = HALO_MASS; ///< Active halo mass for N-body force calculations.
+
+/**
+ * @brief Angular momentum selection configuration for particle filtering.
+ * @details Mode 0: Select particles with the 5 lowest L values.
+ *          Mode 1: Select particles with L values closest to Lcompare.
+ */
+int use_closest_to_Lcompare = 1; ///< Mode selector (0 or 1).
+double Lcompare = 0.05;          ///< Reference L value for closest-match mode (Mode 1).

@@ -86,7 +86,8 @@ PY_TARGETS_BIN = $(patsubst %.py,$(BIN_DIR)/%, $(notdir $(PY_SCRIPTS)))
 
 # Target configuration
 TARGET = nsphere
-SRC = $(C_SRC_DIR)/nsphere.c
+SOURCES = nsphere.c logging.c sidm.c globals.c
+SRC = $(addprefix $(C_SRC_DIR)/, $(SOURCES))
 
 # ================================================================
 # --- Build Rules ---
@@ -99,7 +100,7 @@ all: check-openmp build-if-proceed python_executables
 build-if-proceed: $(ROOT_DIR)/$(TARGET)
 
 # Main target builds the executable
-$(ROOT_DIR)/$(TARGET): $(SRC) Makefile 
+$(ROOT_DIR)/$(TARGET): $(SRC) Makefile
 ifeq ($(PROCEED_BUILD),yes)
 	@echo "Building $(TARGET) ($(BUILD_TYPE))..."
 	@echo "$(CC) $(CFLAGS) $(SRC) -o $@ $(LDFLAGS) $(LDLIBS)"
@@ -216,7 +217,7 @@ help:
 	@echo "  make                  - Build with OpenMP if available (default)"
 	@echo "  make no-openmp        - Build explicitly without OpenMP"
 	@echo "  make debug            - Build with debug symbols and AddressSanitizer"
-	@echo "  make clean            - Remove build files" 
+	@echo "  make clean            - Remove build files"
 	@echo "  make help             - Display this help message"
 	@echo ""
 	@echo "Build options (make DEBUG=yes ...):"

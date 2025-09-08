@@ -159,7 +159,8 @@ else
 endif
 
 # Source files
-SRC = $(C_SRC_DIR)/nsphere.c
+SOURCES = nsphere.c logging.c sidm.c globals.c
+SRC = $(addprefix $(C_SRC_DIR)/, $(SOURCES))
 
 # --- Python Executable Definitions ---
 PY_SCRIPTS = nsphere_plot.py nsphere_animations.py nsphere_distributions.py nsphere_2d_histograms.py
@@ -243,7 +244,7 @@ else
 	@# --- MSVC Clean ---
 	@# Use direct shell commands for maximum reliability
 	-del /Q /F $(ROOT_DIR)\nsphere.exe $(BIN_DIR)\nsphere.exe *.obj openmp_test.* *.pdb *.ilk 2>NUL || true
-	-del /Q /F $(ROOT_DIR)\nsphere_plot.exe $(ROOT_DIR)\nsphere_animations.exe $(ROOT_DIR)\nsphere_distributions.exe $(ROOT_DIR)\nsphere_2d_histograms.exe 2>NUL || true 
+	-del /Q /F $(ROOT_DIR)\nsphere_plot.exe $(ROOT_DIR)\nsphere_animations.exe $(ROOT_DIR)\nsphere_distributions.exe $(ROOT_DIR)\nsphere_2d_histograms.exe 2>NUL || true
 	-del /Q /F $(BIN_DIR)\nsphere_plot.exe $(BIN_DIR)\nsphere_animations.exe $(BIN_DIR)\nsphere_distributions.exe $(BIN_DIR)\nsphere_2d_histograms.exe 2>NUL || true
 	-if exist $(subst /,\\,$(BIN_DIR)) rmdir /S /Q $(subst /,\\,$(BIN_DIR)) 2>NUL || true
 endif
