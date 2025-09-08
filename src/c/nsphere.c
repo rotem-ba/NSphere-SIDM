@@ -211,36 +211,6 @@ int fprintf_bin(FILE *fp, const char *format, ...);
 int fscanf_bin(FILE *fp, const char *format, ...);
 
 /**
- * @brief Conditional compilation macros for feature flags.
- * @details These macros provide a cleaner syntax for conditional code blocks
- *          that depend on the global feature flags.
- *
- * @def IF_DEBUG
- * @brief Macro for code blocks executed only if `g_doDebug` is true.
- * @def IF_DYNPSI
- * @brief Macro for code blocks executed only if `g_doDynPsi` is true.
- * @def IF_DYNRANK
- * @brief Macro for code blocks executed only if `g_doDynRank` is true.
- * @def IF_ALL_PART
- * @brief Macro for code blocks executed only if `g_doAllParticleData` is true.
- */
-#define IF_DEBUG if (g_doDebug)
-#define IF_DYNPSI if (g_doDynPsi)
-#define IF_DYNRANK if (g_doDynRank)
-#define IF_ALL_PART if (g_doAllParticleData)
-
-/**
- * @brief Gravitational force calculation control flag.
- * @details Used for testing and debugging orbital dynamics:
- *          - 0 = Normal gravitational force calculation (default).
- *          - 1 = Zero gravity (particles move in straight lines).
- *
- * @note Setting this to 1 is useful for validating the integration scheme
- *       independent of gravitational physics.
- */
-static int use_identity_gravity = 0;
-
-/**
  * @brief Calculates gravitational acceleration at a given radius.
  *
  * Parameters

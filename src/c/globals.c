@@ -87,23 +87,15 @@ double g_cored_profile_halo_mass = HALO_MASS;
 double g_cored_profile_rmax_factor = CUTOFF_FACTOR_CORED_DEFAULT;
 
 /**
- * @brief Conditional compilation macros for feature flags.
- * @details These macros provide a cleaner syntax for conditional code blocks
- *          that depend on the global feature flags.
+ * @brief Gravitational force calculation control flag.
+ * @details Used for testing and debugging orbital dynamics:
+ *          - 0 = Normal gravitational force calculation (default).
+ *          - 1 = Zero gravity (particles move in straight lines).
  *
- * @def IF_DEBUG
- * @brief Macro for code blocks executed only if `g_doDebug` is true.
- * @def IF_DYNPSI
- * @brief Macro for code blocks executed only if `g_doDynPsi` is true.
- * @def IF_DYNRANK
- * @brief Macro for code blocks executed only if `g_doDynRank` is true.
- * @def IF_ALL_PART
- * @brief Macro for code blocks executed only if `g_doAllParticleData` is true.
+ * @note Setting this to 1 is useful for validating the integration scheme
+ *       independent of gravitational physics.
  */
-#define IF_DEBUG if (g_doDebug)
-#define IF_DYNPSI if (g_doDynPsi)
-#define IF_DYNRANK if (g_doDynRank)
-#define IF_ALL_PART if (g_doAllParticleData)
+int use_identity_gravity = 0;
 
 /**
  * @brief Convolution method selection for density smoothing.

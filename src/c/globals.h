@@ -50,7 +50,6 @@ static double __attribute__((unused)) omp_get_wtime(void) {
 #define kmsec_to_kpcmyr 1.02271e-3 ///< Conversion factor: km/s to kpc/Myr.
 #define VEL_CONV_SQ (kmsec_to_kpcmyr * kmsec_to_kpcmyr) ///< Velocity conversion squared (kpc/Myr)^2 per (km/s)^2.
 
-
 /**
  * @brief Global simulation feature flags.
  * @details These control various optional behaviors and optimizations
@@ -139,6 +138,17 @@ extern double g_cored_profile_rmax_factor;  ///< Cored-profile-specific r_max fa
 #define IF_DYNPSI if (g_doDynPsi)
 #define IF_DYNRANK if (g_doDynRank)
 #define IF_ALL_PART if (g_doAllParticleData)
+
+/**
+ * @brief Gravitational force calculation control flag.
+ * @details Used for testing and debugging orbital dynamics:
+ *          - 0 = Normal gravitational force calculation (default).
+ *          - 1 = Zero gravity (particles move in straight lines).
+ *
+ * @note Setting this to 1 is useful for validating the integration scheme
+ *       independent of gravitational physics.
+ */
+extern int use_identity_gravity;
 
 /**
  * @brief Convolution method selection for density smoothing.
