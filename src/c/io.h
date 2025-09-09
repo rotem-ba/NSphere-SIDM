@@ -19,6 +19,7 @@
 
  #include <string.h>
  #include <stdio.h>
+ #include "globals.h"
 
  // =========================================================================
  // Windows‑compatibility shims
@@ -37,7 +38,7 @@
  #endif
 
 long long get_available_disk_space(const char *path);
-void get_suffixed_filename(const char *base_filename, int with_suffix, char *buffer, size_t bufsize);
+void get_full_filename(const char *base_filename, int with_suffix, char *buffer, size_t bufsize);
 void format_file_size(long size_in_bytes, char *buffer, size_t buffer_size);
 int fprintf_bin(FILE *fp, const char *format, ...);
 int fscanf_bin(FILE *fp, const char *format, ...);
@@ -55,5 +56,12 @@ void mkdir_init();
 int write_to_lastparams();
 
 void write_low_l_particles(double dt, int nlowest, double **lowestL_r, double **lowestL_E, double **lowestL_L);
+
+/** @brief Calculate total number of write events and steps between major snapshots. */
+inline int total_writes() {
+    return ((Ntimes - 1) / dtwrite) + 1; // Total potential write points
+}
+
+void initialize_output_file(int noutsnaps);
 
 #endif // IO_H

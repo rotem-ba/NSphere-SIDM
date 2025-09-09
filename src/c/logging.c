@@ -20,6 +20,7 @@
  #include <sys/stat.h>
  #include "globals.h"
  #include "particle_array_ops.h"
+ #include "exit.h"
 
 /**
  * @brief Writes a formatted message to the log file with timestamp and severity level.
@@ -175,4 +176,57 @@ void warn_no_OpenMP(){
     printf("For better performance, please install OpenMP and recompile with -fopenmp flag.\n\n\n");
 
     log_message("WARNING", "OpenMP not available - running in single-threaded mode");
+}
+
+/**
+ * @brief Log number of scattering events
+ */
+void log_scattering() {
+    if (g_enable_sidm_scattering) {
+        printf("Total SIDM scattering events during simulation: %lld\n", g_total_sidm_scatters);
+        log_message("INFO", "Total SIDM scattering events: %lld", g_total_sidm_scatters);
+    }
+}
+
+/**
+ * @brief Log disk memory space
+ */
+void log_disk_space(long long size) {
+    double size_gb = size / (1024.0 * 1024.0 * 1024.0);
+    double size_mb = size / (1024.0 * 1024.0);
+    double size_kb = size / 1024.0;
+
+    if (size_gb >= 1.0)
+        printf("%.1f GB (%lld bytes)\n", size_gb, size);
+    else if (size_mb >= 1.0)
+        printf("%.1f MB (%lld bytes)\n", size_mb, size);
+    else if (size_kb >= 1.0)
+        printf("%.1f KB (%lld bytes)\n", size_kb, size);
+    else
+        printf("%lld bytes\n", size);
+}
+
+/**
+ * @brief Raise insufficient memory error
+ */
+void raise_insufficient_memory(long long total_disk_space, long long available_space) {
+    double total_gb = total_disk_space / (1024.0 * 1024.0 * 1024.0);
+    double available_gb = available_space / (1024.0 * 1024.0 * 1024.0);
+
+    fprintf(stderr, "\nError: Insufficient disk space!\n");
+    fprintf(stderr, "Required: %.1f GB\n", total_gb);
+    fprintf(stderr, "Available: %.1f GB\n", available_gb);
+    fprintf(stderr, "Shortfall: %.1f GB\n", total_gb - available_gb);
+    CLEAN_EXIT(1);
+}
+
+/**
+ * @brief Raise insufficient memory error
+ */
+void warn_low_memory(long long total_disk_space, long long available_space, double usage_after) {
+    double total_gb = total_disk_space / (1024.0 * 1024.0 * 1024.0);
+    double available_gb = available_space / (1024.0 * 1024.0 * 1024.0);
+
+    printf("\nWarning: Simulation will use %.1f%% of available disk space!\n", 100.0 * total_disk_space / available_space);
+    printf("After simulation: %.1f GB free (%.1f%% remaining)\n", available_gb-total_gb, usage_after * 100.0);
 }

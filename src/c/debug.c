@@ -141,7 +141,7 @@
      {
          // Create filename with suffix
          char filename[256];
-         get_suffixed_filename("data/debug_energy_compare.dat", 1, filename, sizeof(filename));
+         get_full_filename("data/debug_energy_compare.dat", 1, filename, sizeof(filename));
 
          FILE *fp = fopen(filename, "wb"); // Binary mode for fprintf_bin
          if (!fp)

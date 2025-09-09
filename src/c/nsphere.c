@@ -189,9 +189,8 @@ printf("  \n");
         printf("Adjusted Number of Time Steps to %d to satisfy parameter constraints.\n", Ntimes);
     }
     /** @brief Calculate total number of write events and steps between major snapshots. */
-    int total_writes = ((Ntimes - 1) / dtwrite) + 1; // Total potential write points
     int stepBetweenSnaps = (int)floor(
-        (double)(total_writes - 1) / (double)(noutsnaps - 1) + 0.5); // Steps between major snapshots
+        (double)(total_writes() - 1) / (double)(noutsnaps - 1) + 0.5); // Steps between major snapshots
     int ext_Ntimes; ///< Extended time steps potentially needed for trajectory arrays bounds.
     ext_Ntimes = Ntimes + dtwrite; // Allocate trajectory arrays slightly larger
 
@@ -448,7 +447,7 @@ printf("  \n");
                     char diag_fname_mass[256];
                     char diag_base_mass[128];
                     snprintf(diag_base_mass, sizeof(diag_base_mass), "data/massprofile_Ni%d_Ns%d.dat", Nintegration_diag, Nspline_diag_base);
-                    get_suffixed_filename(diag_base_mass, 1, diag_fname_mass, sizeof(diag_fname_mass));
+                    get_full_filename(diag_base_mass, 1, diag_fname_mass, sizeof(diag_fname_mass));
                     FILE *fp_diag_mass = fopen(diag_fname_mass, "wb");
                     if (fp_diag_mass) {
                         for (double r_write_diag = 0.0; r_write_diag < radius_diag_arr[num_points_diag - 1]; r_write_diag += rmax_diag / 900.0) {
@@ -499,7 +498,7 @@ printf("  \n");
                     char diag_fname_psi[256];
                     char diag_base_psi[128];
                     snprintf(diag_base_psi, sizeof(diag_base_psi), "data/Psiprofile_Ni%d_Ns%d.dat", Nintegration_diag, Nspline_diag_base);
-                    get_suffixed_filename(diag_base_psi, 1, diag_fname_psi, sizeof(diag_fname_psi));
+                    get_full_filename(diag_base_psi, 1, diag_fname_psi, sizeof(diag_fname_psi));
                     FILE *fp_diag_psi = fopen(diag_fname_psi, "wb");
                     if (fp_diag_psi) {
                         for (double r_write_diag = 0.0; r_write_diag < radius_diag_arr[num_points_diag - 1]; r_write_diag += rmax_diag / 900.0) {
@@ -596,7 +595,7 @@ printf("  \n");
                     char diag_fname_fofe[256];
                     char diag_base_fofe[128];
                     snprintf(diag_base_fofe, sizeof(diag_base_fofe), "data/f_of_E_Ni%d_Ns%d.dat", Nintegration_diag, Nspline_diag_base);
-                    get_suffixed_filename(diag_base_fofe, 1, diag_fname_fofe, sizeof(diag_fname_fofe));
+                    get_full_filename(diag_base_fofe, 1, diag_fname_fofe, sizeof(diag_fname_fofe));
                     FILE *fp_diag_fofe = fopen(diag_fname_fofe, "wb");
                     if (fp_diag_fofe) {
                         for (int k = 0; k <= num_points_diag; k++) {
@@ -619,7 +618,7 @@ printf("  \n");
                     char diag_fname_integrand[256];
                     char diag_base_integrand[128];
                     snprintf(diag_base_integrand, sizeof(diag_base_integrand), "data/integrand_Ni%d_Ns%d.dat", Nintegration_diag, Nspline_diag_base);
-                    get_suffixed_filename(diag_base_integrand, 1, diag_fname_integrand, sizeof(diag_fname_integrand));
+                    get_full_filename(diag_base_integrand, 1, diag_fname_integrand, sizeof(diag_fname_integrand));
                     FILE *fp_diag_int = fopen(diag_fname_integrand, "wb");
                     if (fp_diag_int) {
                         // Simple integrand convergence test (like Cored profile)
@@ -646,7 +645,7 @@ printf("  \n");
                     char diag_fname_dens[256];
                     char diag_base_dens[128];
                     snprintf(diag_base_dens, sizeof(diag_base_dens), "data/density_profile_Ni%d_Ns%d.dat", Nintegration_diag, Nspline_diag_base);
-                    get_suffixed_filename(diag_base_dens, 1, diag_fname_dens, sizeof(diag_fname_dens));
+                    get_full_filename(diag_base_dens, 1, diag_fname_dens, sizeof(diag_fname_dens));
                     FILE *fp_diag_dens = fopen(diag_fname_dens, "wb");
                     if (fp_diag_dens) {
                         for (int k = 0; k < num_points_diag; k++) {
@@ -674,7 +673,7 @@ printf("  \n");
                     char diag_fname_dpsi[256];
                     char diag_base_dpsi[128];
                     snprintf(diag_base_dpsi, sizeof(diag_base_dpsi), "data/dpsi_dr_Ni%d_Ns%d.dat", Nintegration_diag, Nspline_diag_base);
-                    get_suffixed_filename(diag_base_dpsi, 1, diag_fname_dpsi, sizeof(diag_fname_dpsi));
+                    get_full_filename(diag_base_dpsi, 1, diag_fname_dpsi, sizeof(diag_fname_dpsi));
                     FILE *fp_diag_dpsi = fopen(diag_fname_dpsi, "wb");
                     if (fp_diag_dpsi) {
                         for (int k = 0; k < num_points_diag; k++) {
@@ -695,7 +694,7 @@ printf("  \n");
                     char diag_fname_drhodpsi[256];
                     char diag_base_drhodpsi[128];
                     snprintf(diag_base_drhodpsi, sizeof(diag_base_drhodpsi), "data/drho_dpsi_Ni%d_Ns%d.dat", Nintegration_diag, Nspline_diag_base);
-                    get_suffixed_filename(diag_base_drhodpsi, 1, diag_fname_drhodpsi, sizeof(diag_fname_drhodpsi));
+                    get_full_filename(diag_base_drhodpsi, 1, diag_fname_drhodpsi, sizeof(diag_fname_drhodpsi));
                     FILE *fp_diag_drhodpsi = fopen(diag_fname_drhodpsi, "wb");
                     if (fp_diag_drhodpsi) {
                         for (int k = 1; k < num_points_diag - 1; k++) {
@@ -1542,7 +1541,7 @@ cleanup_diag_iteration:
                 FILE *fp;
                 char base_filename_massprofile[256];
                 snprintf(base_filename_massprofile, sizeof(base_filename_massprofile), "data/massprofile_Ni%d_Ns%d.dat", Nintegration, Nspline);
-                get_suffixed_filename(base_filename_massprofile, 1, fname, sizeof(fname));
+                get_full_filename(base_filename_massprofile, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
                 for (r = 0.0; r < rhigh; r += rmax / 900.0)
                 {
@@ -1587,7 +1586,7 @@ cleanup_diag_iteration:
                 /** @note Write potential profile file for these params (e.g., data/Psiprofile_Ni1k_Ns1k.dat). */
                 char base_filename_psiprofile[256];
                 snprintf(base_filename_psiprofile, sizeof(base_filename_psiprofile), "data/Psiprofile_Ni%d_Ns%d.dat", Nintegration, Nspline);
-                get_suffixed_filename(base_filename_psiprofile, 1, fname, sizeof(fname));
+                get_full_filename(base_filename_psiprofile, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
                 for (r = 0.0; r < ((double)num_points - 1.0) / ((double)num_points) * rmax; r += rmax / 900.0)
                 {
@@ -1613,7 +1612,7 @@ cleanup_diag_iteration:
 
                 char base_filename_integrand[256];
                 snprintf(base_filename_integrand, sizeof(base_filename_integrand), "data/integrand_Ni%d_Ns%d.dat", Nintegration, Nspline);
-                get_suffixed_filename(base_filename_integrand, 1, fname, sizeof(fname));
+                get_full_filename(base_filename_integrand, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
                 calE = Psivalues[0];
                 F.function = &fEintegrand;
@@ -1665,7 +1664,7 @@ cleanup_diag_iteration:
                 /** @note Write theoretical density profile file for these params (e.g., data/density_profile_NiX_NsY.dat). */
                 char base_filename[256];
                 snprintf(base_filename, sizeof(base_filename), "data/density_profile_Ni%d_Ns%d.dat", Nintegration, Nspline);
-                get_suffixed_filename(base_filename, 1, fname, sizeof(fname));
+                get_full_filename(base_filename, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
                 for (i = 0; i < num_points; i++)
                 {
@@ -1676,7 +1675,7 @@ cleanup_diag_iteration:
                 fclose(fp);
 
                 /** @note Write dPsi/dr file (data/dpsi_dr<suffix>.dat) (overwrites previous if suffix same). */
-                get_suffixed_filename("data/dpsi_dr.dat", 1, fname, sizeof(fname));
+                get_full_filename("data/dpsi_dr.dat", 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
                 for (i = 0; i < num_points; i++)
                 {
@@ -1691,7 +1690,7 @@ cleanup_diag_iteration:
                 fclose(fp);
 
                 /** @note Write drho/dPsi file (data/drho_dpsi<suffix>.dat) (overwrites previous if suffix same). */
-                get_suffixed_filename("data/drho_dpsi.dat", 1, fname, sizeof(fname));
+                get_full_filename("data/drho_dpsi.dat", 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
                 for (i = 1; i < num_points - 1; i++)
                 {
@@ -1713,7 +1712,7 @@ cleanup_diag_iteration:
                 /** @note Write f(E) = dI/dE / const file for these params (e.g., data/f_of_E_NiX_NsY.dat). */
                 char base_filename_fofe[256];
                 snprintf(base_filename_fofe, sizeof(base_filename_fofe), "data/f_of_E_Ni%d_Ns%d.dat", Nintegration, Nspline);
-                get_suffixed_filename(base_filename_fofe, 1, fname, sizeof(fname));
+                get_full_filename(base_filename_fofe, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
                 for (i = 0; i <= num_points; i++)
                 {
@@ -1741,7 +1740,7 @@ cleanup_diag_iteration:
                 }
                 fclose(fp);
 
-                get_suffixed_filename("data/df_fixed_radius.dat", 1, fname, sizeof(fname));
+                get_full_filename("data/df_fixed_radius.dat", 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
                 {
                     double r_fixed = 200.0;
@@ -1844,7 +1843,7 @@ cleanup_diag_iteration:
     }
 
     /** @brief Write main mass profile file (data/massprofile<suffix>.dat). */
-    get_suffixed_filename("data/massprofile.dat", 1, fname, sizeof(fname));
+    get_full_filename("data/massprofile.dat", 1, fname, sizeof(fname));
     fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
     for (r = 0.0; r < rhigh; r += rmax / 900.0)
     {
@@ -1892,7 +1891,7 @@ cleanup_diag_iteration:
 
 
     /** @brief Write main potential profile file (data/Psiprofile<suffix>.dat). */
-    get_suffixed_filename("data/Psiprofile.dat", 1, fname, sizeof(fname));
+    get_full_filename("data/Psiprofile.dat", 1, fname, sizeof(fname));
     fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
     for (r = 0.0; r < ((double)num_points - 1.0) / ((double)num_points) * rmax; r += rmax / 900.0)
     {
@@ -1916,7 +1915,7 @@ cleanup_diag_iteration:
     Evalues = (double *)malloc((num_points + 1) * sizeof(double));
     Psimin = Psivalues[num_points - 1];
     Psimax = Psivalues[0];
-    get_suffixed_filename("data/integrand.dat", 1, fname, sizeof(fname));
+    get_full_filename("data/integrand.dat", 1, fname, sizeof(fname));
     fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
     calE = Psivalues[0];
     F.function = &fEintegrand;
@@ -1982,7 +1981,7 @@ cleanup_diag_iteration:
         if (g_master_seed_provided) {
             g_initial_cond_seed = g_master_seed + 1; // Deterministic offset
         } else if (g_attempt_load_seeds) {
-            get_suffixed_filename(g_initial_cond_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
+            get_full_filename(g_initial_cond_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
             fp_seed = fopen(seed_filepath, "r");
             if (fp_seed) {
                 if (fscanf(fp_seed, "%lu", &g_initial_cond_seed) == 1) {
@@ -2009,7 +2008,7 @@ cleanup_diag_iteration:
         if (g_master_seed_provided) {
             g_sidm_seed = g_master_seed + 2; // Deterministic offset, different from IC seed
         } else if (g_attempt_load_seeds) {
-            get_suffixed_filename(g_sidm_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
+            get_full_filename(g_sidm_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
             fp_seed = fopen(seed_filepath, "r");
             if (fp_seed) {
                 if (fscanf(fp_seed, "%lu", &g_sidm_seed) == 1) {
@@ -2043,7 +2042,7 @@ cleanup_diag_iteration:
 
     // Save the seeds that will actually be used
     // Save Initial Conditions Seed
-    get_suffixed_filename(g_initial_cond_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
+    get_full_filename(g_initial_cond_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
     fp_seed = fopen(seed_filepath, "w");
     if (fp_seed) {
         fprintf(fp_seed, "%lu\n", g_initial_cond_seed);
@@ -2076,7 +2075,7 @@ cleanup_diag_iteration:
     }
 
     // Save SIDM Seed
-    get_suffixed_filename(g_sidm_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
+    get_full_filename(g_sidm_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
     fp_seed = fopen(seed_filepath, "w");
     if (fp_seed) {
         fprintf(fp_seed, "%lu\n", g_sidm_seed);
@@ -2344,7 +2343,7 @@ cleanup_diag_iteration:
     if (!skip_file_writes)
     {
         char filename[256];
-        get_suffixed_filename("data/particles.dat", 1, filename, sizeof(filename));
+        get_full_filename("data/particles.dat", 1, filename, sizeof(filename));
         FILE *fpp = fopen(filename, "wb"); // Binary mode for fprintf_bin output
         if (fpp == NULL)
         {
@@ -2395,8 +2394,7 @@ cleanup_diag_iteration:
     int print_steps[21];
     for (int k = 0; k <= 20; k++) print_steps[k] = (int)floor(k * 0.05 * Ntimes); // Calculate steps for progress output
 
-    /** @brief Flag to determine if simulation phase can be skipped. */
-    int skip_simulation = 0;
+
 
     /** @brief Set up simulation tracking variables. */
 
@@ -2606,8 +2604,7 @@ cleanup_diag_iteration:
 
 
     /** @brief Create filename for the main all-particle data output file. */
-    char apd_filename[256]; // Filename for data/all_particle_data<suffix>.dat
-    get_suffixed_filename("data/all_particle_data.dat", 1, apd_filename, sizeof(apd_filename));
+    get_full_filename("data/all_particle_data.dat", 1, apd_filename, sizeof(apd_filename));
 
     /** @brief Allocate primary block storage arrays (float/int for memory efficiency).
      *         These store data for `block_size` steps, indexed [step_in_block * npts + final_rank_id].
@@ -2677,134 +2674,7 @@ cleanup_diag_iteration:
         }
     } // End restart check block
 
-    /**
-     * @brief OUTPUT FILE INITIALIZATION block (`all_particle_data.dat`).
-     * @details Creates (or overwrites) an empty binary file `all_particle_data<suffix>.dat`
-     *          if saving all particle data (`g_doAllParticleData` is true) AND the simulation
-     *          is *not* being skipped (`skip_simulation` is false). This file will be appended to
-     *          incrementally during the simulation timestepping loop via block writes.
-     * @see append_all_particle_data_chunk_to_file
-     * @see apd_filename
-     * @see g_doAllParticleData
-     * @see skip_simulation
-     */
-    if (g_doAllParticleData && !skip_simulation)
-    {
-        // Create/truncate the output file in binary write mode.
-        FILE *fapd = fopen(apd_filename, "wb");
-        if (!fapd) {
-            fprintf(stderr, "Error: cannot create all_particle_data output file %s\n", apd_filename);
-            CLEAN_EXIT(1);
-        }
-        fclose(fapd); // Close immediately, file is now ready for appending.
-        printf("Initialized empty file for all particle data: %s\n", apd_filename);
-
-        // Calculate and display expected file size
-        long long expected_size = (long long)total_writes * (long long)npts * 16LL; // 16 bytes per particle record
-        double size_gb = expected_size / (1024.0 * 1024.0 * 1024.0);
-        double size_mb = expected_size / (1024.0 * 1024.0);
-        double size_kb = expected_size / 1024.0;
-
-        if (size_gb >= 1.0) {
-            printf("All particle data file requires: %.1f GB (%lld bytes)\n", size_gb, expected_size);
-        } else if (size_mb >= 1.0) {
-            printf("All particle data file requires: %.1f MB (%lld bytes)\n", size_mb, expected_size);
-        } else if (size_kb >= 1.0) {
-            printf("All particle data file requires: %.1f KB (%lld bytes)\n", size_kb, expected_size);
-        } else {
-            printf("All particle data file requires: %lld bytes\n", expected_size);
-        }
-
-        // Calculate and display expected snapshot file sizes
-        // Each snapshot has 2 files: unsorted (28 bytes/particle) and sorted (32 bytes/particle)
-        long long snapshot_size = (long long)npts * (28LL + 32LL); // Total per snapshot pair
-        long long total_snapshot_size = snapshot_size * (long long)noutsnaps;
-        double snap_size_gb = total_snapshot_size / (1024.0 * 1024.0 * 1024.0);
-        double snap_size_mb = total_snapshot_size / (1024.0 * 1024.0);
-        double snap_size_kb = total_snapshot_size / 1024.0;
-
-        printf("%d time snapshot files will require: ", noutsnaps);
-        if (snap_size_gb >= 1.0) {
-            printf("%.1f GB (%lld bytes)\n", snap_size_gb, total_snapshot_size);
-        } else if (snap_size_mb >= 1.0) {
-            printf("%.1f MB (%lld bytes)\n", snap_size_mb, total_snapshot_size);
-        } else if (snap_size_kb >= 1.0) {
-            printf("%.1f KB (%lld bytes)\n", snap_size_kb, total_snapshot_size);
-        } else {
-            printf("%lld bytes\n", total_snapshot_size);
-        }
-
-        // Calculate and display total disk space
-        long long total_disk_space = expected_size + total_snapshot_size;
-        double total_gb = total_disk_space / (1024.0 * 1024.0 * 1024.0);
-        double total_mb = total_disk_space / (1024.0 * 1024.0);
-        double total_kb = total_disk_space / 1024.0;
-
-        printf("Total disk space required: ");
-        if (total_gb >= 1.0) {
-            printf("%.1f GB (%lld bytes)\n", total_gb, total_disk_space);
-        } else if (total_mb >= 1.0) {
-            printf("%.1f MB (%lld bytes)\n", total_mb, total_disk_space);
-        } else if (total_kb >= 1.0) {
-            printf("%.1f KB (%lld bytes)\n", total_kb, total_disk_space);
-        } else {
-            printf("%lld bytes\n", total_disk_space);
-        }
-
-        // Check available disk space
-        long long available_space = get_available_disk_space("data/");
-        if (available_space > 0) {
-            double avail_gb = available_space / (1024.0 * 1024.0 * 1024.0);
-            double avail_mb = available_space / (1024.0 * 1024.0);
-            double avail_kb = available_space / 1024.0;
-
-            printf("Available disk space: ");
-            if (avail_gb >= 1.0) {
-                printf("%.1f GB (%lld bytes)\n", avail_gb, available_space);
-            } else if (avail_mb >= 1.0) {
-                printf("%.1f MB (%lld bytes)\n", avail_mb, available_space);
-            } else if (avail_kb >= 1.0) {
-                printf("%.1f KB (%lld bytes)\n", avail_kb, available_space);
-            } else {
-                printf("%lld bytes\n", available_space);
-            }
-
-            // Check if we're within 5% of total available or insufficient
-            double usage_after = (double)(available_space - total_disk_space) / (double)available_space;
-
-            if (available_space < total_disk_space) {
-                // Insufficient space
-                fprintf(stderr, "\nError: Insufficient disk space!\n");
-                fprintf(stderr, "Required: %.1f GB\n", total_gb);
-                fprintf(stderr, "Available: %.1f GB\n", avail_gb);
-                fprintf(stderr, "Shortfall: %.1f GB\n", total_gb - avail_gb);
-                CLEAN_EXIT(1);
-            } else if (usage_after < 0.05) {
-                // Within 5% of capacity after simulation
-                printf("\nWarning: Simulation will use %.1f%% of available disk space!\n",
-                       (100.0 * total_disk_space / available_space));
-                printf("After simulation: %.1f GB free (%.1f%% remaining)\n",
-                       (available_space - total_disk_space) / (1024.0 * 1024.0 * 1024.0),
-                       usage_after * 100.0);
-
-                if (!prompt_yes_no("Continue")) {
-                    printf("Aborting simulation.\n");
-                    CLEAN_EXIT(0);
-                }
-            }
-        } else {
-            fprintf(stderr, "Warning: Could not determine available disk space.\n");
-            if (!prompt_yes_no("Continue without disk space check")) {
-                printf("Aborting simulation.\n");
-                CLEAN_EXIT(0);
-            }
-        }
-
-        printf("\n");
-
-        /** @brief Display initial simulation progress. */
-        printf("0%% complete, timestep 0/%d, time=0.0000 Myr, elapsed=0.00 s\n", Ntimes);
-    }
+    initialize_output_file(noutsnaps);
 
     /**
      * @brief BLOCK STORAGE INITIALIZATION block (Initial L).
@@ -4197,25 +4067,20 @@ cleanup_diag_iteration:
     // Write final particle state if simulation was run
     if (!skip_file_writes)
     {
-        char suffixed_filename[256];
-        get_suffixed_filename("data/particlesfinal.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb"); // Binary mode for fprintf_bin
-        if (fp == NULL)
-        {
-            fprintf(stderr, "Error opening file %s for writing\n", suffixed_filename);
+        get_full_filename("data/particlesfinal.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
+        if (fp == NULL) {
+            fprintf(stderr, "Error opening file %s for writing\n", full_filename);
             exit(1);
         }
 
-        for (i = 0; i < npts; i++)
-        {
+        for (i = 0; i < npts; i++) {
             fprintf_bin(fp, "%f %f %f  %f\n", particles[0][i], particles[1][i], particles[2][i], particles[3][i]);
         }
         fclose(fp);
     }
 
     // Write theoretical profiles (profile-specific formulas)
-    char suffixed_filename[256];
-
     if (g_use_nfw_profile) {
         /**
          * @brief Write final theoretical NFW profile characteristics to .dat files.
@@ -4229,8 +4094,8 @@ cleanup_diag_iteration:
         log_message("INFO", "Writing NFW theoretical profiles to final .dat files...");
 
         // Write NFW theoretical mass profile
-        get_suffixed_filename("data/massprofile.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/massprofile.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0)) {
                 if (r_plot >= radius[0]) {
@@ -4242,12 +4107,12 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final NFW mass profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final NFW mass profile", full_filename);
         }
 
         // Write NFW theoretical potential profile
-        get_suffixed_filename("data/Psiprofile.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/Psiprofile.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0)) {
                 if (r_plot >= radius[0]) {
@@ -4259,12 +4124,12 @@ cleanup_diag_iteration:
              }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final NFW Psi profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final NFW Psi profile", full_filename);
         }
 
         // Write NFW theoretical density profile
-        get_suffixed_filename("data/density_profile.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/density_profile.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * M_PI * normalization);
             for (i = 0; i < num_points; i++) {
@@ -4284,12 +4149,12 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final NFW density profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final NFW density profile", full_filename);
         }
 
         // Write NFW theoretical dPsi/dr profile
-        get_suffixed_filename("data/dpsi_dr.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (i = 0; i < num_points; i++) {
                 double rr = radius[i];
@@ -4301,12 +4166,12 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final NFW dpsi/dr profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final NFW dpsi/dr profile", full_filename);
         }
 
         // Write NFW theoretical drho/dPsi profile
-        get_suffixed_filename("data/drho_dpsi.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/drho_dpsi.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * M_PI * normalization);
             for (i = 1; i < num_points - 1; i++) {
@@ -4327,12 +4192,12 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final NFW drho/dpsi profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final NFW drho/dpsi profile", full_filename);
         }
 
         // Write NFW theoretical f(E) profile
-        get_suffixed_filename("data/f_of_E.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (i = 0; i <= num_points; i++) {
                 double E = Evalues[i];
@@ -4355,13 +4220,13 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final NFW f(E) profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final NFW f(E) profile", full_filename);
         }
 
         // Write NFW distribution function at a fixed radius if simulation was run
         if (!skip_file_writes) {
-            get_suffixed_filename("data/df_fixed_radius.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-            fp = fopen(suffixed_filename, "wb");
+            get_full_filename("data/df_fixed_radius.dat", 1, full_filename, sizeof(full_filename));
+            fp = fopen(full_filename, "wb");
             if (fp) {
                 double r_F = 2.0 * g_nfw_profile_rc;  // r_F = 2 × NFW scale radius
                 double Psi_rf = evaluatespline(splinePsi, Psiinterp, r_F);
@@ -4389,7 +4254,7 @@ cleanup_diag_iteration:
                 }
                 fclose(fp);
             } else {
-                log_message("ERROR", "Failed to open %s for final NFW df_fixed_radius", suffixed_filename);
+                log_message("ERROR", "Failed to open %s for final NFW df_fixed_radius", full_filename);
             }
         }
 
@@ -4406,8 +4271,8 @@ cleanup_diag_iteration:
         log_message("INFO", "Writing Cored theoretical profiles to final .dat files...");
 
         // Write Cored theoretical mass profile
-        get_suffixed_filename("data/massprofile.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/massprofile.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0)) {
                 if (r_plot >= radius[0]) {
@@ -4419,12 +4284,12 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final cored mass profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final cored mass profile", full_filename);
         }
 
         // Write Cored theoretical potential profile
-        get_suffixed_filename("data/Psiprofile.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/Psiprofile.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0)) {
                 if (r_plot >= radius[0]) {
@@ -4436,12 +4301,12 @@ cleanup_diag_iteration:
              }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final cored Psi profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final cored Psi profile", full_filename);
         }
 
         // Write Cored theoretical density profile
-        get_suffixed_filename("data/density_profile.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/density_profile.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (i = 0; i < num_points; i++) {
                 double rr = radius[i];
@@ -4450,12 +4315,12 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final cored density profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final cored density profile", full_filename);
         }
 
         // Write Cored theoretical dPsi/dr profile
-        get_suffixed_filename("data/dpsi_dr.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (i = 0; i < num_points; i++) {
                 double rr = radius[i];
@@ -4467,12 +4332,12 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final cored dpsi/dr profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final cored dpsi/dr profile", full_filename);
         }
 
         // Write Cored theoretical drho/dPsi profile
-        get_suffixed_filename("data/drho_dpsi.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/drho_dpsi.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (i = 1; i < num_points - 1; i++) {
                 double rr = radius[i];
@@ -4488,12 +4353,12 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final cored drho/dpsi profile", suffixed_filename);
+            log_message("ERROR", "Failed to open %s for final cored drho/dpsi profile", full_filename);
         }
 
         // Write theoretical f(E) profile
-        get_suffixed_filename("data/f_of_E.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb");
+        get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb");
         if (fp) {
             for (i = 0; i <= num_points; i++) {
                 double E = Evalues[i];
@@ -4516,13 +4381,13 @@ cleanup_diag_iteration:
             }
             fclose(fp);
         } else {
-            log_message("ERROR", "Failed to open %s for final f(E) profile (%s)", suffixed_filename, g_use_nfw_profile ? "NFW" : "Cored");
+            log_message("ERROR", "Failed to open %s for final f(E) profile (%s)", full_filename, g_use_nfw_profile ? "NFW" : "Cored");
         }
 
         // Write distribution function at a fixed radius if simulation was run
         if (!skip_file_writes) {
-            get_suffixed_filename("data/df_fixed_radius.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-            fp = fopen(suffixed_filename, "wb");
+            get_full_filename("data/df_fixed_radius.dat", 1, full_filename, sizeof(full_filename));
+            fp = fopen(full_filename, "wb");
             if (fp) {
                 double r_F = 2.0 * g_cored_profile_rc;  // r_F = 2 × Cored scale radius
                 double Psi_rf = evaluatespline(splinePsi, Psiinterp, r_F);
@@ -4550,13 +4415,13 @@ cleanup_diag_iteration:
                 }
                 fclose(fp);
             } else {
-                log_message("ERROR", "Failed to open %s for final df_fixed_radius (%s)", suffixed_filename, g_use_nfw_profile ? "NFW" : "Cored");
+                log_message("ERROR", "Failed to open %s for final df_fixed_radius (%s)", full_filename, g_use_nfw_profile ? "NFW" : "Cored");
             }
         }
     }
 
     char filename[256];
-    get_suffixed_filename("data/particles.dat", 1, filename, sizeof(filename));
+    get_full_filename("data/particles.dat", 1, filename, sizeof(filename));
     FILE *finit = fopen(filename, "rb"); // Binary mode for fscanf_bin
     if (!finit)
     {
@@ -4668,9 +4533,9 @@ cleanup_diag_iteration:
     // Write initial 2D histogram if simulation was run
     if (!skip_file_writes)
     {
-        char suffixed_filename[256];
-        get_suffixed_filename("data/2d_hist_initial.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb"); // Binary mode for fprintf_bin
+        char full_filename[256];
+        get_full_filename("data/2d_hist_initial.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
         for (int rr = 0; rr < HIST_NBINS; rr++)
         {
             for (int vv = 0; vv < HIST_NBINS; vv++)
@@ -4685,8 +4550,8 @@ cleanup_diag_iteration:
     // Write final 2D histogram if simulation was run
     if (!skip_file_writes)
     {
-        get_suffixed_filename("data/2d_hist_final.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb"); // Binary mode for fprintf_bin
+        get_full_filename("data/2d_hist_final.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
         for (int rr = 0; rr < HIST_NBINS; rr++)
         {
             for (int vv = 0; vv < HIST_NBINS; vv++)
@@ -4724,7 +4589,7 @@ cleanup_diag_iteration:
     if (!skip_file_writes)
     {
         char filename[256];
-        get_suffixed_filename("data/combined_histogram.dat", 1, filename, sizeof(filename));
+        get_full_filename("data/combined_histogram.dat", 1, filename, sizeof(filename));
         fp = fopen(filename, "wb"); // Binary mode for fprintf_bin
         for (i = 0; i < HIST_NBINS; i++)
         {
@@ -4744,8 +4609,8 @@ cleanup_diag_iteration:
      */
     if (!skip_file_writes)
     {
-        get_suffixed_filename("data/trajectories.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb"); // Binary mode for fprintf_bin
+        get_full_filename("data/trajectories.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
         for (int step = 0; step < Ntimes; step++)
         {
             fprintf_bin(fp, "%f", step * dt);
@@ -4766,8 +4631,8 @@ cleanup_diag_iteration:
      */
     if (!skip_file_writes)
     {
-        get_suffixed_filename("data/single_trajectory.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb"); // Binary mode for fprintf_bin
+        get_full_filename("data/single_trajectory.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
         for (int step = 0; step < Ntimes; step++)
         {
             fprintf_bin(fp, "%f %f %f %f\n", step * dt, trajectories[0][step], velocities_arr[0][step], mu_arr[0][step]);
@@ -4785,8 +4650,8 @@ cleanup_diag_iteration:
     // Write energy/angular momentum evolution for low-ID particles if simulation was run
     if (!skip_file_writes)
     {
-        get_suffixed_filename("data/energy_and_angular_momentum_vs_time.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        fp = fopen(suffixed_filename, "wb"); // Binary mode for fprintf_bin
+        get_full_filename("data/energy_and_angular_momentum_vs_time.dat", 1, full_filename, sizeof(full_filename));
+        fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
         for (int step = 0; step < Ntimes; step++)
         {
             fprintf_bin(fp, "%f", step * dt);
@@ -4823,7 +4688,7 @@ cleanup_diag_iteration:
     for (int s = 0; s < noutsnaps; s++)
     {
         snapshot_steps[s] = (int)floor(
-            s * (total_writes - 1) / (double)(noutsnaps - 1));
+            s * (total_writes() - 1) / (double)(noutsnaps - 1));
         log_message("DEBUG", "snapshot_steps[%d] = %d", s, snapshot_steps[s]);
     }
 
@@ -4845,7 +4710,7 @@ cleanup_diag_iteration:
         }
 
         char apd_filename_for_read[256];
-        get_suffixed_filename("data/all_particle_data.dat", 1, apd_filename_for_read, sizeof(apd_filename_for_read));
+        get_full_filename("data/all_particle_data.dat", 1, apd_filename_for_read, sizeof(apd_filename_for_read));
 
         double fixed_bin_width = 0.0; // Initialized, set during first snapshot processing
 
@@ -5045,7 +4910,7 @@ cleanup_diag_iteration:
                 if (!skip_file_writes)
                 {
                     char fname_lowest_ids[256];
-                    get_suffixed_filename("data/lowest_radius_ids.dat", 1, fname_lowest_ids, sizeof(fname_lowest_ids));
+                    get_full_filename("data/lowest_radius_ids.dat", 1, fname_lowest_ids, sizeof(fname_lowest_ids));
                     log_message("INFO", "Thread %d: Writing lowest radius IDs to %s",
                                 omp_get_thread_num(), fname_lowest_ids);
 
@@ -5638,7 +5503,7 @@ cleanup_diag_iteration:
                 char fname_PsiA[256];
                 char base_filename[256];
                 snprintf(base_filename, sizeof(base_filename), "data/Psi_methodA_t%05d.dat", snap);
-                get_suffixed_filename(base_filename, 1, fname_PsiA, sizeof(fname_PsiA));
+                get_full_filename(base_filename, 1, fname_PsiA, sizeof(fname_PsiA));
 
                 FILE *fA = fopen(fname_PsiA, "wb"); // Binary mode for fprintf_bin
                 // Write the zero point first.
@@ -5804,7 +5669,7 @@ cleanup_diag_iteration:
                     char fname_unsorted[256];
                     char base_filename[256];
                     snprintf(base_filename, sizeof(base_filename), "data/Rank_Mass_Rad_VRad_unsorted_t%05d.dat", snap);
-                    get_suffixed_filename(base_filename, 1, fname_unsorted, sizeof(fname_unsorted));
+                    get_full_filename(base_filename, 1, fname_unsorted, sizeof(fname_unsorted));
 
                     log_message("INFO", "Thread %d: Opening %s for writing",
                                 omp_get_thread_num(), fname_unsorted);
@@ -5841,7 +5706,7 @@ cleanup_diag_iteration:
 
                     char fname_sorted[256];
                     snprintf(base_filename, sizeof(base_filename), "data/Rank_Mass_Rad_VRad_sorted_t%05d.dat", snap);
-                    get_suffixed_filename(base_filename, 1, fname_sorted, sizeof(fname_sorted));
+                    get_full_filename(base_filename, 1, fname_sorted, sizeof(fname_sorted));
 
                     log_message("INFO", "Thread %d: Opening %s for writing",
                                 omp_get_thread_num(), fname_sorted);
@@ -5951,7 +5816,7 @@ cleanup_diag_iteration:
         for (int s = 0; s < noutsnaps; s++)
         {
             snapshot_steps[s] = (int)floor(
-                s * (total_writes - 1) / (double)(noutsnaps - 1));
+                s * (total_writes() - 1) / (double)(noutsnaps - 1));
         }
     }
 
@@ -6032,11 +5897,7 @@ cleanup_diag_iteration:
 #ifdef _OPENMP
     // Clean up FFTW threads only if they were initialized.
     fftw_cleanup_threads();
-
-    if (g_enable_sidm_scattering) {
-        printf("Total SIDM scattering events during simulation: %lld\n", g_total_sidm_scatters);
-        log_message("INFO", "Total SIDM scattering events: %lld", g_total_sidm_scatters);
-    }
+    log_scattering();
 #endif
 
     // Free per-thread GSL RNG resources

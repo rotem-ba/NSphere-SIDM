@@ -195,6 +195,18 @@ void errorAndExit(const char *msg, const char *arg, const char *prog)
  }
 
  /**
+  * @brief Prompts the user with a yes/no question, and quits on a "yes".
+  * @param prompt [in] The question/prompt message to display to the user.
+  * @param exit_message [in] The exit message displayd if the user elects to quit.
+  */
+ void prompt_quit(const char *prompt, const char *exit_message) {
+     if (!prompt_yes_no(prompt)) {
+         printf("%s", exit_message);
+         CLEAN_EXIT(0);
+     }
+ }
+
+ /**
   * @brief Parses sub-arguments for the `--save` command-line option.
   * @details This function is called when the `--save` option is encountered during
   *          command-line argument parsing. It reads subsequent arguments (until another

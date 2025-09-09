@@ -23,5 +23,9 @@ void print_density_params();
 void print_logging_status();
 void print_SIDM_OpenMP_status();
 void warn_no_OpenMP();
+void log_scattering();
+void log_disk_space(long long size);
+void raise_insufficient_memory(long long total_disk_space, long long available_space);
+void warn_low_memory(long long total_disk_space, long long available_space, double usage_after);
 
 #endif // LOGGING_H

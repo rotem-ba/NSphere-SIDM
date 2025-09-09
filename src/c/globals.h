@@ -272,5 +272,10 @@ extern int display_sort;              ///< Sorting algorithm used (default 1 = P
 extern int include_method_in_suffix;  ///< Boolean, include method string in output filenames (default 0 = don't show)
 extern char custom_tag[256];          ///< Tag added to output files (default: no custom tag)
 extern char filename_tag[512];        ///< Filename total tag
+extern char full_filename[256];       ///< Full filename (with suffixes)
+extern char apd_filename[256];        ///< Filename for data/all_particle_data<suffix>.dat
+
+extern int skip_simulation;           ///< Flag to determine if simulation phase can be skipped
+
 
 #endif // GLOBALS_H

@@ -24,6 +24,8 @@
 #define sqr(x) ((x) * (x))
 /** @def cube(x) Calculates the cube of a value. */
 #define cube(x) ((x) * (x) * (x))
+/** @def in_range(x) Checks if the value x is in the range [gte,lte]. */
+#define in_range(x,gte,lte) (x >= gte && x <= lte)
 
 int isInteger(const char *str);
 int isFloat(const char *str);

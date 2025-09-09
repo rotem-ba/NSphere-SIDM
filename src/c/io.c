@@ -16,7 +16,10 @@
 
  #include "globals.h"
  #include "logging.h"
+ #include "cli.h"
  #include "exit.h"
+ #include "io.h"
+ #include "utils.h"
  #include <string.h>
  #include <stdarg.h>
  #include <sys/stat.h>
@@ -47,9 +50,8 @@
          }
      #else
          struct statvfs stat;
-         if (statvfs(path, &stat) == 0) {
+         if (statvfs(path, &stat) == 0)
              return (long long)stat.f_bavail * (long long)stat.f_frsize;
-         }
      #endif
      return -1;
  }
@@ -74,10 +76,8 @@
   * -------
   * None
   */
- void get_suffixed_filename(const char *base_filename, int with_suffix, char *buffer, size_t bufsize)
- {
-     if (!with_suffix || g_file_suffix[0] == '\0')
-     {
+ void get_full_filename(const char *base_filename, int with_suffix, char *buffer, size_t bufsize) {
+     if (!with_suffix || g_file_suffix[0] == '\0') {
          // No suffix to apply
          strncpy(buffer, base_filename, bufsize - 1);
          buffer[bufsize - 1] = '\0';
@@ -85,12 +85,10 @@
      }
 
      const char *ext = strrchr(base_filename, '.');
-     if (ext && strcmp(ext, ".dat") == 0)
-     {
+     if (ext && strcmp(ext, ".dat") == 0) {
          // For .dat files: insert suffix before extension
          size_t basename_len = ext - base_filename;
-         if (basename_len + strlen(g_file_suffix) + strlen(ext) + 1 > bufsize)
-         {
+         if (basename_len + strlen(g_file_suffix) + strlen(ext) + 1 > bufsize) {
              // Buffer too small
              strncpy(buffer, base_filename, bufsize - 1);
              buffer[bufsize - 1] = '\0';
@@ -101,12 +99,9 @@
          buffer[basename_len] = '\0';
          strcat(buffer, g_file_suffix);
          strcat(buffer, ext);
-     }
-     else
-     {
+     } else {
          // For non-dat files: append suffix to filename
-         if (strlen(base_filename) + strlen(g_file_suffix) + 1 > bufsize)
-         {
+         if (strlen(base_filename) + strlen(g_file_suffix) + 1 > bufsize) {
              // Buffer too small
              strncpy(buffer, base_filename, bufsize - 1);
              buffer[bufsize - 1] = '\0';
@@ -134,35 +129,24 @@
   * -------
   * None
   */
- void format_file_size(long size_in_bytes, char *buffer, size_t buffer_size)
- {
+ void format_file_size(long size_in_bytes, char *buffer, size_t buffer_size) {
      const char *units[] = {"B", "KB", "MB", "GB", "TB"};
      int unit_index = 0;
      double size = (double)size_in_bytes;
 
      // Find appropriate unit
-     while (size >= 1024.0 && unit_index < 4)
-     {
+     while (size >= 1024.0 && unit_index < 4) {
          size /= 1024.0;
          unit_index++;
      }
 
      // Format with appropriate precision based on size
-     if (unit_index == 0)
-     {
-         // Bytes: no decimal places needed
+     if (unit_index == 0) // Bytes: no decimal places needed
          snprintf(buffer, buffer_size, "%ld %s", (long)size, units[unit_index]);
-     }
-     else if (size >= 10)
-     {
-         // Larger sizes: one decimal place
+     else if (size >= 10) // Larger sizes: one decimal place
          snprintf(buffer, buffer_size, "%.1f %s", size, units[unit_index]);
-     }
-     else
-     {
-         // Small sizes: two decimal places
+     else // Small sizes: two decimal places
          snprintf(buffer, buffer_size, "%.2f %s", size, units[unit_index]);
-     }
  }
 
  // =========================================================================
@@ -202,27 +186,21 @@
      int count_items = 0;
      const char *p = format;
 
-     while (*p != '\0')
-     {
-         if (*p == '%')
-         {
+     while (*p != '\0') {
+         if (*p == '%') {
              p++; // Move past '%'
 
              // Skip format modifiers until we find a type specifier
              while (*p && !strchr("dfge", *p) && !(*p == 'l'))
-             {
                  p++;
-             }
 
-             if (*p == 'd')
-             {
+             if (*p == 'd') {
                  // Process integer format
                  int val = va_arg(args, int);
                  fwrite(&val, sizeof(val), 1, fp);
                  count_items++;
              }
-             else if (*p == 'f' || *p == 'g' || *p == 'e')
-             {
+             else if (*p == 'f' || *p == 'g' || *p == 'e') {
                  // Process float format (stored as 4-byte float)
                  double tmp = va_arg(args, double);
                  float val = (float)tmp;
@@ -273,20 +251,15 @@
      int count_items = 0;
      const char *p = format;
 
-     while (*p != '\0')
-     {
-         if (*p == '%')
-         {
+     while (*p != '\0') {
+         if (*p == '%') {
              p++; // Move past '%'
 
              // Skip format modifiers until we reach a type specifier
              while (*p && !strchr("dfge", *p) && !(*p == 'l'))
-             {
                  p++;
-             }
 
-             if (*p == 'd')
-             {
+             if (*p == 'd') {
                  // Process integer format
                  int *iptr = va_arg(args, int *);
                  size_t nread = fread(iptr, sizeof(int), 1, fp);
@@ -294,23 +267,17 @@
                      count_items++;
                  else
                      return count_items;
-             }
-             else if (*p == 'f' || *p == 'g' || *p == 'e')
-             {
+             } else if (*p == 'f' || *p == 'g' || *p == 'e') {
                  // Read 4-byte float from file
                  float fval;
                  size_t nread = fread(&fval, sizeof(float), 1, fp);
-                 if (nread == 1)
-                 {
+                 if (nread == 1) {
                      // Store in caller's double pointer with type conversion
                      double *dptr = va_arg(args, double *);
                      *dptr = (double)fval;
                      count_items++;
-                 }
-                 else
-                 {
+                 } else
                      return count_items; // Stop on read failure
-                 }
              }
          }
          if (*p)
@@ -348,11 +315,9 @@
   *               appear valid (implying no further snapshot processing is needed for this phase).
   *             Prints status messages to stdout and logs warnings/errors.
   */
- int find_last_processed_snapshot(int *snapshot_steps, int noutsnaps)
- {
+ int find_last_processed_snapshot(int *snapshot_steps, int noutsnaps) {
      // Validate input parameters before proceeding
-     if (snapshot_steps == NULL || noutsnaps <= 0)
-     {
+     if (snapshot_steps == NULL || noutsnaps <= 0) {
          printf("ERROR: Invalid snapshot_steps or noutsnaps in find_last_processed_snapshot\n");
          return -1; // Start from beginning.
      }
@@ -382,13 +347,10 @@
 
      {
          int *seen = (int *)calloc(total_writes, sizeof(int)); // Use calloc to initialize to 0.
-         if (seen)
-         {
-             for (int i = 0; i < noutsnaps; i++)
-             {
+         if (seen) {
+             for (int i = 0; i < noutsnaps; i++) {
                  int snap = snapshot_steps[i];
-                 if (snap >= 0 && snap < total_writes && !seen[snap])
-                 {
+                 if (snap >= 0 && snap < total_writes && !seen[snap]) {
                      seen[snap] = 1;
                      unique_snapshots++;
                  }
@@ -396,34 +358,29 @@
              free(seen);
          }
          else
-         {
              unique_snapshots = noutsnaps; // Fallback if memory allocation fails.
-         }
      }
 
      int total_expected = unique_snapshots * 2; // Total files expected (unsorted + sorted for each unique snapshot).
-     printf("Detected %d unique snapshot numbers out of %d indices. Expecting %d files total.\n\n",
-            unique_snapshots, noutsnaps, total_expected);
+     printf("Detected %d unique snapshot numbers out of %d indices. Expecting %d files total.\n\n", unique_snapshots, noutsnaps, total_expected);
 
      // First, see if we even have the reference snapshot file.
-     if (noutsnaps > 0)
-     {
+     if (noutsnaps > 0) {
          int snap = snapshot_steps[0];
          char fname_unsorted[256];
          char fname_sorted[256];
 
          char base_filename_1[256];
          snprintf(base_filename_1, sizeof(base_filename_1), "data/Rank_Mass_Rad_VRad_unsorted_t%05d.dat", snap);
-         get_suffixed_filename(base_filename_1, 1, fname_unsorted, sizeof(fname_unsorted));
+         get_full_filename(base_filename_1, 1, fname_unsorted, sizeof(fname_unsorted));
          char base_filename_2[256];
          snprintf(base_filename_2, sizeof(base_filename_2), "data/Rank_Mass_Rad_VRad_sorted_t%05d.dat", snap);
-         get_suffixed_filename(base_filename_2, 1, fname_sorted, sizeof(fname_sorted));
+         get_full_filename(base_filename_2, 1, fname_sorted, sizeof(fname_sorted));
 
          FILE *fun = fopen(fname_unsorted, "rb");
          FILE *fsort = fopen(fname_sorted, "rb");
 
-         if (fun && fsort)
-         {
+         if (fun && fsort) {
              // Get file sizes.
              fseek(fun, 0, SEEK_END);
              reference_unsorted_size = ftell(fun);
@@ -431,10 +388,9 @@
              reference_sorted_size = ftell(fsort);
 
              // If both files have non-zero size, use as reference.
-             if (reference_unsorted_size > 0 && reference_sorted_size > 0)
-             {
-                 printf("Found reference file sizes from snapshot %d (unsorted: %ld bytes, sorted: %ld bytes)\n\n",
-                        snap, reference_unsorted_size, reference_sorted_size);
+             if (reference_unsorted_size > 0 && reference_sorted_size > 0) {
+                 printf("Found reference file sizes from snapshot %d (unsorted: %ld bytes, sorted: %ld bytes)\n\n", snap, reference_unsorted_size,
+                        reference_sorted_size);
                  last_valid_snap = snap;
                  last_valid_index = 0;
                  checked_count += 2; // Count these two files.
@@ -442,9 +398,7 @@
 
              fclose(fun);
              fclose(fsort);
-         }
-         else
-         {
+         } else {
              // Only close if non-NULL.
              if (fun)
                  fclose(fun);
@@ -455,16 +409,11 @@
              printf("Could not find initial snapshot files for index 0. Will start from the beginning.\n");
              return -1;
          }
-     }
-     else
-     {
-         // No snapshots to check.
+     } else// No snapshots to check.
          return -1;
-     }
 
      // If reference sizes cannot be found, proper validation is not possible.
-     if (reference_unsorted_size == 0 || reference_sorted_size == 0)
-     {
+     if (reference_unsorted_size == 0 || reference_sorted_size == 0) {
          printf("Could not find valid reference file sizes. Will start from the beginning.\n\n");
          return -1;
      }
@@ -472,33 +421,29 @@
      printf("Checking all %d snapshots for completeness...\n\n", noutsnaps);
 
      // Now check ALL snapshots (except index 0 which we already checked).
-     for (int i = 1; i < noutsnaps; i++)
-     {
+     for (int i = 1; i < noutsnaps; i++) {
          int snap = snapshot_steps[i];
 
          // If this snapshot index maps to the same snapshot number as a previous index,.
          // We might be seeing duplicated snapshot numbers in the calculation.
          if (snap == snapshot_steps[0])
-         {
              printf("Warning: Duplicate snapshot number %d (index 0 and %d)\n", snap, i);
-         }
 
          char fname_unsorted[256];
          char fname_sorted[256];
 
          char base_filename_3[256];
          snprintf(base_filename_3, sizeof(base_filename_3), "data/Rank_Mass_Rad_VRad_unsorted_t%05d.dat", snap);
-         get_suffixed_filename(base_filename_3, 1, fname_unsorted, sizeof(fname_unsorted));
+         get_full_filename(base_filename_3, 1, fname_unsorted, sizeof(fname_unsorted));
 
          char base_filename_4[256];
          snprintf(base_filename_4, sizeof(base_filename_4), "data/Rank_Mass_Rad_VRad_sorted_t%05d.dat", snap);
-         get_suffixed_filename(base_filename_4, 1, fname_sorted, sizeof(fname_sorted));
+         get_full_filename(base_filename_4, 1, fname_sorted, sizeof(fname_sorted));
 
          FILE *fun = fopen(fname_unsorted, "rb");
          FILE *fsort = fopen(fname_sorted, "rb");
 
-         if (fun && fsort)
-         {
+         if (fun && fsort) {
              // Get file sizes.
              fseek(fun, 0, SEEK_END);
              long unsorted_size = ftell(fun);
@@ -510,18 +455,12 @@
              double unsorted_ratio = (double)unsorted_size / reference_unsorted_size;
              double sorted_ratio = (double)sorted_size / reference_sorted_size;
 
-             if (unsorted_size > 0 && sorted_size > 0 &&
-                 unsorted_ratio >= 0.95 && unsorted_ratio <= 1.05 &&
-                 sorted_ratio >= 0.95 && sorted_ratio <= 1.05)
-             {
+             if (unsorted_size > 0 && sorted_size > 0 && in_range(unsorted_ratio,0.95,1.05) && in_range(sorted_ratio,0.95,1.05)) {
                  last_valid_snap = snap;
                  last_valid_index = i;
-                 log_message("INFO", "Verified valid files for snapshot %d (unsorted: %ld bytes, sorted: %ld bytes)",
-                             snap, unsorted_size, sorted_size);
+                 log_message("INFO", "Verified valid files for snapshot %d (unsorted: %ld bytes, sorted: %ld bytes)", snap, unsorted_size, sorted_size);
                  checked_count += 2; // Count both files as checked.
-             }
-             else
-             {
+             } else {
                  log_message("WARNING", "Found invalid files for snapshot %d (unsorted: %ld bytes, sorted: %ld bytes) - expected ~%ld and ~%ld bytes",
                              snap, unsorted_size, sorted_size, reference_unsorted_size, reference_sorted_size);
                  fclose(fun);
@@ -533,9 +472,7 @@
 
              fclose(fun);
              fclose(fsort);
-         }
-         else
-         {
+         } else {
              // File doesn't exist at all for this snapshot.
              log_message("WARNING", "Missing files for snapshot %d", snap);
              // Only close if non-NULL.
@@ -549,47 +486,34 @@
          }
      }
 
-     printf("End of file check: last_valid_snap=%d, last_valid_index=%d, noutsnaps=%d, all_snapshots_checked=%d\n\n",
-            last_valid_snap, last_valid_index, noutsnaps, all_snapshots_checked);
-     printf("Files checked: %d out of %d expected (unique snapshots: %d)\n\n",
-            checked_count, total_expected, unique_snapshots);
+     printf("End of file check: last_valid_snap=%d, last_valid_index=%d, noutsnaps=%d, all_snapshots_checked=%d\n\n", last_valid_snap, last_valid_index,
+            noutsnaps, all_snapshots_checked);
+     printf("Files checked: %d out of %d expected (unique snapshots: %d)\n\n", checked_count, total_expected, unique_snapshots);
 
-     if (last_valid_snap == -1)
-     {
+     if (last_valid_snap == -1) {
          printf("No valid data products found. Will start from the beginning.\n\n");
          return -1;
      }
 
      // Check if we've verified more files than expected - this can happen if we have duplicate snapshot numbers.
      if (checked_count > total_expected)
-     {
-         printf("WARNING: Checked more files (%d) than expected (%d) - likely due to duplicate snapshot numbers.\n",
-                checked_count, total_expected);
-     }
+         printf("WARNING: Checked more files (%d) than expected (%d) - likely due to duplicate snapshot numbers.\n", checked_count, total_expected);
 
      // Determine if we need to proceed with Rank file generation.
-     if (unique_snapshots == 1 && all_snapshots_checked)
-     {
+     if (unique_snapshots == 1 && all_snapshots_checked) {
          // Special case: Only one unique snapshot number (usually 0), and it's valid.
-         printf("WARNING: Only one unique snapshot number found (%d). There's likely an issue with the calculation.\n",
-                snapshot_steps[0]);
-         printf("Only 1 Rank file (snapshot %d) exists. Starting from the beginning to create all files.\n",
-                snapshot_steps[0]);
+         printf("WARNING: Only one unique snapshot number found (%d). There's likely an issue with the calculation.\n", snapshot_steps[0]);
+         printf("Only 1 Rank file (snapshot %d) exists. Starting from the beginning to create all files.\n", snapshot_steps[0]);
          return -1; // Start from beginning.
      }
      // Only say "all files exist" if:
      // 1. We have more than one unique snapshot, and.
      // 2. We've checked all expected files and found them valid.
-     else if (unique_snapshots > 1 && checked_count >= total_expected && all_snapshots_checked)
-     {
-         printf("All %d data product files (for %d unique snapshots) already exist and are valid. Nothing to do.\n\n",
-                checked_count, unique_snapshots);
+     else if (unique_snapshots > 1 && checked_count >= total_expected && all_snapshots_checked) {
+         printf("All %d data product files (for %d unique snapshots) already exist and are valid. Nothing to do.\n\n", checked_count, unique_snapshots);
          return -2; // Special code for "all done".
-     }
-     else
-     {
-         printf("Will restart processing from snapshot index %d (after snapshot %d)\n\n",
-                last_valid_index + 1, last_valid_snap);
+     } else {
+         printf("Will restart processing from snapshot index %d (after snapshot %d)\n\n", last_valid_index + 1, last_valid_snap);
          return last_valid_index + 1; // Return the index of the NEXT snapshot to process.
      }
  }
@@ -626,11 +550,9 @@
   *
   * @see read_initial_conditions
   */
- void write_initial_conditions(double **particles, int npts, const char *filename)
- {
+ void write_initial_conditions(double **particles, int npts, const char *filename) {
      FILE *fp = fopen(filename, "wb");
-     if (!fp)
-     {
+     if (!fp) {
          fprintf(stderr, "Error: cannot open '%s' for writing initial conditions.\n", filename);
          return;
      }
@@ -638,8 +560,7 @@
      // Write the number of particles first
      fwrite(&npts, sizeof(int), 1, fp);
 
-     for (int i = 0; i < npts; i++)
-     {
+     for (int i = 0; i < npts; i++) {
          double r_val = particles[0][i];
          double v_val = particles[1][i];
          double ell_val = particles[2][i];
@@ -685,34 +606,28 @@
   *
   * @see write_initial_conditions
   */
- void read_initial_conditions(double **particles, int npts, const char *filename)
- {
+ void read_initial_conditions(double **particles, int npts, const char *filename) {
      FILE *fp = fopen(filename, "rb");
-     if (!fp)
-     {
+     if (!fp) {
          fprintf(stderr, "Error: cannot open '%s' for reading initial conditions.\n", filename);
          return;
      }
 
      int file_npts;
-     if (fread(&file_npts, sizeof(int), 1, fp) != 1)
-     {
+     if (fread(&file_npts, sizeof(int), 1, fp) != 1) {
          fprintf(stderr, "Error: failed to read npts from '%s'.\n", filename);
          fclose(fp);
          return;
      }
-     if (file_npts != npts)
-     {
+     if (file_npts != npts) {
          fprintf(stderr, "Warning: file npts=%d doesn't match current npts=%d.\n", file_npts, npts);
          fclose(fp);
          return;
      }
 
-     for (int i = 0; i < npts; i++)
-     {
+     for (int i = 0; i < npts; i++) {
          double r_val, v_val, ell_val, idx_val, mu_val;
-         if (fread(&r_val, sizeof(double), 1, fp) != 1 || fread(&v_val, sizeof(double), 1, fp) != 1 || fread(&ell_val, sizeof(double), 1, fp) != 1 || fread(&idx_val, sizeof(double), 1, fp) != 1 || fread(&mu_val, sizeof(double), 1, fp) != 1)
-         {
+         if (fread(&r_val, sizeof(double), 1, fp) != 1 || fread(&v_val, sizeof(double), 1, fp) != 1 || fread(&ell_val, sizeof(double), 1, fp) != 1 || fread(&idx_val, sizeof(double), 1, fp) != 1 || fread(&mu_val, sizeof(double), 1, fp) != 1) {
              fprintf(stderr, "Error: partial read at i=%d in '%s'.\n", i, filename);
              fclose(fp);
              return;
@@ -758,20 +673,16 @@
   * @note Exits via `CLEAN_EXIT(1)` if the file cannot be opened for appending.
   */
  void append_all_particle_data_chunk_to_file(const char *filename, int npts, int block_size, float *L_block, int *Rank_block, float *R_block,
-                                             float *Vrad_block)
- {
+                                             float *Vrad_block) {
      FILE *f = fopen(filename, "ab");
-     if (!f)
-     {
+     if (!f) {
          printf("Error: cannot open %s for appending all_particle_data\n", filename);
          CLEAN_EXIT(1);
      }
 
      // Write particle data in step-major order
      for (int step = 0; step < block_size; step++)
-     {
-         for (int i = 0; i < npts; i++)
-         {
+         for (int i = 0; i < npts; i++) {
              int rankval = Rank_block[step * npts + i];
              float rval = R_block[step * npts + i];
              float vval = Vrad_block[step * npts + i];
@@ -783,8 +694,6 @@
              fwrite(&vval, sizeof(float), 1, f);
              fwrite(&lval, sizeof(float), 1, f);
          }
-     }
-
      fclose(f);
  }
 
@@ -811,16 +720,14 @@
   * @param Vrad_out    [out] Pointer to an array (size `npts`) to store the retrieved radial velocities.
   * @note Exits via `CLEAN_EXIT(1)` on memory allocation failure, file open failure, fseek failure, or unexpected EOF.
   */
- void retrieve_all_particle_snapshot(const char *filename, int snap, int npts, int block_size, float *L_out, int *Rank_out, float *R_out, float *Vrad_out)
- {
+ void retrieve_all_particle_snapshot(const char *filename, int snap, int npts, int block_size, float *L_out, int *Rank_out, float *R_out, float *Vrad_out) {
      // Allocate local (thread-private) arrays
      float *tmpL = (float *)malloc(npts * sizeof(float));
      int *tmpRank = (int *)malloc(npts * sizeof(int));
      float *tmpR = (float *)malloc(npts * sizeof(float));
      float *tmpV = (float *)malloc(npts * sizeof(float));
 
-     if (!tmpL || !tmpRank || !tmpR || !tmpV)
-     {
+     if (!tmpL || !tmpRank || !tmpR || !tmpV) {
          fprintf(stderr, "Error: out of memory in retrieve_all_particle_snapshot!\n");
          CLEAN_EXIT(1);
      }
@@ -831,8 +738,7 @@
  #pragma omp critical(file_access)
      {
          FILE *f = fopen(filename, "rb");
-         if (!f)
-         {
+         if (!f) {
              fprintf(stderr, "Error: cannot open %s for reading\n", filename);
              CLEAN_EXIT(1);
          }
@@ -845,24 +751,18 @@
          long long block_data_size = (long long)block_size * step_data_size;
          long long offset = block_data_size * block_number + step_data_size * index_in_block;
 
-         if (fseek(f, offset, SEEK_SET) != 0)
-         {
+         if (fseek(f, offset, SEEK_SET) != 0) {
              fprintf(stderr, "Error: fseek failed for snap=%d\n", snap);
              fclose(f);
              CLEAN_EXIT(1);
          }
 
          // Read npts records into local buffers.
-         for (int i = 0; i < npts; i++)
-         {
+         for (int i = 0; i < npts; i++) {
              int rankval;
              float rval, vval, lval;
 
-             if (fread(&rankval, sizeof(int), 1, f) != 1 ||
-                 fread(&rval, sizeof(float), 1, f) != 1 ||
-                 fread(&vval, sizeof(float), 1, f) != 1 ||
-                 fread(&lval, sizeof(float), 1, f) != 1)
-             {
+             if (fread(&rankval, sizeof(int), 1, f) != 1 || fread(&rval, sizeof(float), 1, f) != 1 || fread(&vval, sizeof(float), 1, f) != 1 || fread(&lval, sizeof(float), 1, f) != 1) {
                  fprintf(stderr, "Error: unexpected EOF while reading snap=%d (particle %d)\n", snap, i);
                  fclose(f);
                  CLEAN_EXIT(1);
@@ -893,16 +793,11 @@
  */
 void compile_filename_tag() {
     if (custom_tag[0] != '\0')
-    {
         strcat(filename_tag, custom_tag);
-    }
 
-    if (include_method_in_suffix)
-    {
+    if (include_method_in_suffix) {
         if (filename_tag[0] != '\0')
-        {
             strcat(filename_tag, "_");
-        }
         strcat(filename_tag, method_filename);
     }
 }
@@ -912,22 +807,17 @@ void compile_filename_tag() {
  */
 void mkdir_init(){
     struct stat st_init = {0};
-    if (stat("init", &st_init) == -1)
-    {
+    if (stat("init", &st_init) == -1) {
         #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
-            if (mkdir("init") != 0) {
+            if (mkdir("init") != 0) // Decide if this is fatal - perhaps not if only writing
                  perror("Error creating init directory");
-                 // Decide if this is fatal - perhaps not if only writing
-            } else {
+            else
                  log_message("INFO", "Created init/ directory.");
-            }
         #else
-            if (mkdir("init", 0755) != 0) { // POSIX standard
-                 perror("Error creating init directory");
-                 // Decide if this is fatal
-            } else {
+            if (mkdir("init", 0755) != 0) // Decide if this is fatal
+                 perror("Error creating init directory"); // POSIX standard
+            else
                  log_message("INFO", "Created init/ directory.");
-            }
         #endif
     }
 }
@@ -937,28 +827,23 @@ void mkdir_init(){
  */
 int write_to_lastparams() {
     char file_tag[512] = "";
-    if (custom_tag[0] != '\0')
-    {
+    if (custom_tag[0] != '\0') {
         strcat(file_tag, custom_tag);
-        if (include_method_in_suffix)
-        {
+        if (include_method_in_suffix) {
             strcat(file_tag, "_");
             strcat(file_tag, method_filename);
         }
     }
     else if (include_method_in_suffix)
-    {
         strcat(file_tag, method_filename);
-    }
 
     /** @note Create filename with suffix for the specific run parameters file. */
     char filename[512]; // Holds suffixed filename, e.g., data/lastparams_run1_100k_10k_5.dat
-    get_suffixed_filename("data/lastparams.dat", 1, filename, sizeof(filename));
+    get_full_filename("data/lastparams.dat", 1, filename, sizeof(filename));
     printf("Saving parameters: %s\n", filename);
 
     FILE *fp_params = fopen(filename, "w"); // Text mode for regular fprintf
-    if (!fp_params)
-    {
+    if (!fp_params) {
         printf("Error: cannot open %s\n", filename);
         return 1;
     }
@@ -979,28 +864,20 @@ int write_to_lastparams() {
     // Use lower-level file operations instead of system commands for better compatibility.
     FILE *source, *dest;
     source = fopen(filename, "rb");
-    if (!source)
-    {
+    if (!source) {
         printf("Warning: Failed to open source file %s for copying\n", filename);
-    }
-    else
-    {
+    } else {
         dest = fopen(linkname, "wb");
-        if (!dest)
-        {
+        if (!dest) {
             printf("Warning: Failed to create destination file %s\n", linkname);
             fclose(source);
-        }
-        else
-        {
+        } else {
             // Copy file content.
             char buffer[4096];
             size_t bytes_read;
 
             while ((bytes_read = fread(buffer, 1, sizeof(buffer), source)) > 0)
-            {
                 fwrite(buffer, 1, bytes_read, dest);
-            }
 
             fclose(dest);
             fclose(source);
@@ -1027,23 +904,15 @@ int write_to_lastparams() {
     basename = basename ? basename + 1 : filename; // Skip the '/' or use full name if no '/'
 
     snprintf(command, sizeof(command), "ln -s \"%s\" \"%s\"", basename, linkname);
-    if (system(command) != 0)
-    {
+    if (system(command) != 0) {
         // If symbolic link fails, fall back to copying the file.
         snprintf(command, sizeof(command), "cp \"%s\" \"%s\"", filename, linkname);
         if (system(command) != 0)
-        {
             printf("Warning: Failed to create link or copy %s to %s\n", filename, linkname);
-        }
         else
-        {
             printf("Created link: %s -> %s\n\n", filename, linkname);
-        }
-    }
-    else
-    {
+    } else
         printf("Created link: %s -> %s\n\n", filename, linkname);
-    }
 #endif
 return 0;
 }
@@ -1058,31 +927,97 @@ return 0;
  */
 void write_low_l_particles(double dt, int nlowest, double **lowestL_r, double **lowestL_E, double **lowestL_L){
     // Write trajectories for selected lowest-L particles if simulation was run
-    if (!skip_file_writes)
-    {
-        char suffixed_filename[256];
-        get_suffixed_filename("data/lowest_l_trajectories.dat", 1, suffixed_filename, sizeof(suffixed_filename));
-        FILE *fp_lowest = fopen(suffixed_filename, "wb"); // Binary mode for fprintf_bin
-        if (!fp_lowest)
-        {
-            fprintf(stderr, "Error: cannot open data/lowest_l_trajectories.dat\n");
-            CLEAN_EXIT(1);
-        }
+    if (skip_file_writes)
+        return;
+    char full_filename[256];
+    get_full_filename("data/lowest_l_trajectories.dat", 1, full_filename, sizeof(full_filename));
+    FILE *fp_lowest = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
+    if (!fp_lowest) {
+        fprintf(stderr, "Error: cannot open data/lowest_l_trajectories.dat\n");
+        CLEAN_EXIT(1);
+    }
 
-        // Write data for Ntimes steps:
-        for (int step = 0; step < Ntimes; step++)
-        {
-            double tval = step * dt;
-            fprintf_bin(fp_lowest, "%f", tval);
-            for (int p = 0; p < nlowest; p++)
-            {
-                double rr = lowestL_r[p][step];
-                double Ecur = lowestL_E[p][step];
-                double lcur = lowestL_L[p][step];
-                fprintf_bin(fp_lowest, " %f %f %f", rr, Ecur, lcur);
-            }
-            fprintf_bin(fp_lowest, "\n");
+    // Write data for Ntimes steps:
+    for (int step = 0; step < Ntimes; step++) {
+        double tval = step * dt;
+        fprintf_bin(fp_lowest, "%f", tval);
+        for (int p = 0; p < nlowest; p++) {
+            double rr = lowestL_r[p][step];
+            double Ecur = lowestL_E[p][step];
+            double lcur = lowestL_L[p][step];
+            fprintf_bin(fp_lowest, " %f %f %f", rr, Ecur, lcur);
         }
-        fclose(fp_lowest);
-    } // Close if (.skip_file_writes)
+        fprintf_bin(fp_lowest, "\n");
+    }
+    fclose(fp_lowest);
+}
+
+/**
+ * @brief OUTPUT FILE INITIALIZATION block (`all_particle_data.dat`).
+ * @details Creates (or overwrites) an empty binary file `all_particle_data<suffix>.dat`
+ *          if saving all particle data (`g_doAllParticleData` is true) AND the simulation
+ *          is *not* being skipped (`skip_simulation` is false). This file will be appended to
+ *          incrementally during the simulation timestepping loop via block writes.
+ * @see append_all_particle_data_chunk_to_file
+ * @see apd_filename
+ * @see g_doAllParticleData
+ * @see skip_simulation
+ */
+void initialize_output_file(int noutsnaps) {
+    if (!g_doAllParticleData || skip_simulation)
+        return;
+
+    // Create/truncate the output file in binary write mode.
+    FILE *fapd = fopen(apd_filename, "wb");
+    if (!fapd) {
+        fprintf(stderr, "Error: cannot create all_particle_data output file %s\n", apd_filename);
+        CLEAN_EXIT(1);
+    }
+    fclose(fapd); // Close immediately, file is now ready for appending.
+    printf("Initialized empty file for all particle data: %s\n", apd_filename);
+
+    // Calculate and display expected file size
+    long long expected_size = (long long)total_writes() * (long long)npts * 16LL; // 16 bytes per particle record
+
+    printf("All particle data file requires: ");
+    log_disk_space(expected_size);
+
+    // Calculate and display expected snapshot file sizes
+    // Each snapshot has 2 files: unsorted (28 bytes/particle) and sorted (32 bytes/particle)
+    long long snapshot_size = (long long)npts * (28LL + 32LL); // Total per snapshot pair
+    long long total_snapshot_size = snapshot_size * (long long)noutsnaps;
+
+    printf("%d time snapshot files will require: ", noutsnaps);
+    log_disk_space(total_snapshot_size);
+
+    // Calculate and display total disk space
+    long long total_disk_space = expected_size + total_snapshot_size;
+
+    printf("Total disk space required: ");
+    log_disk_space(total_disk_space);
+
+    // Check available disk space
+    long long available_space = get_available_disk_space("data/");
+    if (available_space > 0) {
+        printf("Available disk space: ");
+        log_disk_space(available_space);
+
+        // Check if we're within 5% of total available or insufficient
+        double usage_after = (double)(available_space - total_disk_space) / (double)available_space;
+
+        if (available_space < total_disk_space)
+            raise_insufficient_memory(total_disk_space, available_space); // Insufficient space
+        else if (usage_after < 0.05) { // Within 5% of capacity after simulation
+            warn_low_memory(total_disk_space, available_space, usage_after);
+            prompt_quit("Continue", "Aborting simulation.\n");
+        }
+    } else {
+        fprintf(stderr, "Warning: Could not determine available disk space.\n");
+        prompt_quit("Continue without disk space check", "Aborting simulation.\n");
+    }
+
+    printf("\n");
+
+    /** @brief Display initial simulation progress. */
+    printf("0%% complete, timestep 0/%d, time=0.0000 Myr, elapsed=0.00 s\n", Ntimes);
 }

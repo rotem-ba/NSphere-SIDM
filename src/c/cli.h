@@ -20,6 +20,7 @@
 void printUsage(const char *prog);
 void errorAndExit(const char *msg, const char *arg, const char *prog);
 int prompt_yes_no(const char *prompt);
+void prompt_quit(const char *prompt, const char *exit_message);
 void parseSaveArgs(int argc, char *argv[], int *pIndex);
 
 int exit_on_help(int argc, char *argv[]);
