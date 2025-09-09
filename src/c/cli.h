@@ -18,14 +18,16 @@
  #define CLI_H
 
 void printUsage(const char *prog);
-void errorAndExit(const char *msg, const char *arg, const char *prog);
+static int validate_int_input(int *i, int argc, char **argv, const char *param_name);
+static float validate_float_input(int *i, int argc, char **argv, const char *param_name);
+static void raise_incompatible_choice_error(const char *main_param, const char *param2, int condition);
 int prompt_yes_no(const char *prompt);
 void prompt_quit(const char *prompt, const char *exit_message);
 void parseSaveArgs(int argc, char *argv[], int *pIndex);
 
-int exit_on_help(int argc, char *argv[]);
+void exit_on_help(int argc, char *argv[]);
 void read_user_arguments(int argc, char *argv[]);
-int parse_user_arguments(int argc, char *argv[]);
+void parse_user_arguments(int argc, char *argv[]);
 void set_method_name();
 
 

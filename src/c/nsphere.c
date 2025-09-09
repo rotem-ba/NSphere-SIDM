@@ -106,8 +106,7 @@ printf("  \n");
     // Set OpenMP to use maximum available thread parallelism
     omp_set_num_threads(max_threads);
 
-    printf("OpenMP Status: ENABLED (%d logical processors, using %d threads)\n",
-           num_processors, max_threads);
+    printf("OpenMP Status: ENABLED (%d logical processors, using %d threads)\n", num_processors, max_threads);
     printf("\n\n");
 
     log_message("INFO", "Using maximum thread parallelism: %d threads", max_threads);
@@ -146,9 +145,7 @@ printf("  \n");
     fftw_plan_with_nthreads(max_threads);
 #endif
     int noutsnaps;
-    if (parse_user_arguments(argc, argv)) {
-        return 0;
-    }
+    parse_user_arguments(argc, argv);
     set_global_density_params();
     compile_filename_tag();
     print_input_parameters();
