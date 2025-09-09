@@ -19,5 +19,6 @@
 #define TIMESTEPS_H
 
 int adjust_ntimesteps(int Ntimes_initial, int nout, int dtwrite);
+void adjust_Ntimes();
 
 #endif // TIMESTEPS_H

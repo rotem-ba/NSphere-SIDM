@@ -221,3 +221,4 @@ char full_filename[256];
 char apd_filename[256];
 
 int skip_simulation = 0;
+int ext_Ntimes;

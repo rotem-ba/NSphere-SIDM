@@ -173,47 +173,9 @@ printf("  \n");
     /** @note Calculate number of snapshots (`noutsnaps`) based on desired intervals (`nout`). */
     nout = nout + 1; // nout specifies intervals, noutsnaps is number of points (intervals + 1)
     noutsnaps = nout;
+    adjust_Ntimes();
 
-    /**
-     * @brief Adjust Ntimes using adjust_ntimesteps to align with output schedule.
-     * @details Ensures (Ntimes - 1) is a multiple of (noutsnaps - 1) * dtwrite.
-     * @see adjust_ntimesteps
-     */
-    int oldN = Ntimes;
-    Ntimes = adjust_ntimesteps(Ntimes, noutsnaps, dtwrite); // Use noutsnaps here
-    if (Ntimes != oldN)
-    {
-        printf("Adjusted Number of Time Steps to %d to satisfy parameter constraints.\n", Ntimes);
-    }
-    /** @brief Calculate total number of write events and steps between major snapshots. */
-    int stepBetweenSnaps = (int)floor(
-        (double)(total_writes() - 1) / (double)(noutsnaps - 1) + 0.5); // Steps between major snapshots
-    int ext_Ntimes; ///< Extended time steps potentially needed for trajectory arrays bounds.
-    ext_Ntimes = Ntimes + dtwrite; // Allocate trajectory arrays slightly larger
-
-    /** @brief Initialize the global file suffix string `g_file_suffix` based on cmd line args. */
-    g_file_suffix[0] = '\0';
-
-    /** @brief Add custom tag to suffix if provided via `--tag`. */
-    if (custom_tag[0] != '\0')
-    {
-        snprintf(g_file_suffix, sizeof(g_file_suffix), "_%s", custom_tag);
-    }
-
-    /** @brief Add method/parameter tag to suffix. */
-    char temp[256];
-    if (include_method_in_suffix)
-    {
-        snprintf(temp, sizeof(temp), "_%s_%d_%d_%d", method_filename, npts, Ntimes, tfinal_factor);
-    }
-    else
-    {
-        snprintf(temp, sizeof(temp), "_%d_%d_%d", npts, Ntimes, tfinal_factor);
-    }
-
-    /** @brief Append the parameter tag to the global suffix. */
-    strcat(g_file_suffix, temp); // Append temp to g_file_suffix
-
+    fill_suffix_tags();
     /** @brief Set flag `skip_file_writes=1` if in restart mode (`g_doRestart`). */
     if (g_doRestart)
     {
@@ -225,15 +187,10 @@ printf("  \n");
     {
         struct stat st = {0};
         if (stat("data", &st) == -1)
-        {
             mkdir("data", 0755); // POSIX standard, works on most systems including MinGW/Cygwin
-        }
     }
-
     mkdir_init();
-    if (write_to_lastparams()) {
-        return 1;
-    }
+    write_to_lastparams();
 
     /**
      * @brief Common IC generation variables shared between profile pathways.

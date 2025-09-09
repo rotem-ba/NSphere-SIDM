@@ -825,7 +825,7 @@ void mkdir_init(){
 /**
  * @brief Write current run parameters to `data/lastparams<suffix>.dat` and create a standard link `data/lastparams.dat`.
  */
-int write_to_lastparams() {
+void write_to_lastparams() {
     char file_tag[512] = "";
     if (custom_tag[0] != '\0') {
         strcat(file_tag, custom_tag);
@@ -843,10 +843,8 @@ int write_to_lastparams() {
     printf("Saving parameters: %s\n", filename);
 
     FILE *fp_params = fopen(filename, "w"); // Text mode for regular fprintf
-    if (!fp_params) {
-        printf("Error: cannot open %s\n", filename);
-        return 1;
-    }
+    if (!fp_params)
+        raise_error("Error: cannot open %s\n", filename);
 
     fprintf(fp_params, "%d %d %d %s\n", npts, Ntimes, tfinal_factor, file_tag);
     fclose(fp_params);
@@ -864,9 +862,9 @@ int write_to_lastparams() {
     // Use lower-level file operations instead of system commands for better compatibility.
     FILE *source, *dest;
     source = fopen(filename, "rb");
-    if (!source) {
+    if (!source)
         printf("Warning: Failed to open source file %s for copying\n", filename);
-    } else {
+    else {
         dest = fopen(linkname, "wb");
         if (!dest) {
             printf("Warning: Failed to create destination file %s\n", linkname);
@@ -914,7 +912,6 @@ int write_to_lastparams() {
     } else
         printf("Created link: %s -> %s\n\n", filename, linkname);
 #endif
-return 0;
 }
 
 /**
@@ -1018,4 +1015,23 @@ void initialize_output_file(int noutsnaps) {
 
     /** @brief Display initial simulation progress. */
     printf("0%% complete, timestep 0/%d, time=0.0000 Myr, elapsed=0.00 s\n", Ntimes);
+}
+
+/** @brief Initialize the global file suffix string `g_file_suffix` based on cmd line args. */
+void fill_suffix_tags() {
+    g_file_suffix[0] = '\0';
+
+    /** @brief Add custom tag to suffix if provided via `--tag`. */
+    if (custom_tag[0] != '\0')
+        snprintf(g_file_suffix, sizeof(g_file_suffix), "_%s", custom_tag);
+
+    /** @brief Add method/parameter tag to suffix. */
+    char temp[256];
+    if (include_method_in_suffix)
+        snprintf(temp, sizeof(temp), "_%s_%d_%d_%d", method_filename, npts, Ntimes, tfinal_factor);
+    else
+        snprintf(temp, sizeof(temp), "_%d_%d_%d", npts, Ntimes, tfinal_factor);
+
+    /** @brief Append the parameter tag to the global suffix. */
+    strcat(g_file_suffix, temp); // Append temp to g_file_suffix
 }

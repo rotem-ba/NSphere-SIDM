@@ -15,6 +15,8 @@
  */
 
  #include <math.h>
+ #include "globals.h"
+ #include "io.h"
 
  /**
   * @brief Adjusts the total number of timesteps to align with desired output snapshot intervals.
@@ -33,48 +35,47 @@
   * @return int The adjusted total number of timesteps (\f$N'_{times}\f$). Returns `Ntimes_initial`
   *             if `nout < 2` or `dtwrite < 1` or other edge cases where the constraint cannot be met.
   */
-int adjust_ntimesteps(int Ntimes_initial, int nout, int dtwrite)
-{
-     // Notation: M = nout, p = dtwrite, N = Ntimes_initial.
-     // Find the smallest N' >= N such that (N' - 1) is a multiple of (M - 1) * p.
-
-     int M = nout;
-     int p = dtwrite;
-     int N = Ntimes_initial;
+int adjust_ntimesteps(int Ntimes_initial, int nout, int dtwrite) {
+     // Find the smallest N' >= N such that (Ntimes_initial' - 1) is a multiple of (nout - 1) * dtwrite.
 
      // Edge cases:
-     if (M < 2)
-     {
-         // If only 0 or 1 snapshot requested, no interval constraint applies.
-         return N;
-     }
-     if (p < 1)
-     {
-         // Invalid write interval.
-         return N;
-     }
+     if (nout < 2) // If only 0 or 1 snapshot requested, no interval constraint applies.
+         return Ntimes_initial;
+     if (dtwrite < 1) // Invalid write interval.
+         return Ntimes_initial;
 
-     // The total number of intervals between M snapshots is (M - 1).
-     // The total number of steps spanning these intervals must be a multiple of p.
-     // Therefore, the total number of steps (N' - 1) must be a multiple of (M - 1) * p.
-     // Find the smallest integer k >= 1 such that (M - 1) * k * p >= (N - 1).
-     double required_steps = (double)(N - 1);
-     double steps_per_output_cycle = (M - 1) * (double)p;
+     // The total number of intervals between nout snapshots is (nout - 1).
+     // The total number of steps spanning these intervals must be a multiple of dtwrite.
+     // Therefore, the total number of steps (Ntimes_initial' - 1) must be a multiple of (nout - 1) * dtwrite.
+     // Find the smallest integer k >= 1 such that (nout - 1) * k * dtwrite >= (Ntimes_initial - 1).
+     double required_steps = (double)(Ntimes_initial - 1);
+     double steps_per_output_cycle = (nout - 1) * (double)dtwrite;
 
-     // Handle case where denominator is zero (e.g., M=1 or p=0, caught above but added safety)
-     if (steps_per_output_cycle <= 0) {
-         return N; // Cannot satisfy constraint
-     }
+     // Handle case where denominator is zero (e.g., nout=1 or dtwrite=0, caught above but added safety)
+     if (steps_per_output_cycle <= 0)
+         return Ntimes_initial; // Cannot satisfy constraint
 
      double ratio = required_steps / steps_per_output_cycle;
      int k = (int)ceil(ratio);
      if (k < 1)
-     {
          k = 1; // Ensure at least one full output cycle.
-     }
 
-     int Nprime_minus_1 = (M - 1) * k * p;
+     int Nprime_minus_1 = (nout - 1) * k * dtwrite;
      int Nprime = Nprime_minus_1 + 1;
 
      return Nprime;
  }
+
+ /**
+  * @brief Adjust Ntimes using adjust_ntimesteps to align with output schedule.
+  * @details Ensures (Ntimes - 1) is a multiple of (noutsnaps - 1) * dtwrite.
+  * @see adjust_ntimesteps
+  */
+void adjust_Ntimes() {
+    int oldN = Ntimes;
+    Ntimes = adjust_ntimesteps(Ntimes, nout + 1, dtwrite); // Use noutsnaps here
+    if (Ntimes != oldN)
+        printf("Adjusted Number of Time Steps to %d to satisfy parameter constraints.\n", Ntimes);
+    /** @brief Calculate total number of write events and steps between major snapshots. */
+    ext_Ntimes = Ntimes + dtwrite; // Allocate trajectory arrays slightly larger
+}

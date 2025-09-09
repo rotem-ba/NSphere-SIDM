@@ -53,7 +53,7 @@ void retrieve_all_particle_snapshot(const char *filename, int snap, int npts, in
 
 void compile_filename_tag();
 void mkdir_init();
-int write_to_lastparams();
+void write_to_lastparams();
 
 void write_low_l_particles(double dt, int nlowest, double **lowestL_r, double **lowestL_E, double **lowestL_L);
 
@@ -63,5 +63,6 @@ inline int total_writes() {
 }
 
 void initialize_output_file(int noutsnaps);
+void fill_suffix_tags();
 
 #endif // IO_H

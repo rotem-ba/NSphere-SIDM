@@ -276,6 +276,8 @@ extern char full_filename[256];       ///< Full filename (with suffixes)
 extern char apd_filename[256];        ///< Filename for data/all_particle_data<suffix>.dat
 
 extern int skip_simulation;           ///< Flag to determine if simulation phase can be skipped
-
+extern int ext_Ntimes;                ///< Extended time steps potentially needed for trajectory arrays bounds.
+/** @def Steps between major snapshots. */
+#define stepBetweenSnaps (int)floor((double)(total_writes() - 1) / (double)(nout - 1) + 0.5)
 
 #endif // GLOBALS_H
