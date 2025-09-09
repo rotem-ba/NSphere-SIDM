@@ -38,3 +38,5 @@ int *chosen = NULL;
 double **lowestL_r = NULL;
 double **lowestL_E = NULL;
 double **lowestL_L = NULL;
+
+double **particles = NULL;           ///< Main particle data array

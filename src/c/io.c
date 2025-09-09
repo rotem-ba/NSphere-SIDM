@@ -969,10 +969,8 @@ void initialize_output_file(int noutsnaps) {
 
     // Create/truncate the output file in binary write mode.
     FILE *fapd = fopen(apd_filename, "wb");
-    if (!fapd) {
-        fprintf(stderr, "Error: cannot create all_particle_data output file %s\n", apd_filename);
-        CLEAN_EXIT(1);
-    }
+    if (!fapd)
+        raise_error("Error: cannot create all_particle_data output file %s\n", apd_filename);
     fclose(fapd); // Close immediately, file is now ready for appending.
     printf("Initialized empty file for all particle data: %s\n", apd_filename);
 

@@ -243,7 +243,7 @@ printf("  \n");
      * @details These variables are declared before the profile selection block
      *          and will be populated by whichever profile pathway is chosen.
      */
-    double **particles = NULL;           ///< Main particle data array
+
     int i = 0;                          ///< Loop counter
     double result, error;               ///< GSL integration results
     double calE;                        ///< Energy value for calculations
@@ -283,16 +283,12 @@ printf("  \n");
      * @details This ensures both NFW and Cored pathways use the same particles array.
      */
     particles = (double **)malloc(5 * sizeof(double *));
-    if (particles == NULL) {
-        fprintf(stderr, "ERROR: Memory allocation failed for particle array pointer\n");
-        CLEAN_EXIT(1);
-    }
+    if (particles == NULL)
+        raise_error("ERROR: Memory allocation failed for particle array pointer\n", i);
     for (i = 0; i < 5; i++) {
         particles[i] = (double *)malloc(npts_initial * sizeof(double));
-        if (particles[i] == NULL) {
-            fprintf(stderr, "ERROR: Memory allocation failed for particles[%d]\n", i);
-            CLEAN_EXIT(1);
-        }
+        if (particles[i] == NULL)
+            raise_error("ERROR: Memory allocation failed for particles[%d]\n", i);
     }
 
     /**
@@ -304,10 +300,8 @@ printf("  \n");
     gsl_rng_env_setup();                           // Setup GSL RNG environment
     const gsl_rng_type * T_rng = gsl_rng_default;  // Use default RNG type
     g_rng = gsl_rng_alloc(T_rng);                  // Allocate global GSL RNG state
-    if (g_rng == NULL) {                           // Check allocation success
-        fprintf(stderr, "Error allocating GSL RNG.\n");
-        CLEAN_EXIT(1);
-    }
+    if (g_rng == NULL)                             // Check allocation success
+        raise_error("Error allocating GSL RNG.\n");
 
     // Seed the global g_rng (used for ICs and Serial SIDM)
     gsl_rng_set(g_rng, g_initial_cond_seed);       // Use the determined IC seed for g_rng
@@ -322,20 +316,17 @@ printf("  \n");
     #endif
 
     g_rng_per_thread = (gsl_rng **)malloc(g_max_omp_threads_for_rng * sizeof(gsl_rng *));
-    if (g_rng_per_thread == NULL) {
-        fprintf(stderr, "Error: Failed to allocate memory for per-thread RNG array.\n");
-        CLEAN_EXIT(1);
-    }
+    if (g_rng_per_thread == NULL)
+        raise_error("Error: Failed to allocate memory for per-thread RNG array.\n");
 
     const gsl_rng_type *T_rng_thread = gsl_rng_default;
 
     for (int i_rng = 0; i_rng < g_max_omp_threads_for_rng; ++i_rng) {
         g_rng_per_thread[i_rng] = gsl_rng_alloc(T_rng_thread);
         if (g_rng_per_thread[i_rng] == NULL) {
-            fprintf(stderr, "Error: Failed to allocate GSL RNG for thread %d.\n", i_rng);
             for (int k_rng = 0; k_rng < i_rng; ++k_rng) gsl_rng_free(g_rng_per_thread[k_rng]);
             free(g_rng_per_thread);
-            CLEAN_EXIT(1);
+            raise_error("Error: Failed to allocate GSL RNG for thread %d.\n", i_rng);
         }
         gsl_rng_set(g_rng_per_thread[i_rng], g_sidm_seed + (unsigned long int)i_rng);
     }
@@ -782,10 +773,8 @@ cleanup_diag_iteration:
 
         // Allocate GSL workspace
         w = gsl_integration_workspace_alloc(1000);
-        if (!w) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate GSL workspace\n");
-            CLEAN_EXIT(1);
-        }
+        if (!w)
+            raise_error("NFW_PATH: Failed to allocate GSL workspace\n");
 
         // Prepare mass integrand function
         gsl_function F_nfw_calc;
@@ -813,10 +802,8 @@ cleanup_diag_iteration:
             log_message("DEBUG", "  Final 'normalization' variable = %.6e", normalization);
         }
 
-        if (normalization <= 1e-30) {
-            fprintf(stderr, "NFW_PATH: Normalization is zero or negative (%.3e). Exiting.\n", normalization);
-            CLEAN_EXIT(1);
-        }
+        if (normalization <= 1e-30)
+            raise_error("NFW_PATH: Normalization is zero or negative (%.3e). Exiting.\n", normalization);
 
         // Update nt_nfw with proper normalization
         nfw_params[2] = current_profile_halo_mass / (4.0 * M_PI * normalization);
@@ -839,10 +826,8 @@ cleanup_diag_iteration:
         mass = (double *)malloc(num_points * sizeof(double));
         radius = (double *)malloc(num_points * sizeof(double));
         radius_monotonic_grid_nfw = (double *)malloc(num_points * sizeof(double));
-        if (!mass || !radius || !radius_monotonic_grid_nfw) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate mass/radius arrays\n");
-            CLEAN_EXIT(1);
-        }
+        if (!mass || !radius || !radius_monotonic_grid_nfw)
+            raise_error("NFW_PATH: Failed to allocate mass/radius arrays\n");
 
         mass[0] = 0.0;
         radius[0] = 0.0;                                  // For the y-values of r(Psi) spline later
@@ -877,10 +862,8 @@ cleanup_diag_iteration:
         // Create mass spline
         enclosedmass = gsl_interp_accel_alloc();
         splinemass = gsl_spline_alloc(gsl_interp_cspline, num_points);
-        if (!enclosedmass || !splinemass) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate mass spline\n");
-            CLEAN_EXIT(1);
-        }
+        if (!enclosedmass || !splinemass)
+            raise_error("NFW_PATH: Failed to allocate mass spline\n");
         gsl_spline_init(splinemass, radius_monotonic_grid_nfw, mass, num_points);
 
         // Write generic mass profile for plotting script
@@ -900,10 +883,8 @@ cleanup_diag_iteration:
          */
         Psivalues = (double *)malloc(num_points * sizeof(double));
         nPsivalues = (double *)malloc(num_points * sizeof(double));
-        if (!Psivalues || !nPsivalues) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate Psi arrays\n");
-            CLEAN_EXIT(1);
-        }
+        if (!Psivalues || !nPsivalues)
+            raise_error("NFW_PATH: Failed to allocate Psi arrays\n");
 
         // Prepare Psiintegrand parameters for NFW
         Psiintegrand_params psi_params_nfw;
@@ -942,10 +923,8 @@ cleanup_diag_iteration:
         // Create Psi splines
         Psiinterp = gsl_interp_accel_alloc();
         splinePsi = gsl_spline_alloc(gsl_interp_cspline, num_points);
-        if (!Psiinterp || !splinePsi) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate Psi spline\n");
-            CLEAN_EXIT(1);
-        }
+        if (!Psiinterp || !splinePsi)
+            raise_error("NFW_PATH: Failed to allocate Psi spline\n");
         gsl_spline_init(splinePsi, radius_monotonic_grid_nfw, Psivalues, num_points);
 
         // Write generic Psi profile for plotting script
@@ -963,20 +942,19 @@ cleanup_diag_iteration:
         // Create r(Psi) spline
         rofPsiinterp = gsl_interp_accel_alloc();
         splinerofPsi = gsl_spline_alloc(gsl_interp_cspline, num_points);
-        if (!rofPsiinterp || !splinerofPsi) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate r(Psi) spline\n");
-            CLEAN_EXIT(1);
-        }
+        if (!rofPsiinterp || !splinerofPsi)
+            raise_error("NFW_PATH: Failed to allocate r(Psi) spline\n");
 
         // Use temporary copies for r(Psi) spline to preserve the original radius grid
         double *nPsivalues_for_rPsi_spline = (double *)malloc(num_points * sizeof(double));
         double *radius_values_for_rPsi_spline = (double *)malloc(num_points * sizeof(double));
 
         if (!nPsivalues_for_rPsi_spline || !radius_values_for_rPsi_spline) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate temp arrays for r(Psi) spline data.\n");
-            if (nPsivalues_for_rPsi_spline) free(nPsivalues_for_rPsi_spline);
-            if (radius_values_for_rPsi_spline) free(radius_values_for_rPsi_spline);
-            CLEAN_EXIT(1);
+            if (nPsivalues_for_rPsi_spline)
+                free(nPsivalues_for_rPsi_spline);
+            if (radius_values_for_rPsi_spline)
+                free(radius_values_for_rPsi_spline);
+            raise_error("NFW_PATH: Failed to allocate temp arrays for r(Psi) spline data.\n");
         }
 
         // Copy nPsivalues and the corresponding radius_monotonic_grid_nfw values
@@ -1031,18 +1009,13 @@ cleanup_diag_iteration:
             log_message("DEBUG", "Continuing with I(E) calculation.");
         }
 
-        if (Psimax <= Psimin) {
-            fprintf(stderr, "NFW_PATH: Potential not monotonic (Psimax=%.3e <= Psimin=%.3e)\n",
-                    Psimax, Psimin);
-            CLEAN_EXIT(1);
-        }
+        if (Psimax <= Psimin)
+            raise_error("NFW_PATH: Potential not monotonic (Psimax=%.3e <= Psimin=%.3e)\n", Psimax, Psimin);
 
         innerintegrandvalues = (double *)malloc((num_points + 1) * sizeof(double));
         Evalues = (double *)malloc((num_points + 1) * sizeof(double));
-        if (!innerintegrandvalues || !Evalues) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate f(E) arrays\n");
-            CLEAN_EXIT(1);
-        }
+        if (!innerintegrandvalues || !Evalues)
+            raise_error("NFW_PATH: Failed to allocate f(E) arrays\n");
 
         // NFW uses conservative tolerance for f(E) integral
         F_nfw_calc.function = &fEintegrand_nfw;
@@ -1157,10 +1130,9 @@ cleanup_diag_iteration:
         // Create f(E) interpolation using cspline interpolation for NFW (smoother dI/dE)
         g_main_fofEinterp = gsl_interp_alloc(gsl_interp_cspline, num_points + 1);
         g_main_fofEacc = gsl_interp_accel_alloc();
-        if (!g_main_fofEinterp || !g_main_fofEacc) {
-            fprintf(stderr, "NFW_PATH: Failed to allocate f(E) interpolation\n");
-            CLEAN_EXIT(1);
-        }
+        if (!g_main_fofEinterp || !g_main_fofEacc)
+            raise_error("NFW_PATH: Failed to allocate f(E) interpolation\n");
+
         // ADD THIS BLOCK BEFORE gsl_interp_init:
         if (g_doDebug) {
             int monotonicity_violations = 0;
@@ -1175,12 +1147,11 @@ cleanup_diag_iteration:
                     monotonicity_violations++;
                 }
             }
-            if (monotonicity_violations > 0) {
-                fprintf(stderr, "  NFW_CRITICAL_SPLINE_INIT: Total Evalues monotonicity violations: %d. GSL interp_init will likely fail. Exiting.\n", monotonicity_violations);
-                CLEAN_EXIT(1); // Add explicit exit if violations found.
-            } else if (g_doDebug) { // Only log success if in debug mode
+            if (monotonicity_violations > 0)
+                raise_error("  NFW_CRITICAL_SPLINE_INIT: Total Evalues monotonicity violations: %d. GSL interp_init will likely fail. Exiting.\n",
+                            monotonicity_violations);
+            else if (g_doDebug) // Only log success if in debug mode
                 log_message("DEBUG", "Evalues array confirmed strictly monotonic before I(E) spline init.");
-            }
         }
         // END ADDED BLOCK
 
@@ -1218,16 +1189,12 @@ cleanup_diag_iteration:
              *          [3] = particle ID, [4] = orientation (mu)
              */
             particles = (double **)malloc(5 * sizeof(double *));
-            if (particles == NULL) {
-                fprintf(stderr, "NFW_PATH: Memory allocation failed for particle array\n");
-                CLEAN_EXIT(1);
-            }
+            if (particles == NULL)
+                raise_error("NFW_PATH: Memory allocation failed for particle array\n");
             for (i = 0; i < 5; i++) {
                 particles[i] = (double *)malloc(npts_initial * sizeof(double));
-                if (particles[i] == NULL) {
-                    fprintf(stderr, "NFW_PATH: Memory allocation failed for particles[%d]\n", i);
-                    CLEAN_EXIT(1);
-                }
+                if (particles[i] == NULL)
+                    raise_error("NFW_PATH: Memory allocation failed for particles[%d]\n", i);
             }
 
             /**
@@ -1235,42 +1202,35 @@ cleanup_diag_iteration:
              */
             double *maxv2f_nfw = (double *)malloc(num_maxv2f * sizeof(double));
             double *radius_maxv2f_nfw = (double *)malloc(num_maxv2f * sizeof(double));
-            if (!maxv2f_nfw || !radius_maxv2f_nfw) {
-                fprintf(stderr, "NFW_PATH: Failed to allocate maxv2f arrays\n");
-                CLEAN_EXIT(1);
-            }
+            if (!maxv2f_nfw || !radius_maxv2f_nfw)
+                raise_error("NFW_PATH: Failed to allocate maxv2f arrays\n");
 
             double nfw_vel, nfw_ratio, nfw_Psir, nfw_mu, nfw_maxv, nfw_maxvalue;
 
             // Create spline for r(M) - radius as function of enclosed mass
             gsl_interp_accel *rofMaccel_nfw = gsl_interp_accel_alloc();
             gsl_spline *splinerofM_nfw = gsl_spline_alloc(gsl_interp_cspline, num_points);
-            if (!rofMaccel_nfw || !splinerofM_nfw) {
-                fprintf(stderr, "NFW_PATH: Failed to allocate r(M) spline\n");
-                CLEAN_EXIT(1);
-            }
+            if (!rofMaccel_nfw || !splinerofM_nfw)
+                raise_error("NFW_PATH: Failed to allocate r(M) spline\n");
             // ADD THIS DIAGNOSTIC BLOCK:
         if (g_doDebug) {
             int monotonicity_violations_mass_spline = 0;
             log_message("DEBUG", "Checking mass array for strict monotonicity (size: %d)", num_points);
             // 'mass' array has num_points elements. Loop up to num_points-2 to check mass[chk+1] vs mass[chk].
-            if (num_points >= 2) { // Need at least 2 points to check monotonicity
-                for (int chk_m = 0; chk_m < num_points - 1; ++chk_m) {
+            if (num_points >= 2) // Need at least 2 points to check monotonicity
+                for (int chk_m = 0; chk_m < num_points - 1; ++chk_m)
                     if (!(mass[chk_m+1] > mass[chk_m])) {
-                        if (monotonicity_violations_mass_spline < 20) {
+                        if (monotonicity_violations_mass_spline < 20)
                             fprintf(stderr, "  Mass array monotonicity violation: mass[%d]=%.17e >= mass[%d]=%.17e (Diff: %.3e)\n",
                                    chk_m, mass[chk_m], chk_m+1, mass[chk_m+1], mass[chk_m+1] - mass[chk_m]);
-                        }
                         monotonicity_violations_mass_spline++;
                     }
-                }
-            }
             if (monotonicity_violations_mass_spline > 0) {
                 fprintf(stderr, "  NFW_CRITICAL_MONO_CHECK_ROFM: Total 'mass' array monotonicity violations: %d. gsl_spline_init for splinerofM_nfw will fail.\n", monotonicity_violations_mass_spline);
-                 if (monotonicity_violations_mass_spline > 20) fprintf(stderr, "  (Further violations suppressed)\n");
-            } else {
+                if (monotonicity_violations_mass_spline > 20)
+                    fprintf(stderr, "  (Further violations suppressed)\n");
+            } else
                 log_message("DEBUG", "Mass array confirmed strictly monotonic.");
-            }
         }
         // END ADDED DIAGNOSTIC BLOCK
 
@@ -1314,32 +1274,27 @@ cleanup_diag_iteration:
             // Create spline for max v^2 * f(E)
             gsl_interp_accel *maxv2faccel_nfw = gsl_interp_accel_alloc();
             gsl_spline *splinemaxv2f_nfw = gsl_spline_alloc(gsl_interp_cspline, num_maxv2f);
-            if (!maxv2faccel_nfw || !splinemaxv2f_nfw) {
-                fprintf(stderr, "NFW_PATH: Failed to allocate maxv2f spline\n");
-                CLEAN_EXIT(1);
-            }
+            if (!maxv2faccel_nfw || !splinemaxv2f_nfw)
+                raise_error("NFW_PATH: Failed to allocate maxv2f spline\n");
             // ADD THIS DIAGNOSTIC BLOCK:
         if (g_doDebug) {
             int monotonicity_violations_rad_spline = 0;
             log_message("DEBUG", "Checking radius array for strict monotonicity (size: %d)", num_points);
             // 'radius' array has num_points elements. Loop up to num_points-2.
-            if (num_points >= 2) {
-                for (int chk_r = 0; chk_r < num_points - 1; ++chk_r) {
+            if (num_points >= 2)
+                for (int chk_r = 0; chk_r < num_points - 1; ++chk_r)
                     if (!(radius[chk_r+1] > radius[chk_r])) {
-                        if (monotonicity_violations_rad_spline < 20) {
+                        if (monotonicity_violations_rad_spline < 20)
                             fprintf(stderr, "  Radius array monotonicity violation: radius[%d]=%.17e >= radius[%d]=%.17e (Diff: %.3e)\n",
                                    chk_r, radius[chk_r], chk_r+1, radius[chk_r+1], radius[chk_r+1] - radius[chk_r]);
-                        }
                         monotonicity_violations_rad_spline++;
                     }
-                }
-            }
             if (monotonicity_violations_rad_spline > 0) {
                 fprintf(stderr, "  NFW_CRITICAL_MONO_CHECK_MAXV2F: Total 'radius' array monotonicity violations: %d. gsl_spline_init for splinemaxv2f_nfw will fail.\n", monotonicity_violations_rad_spline);
-                if (monotonicity_violations_rad_spline > 20) fprintf(stderr, "  (Further violations suppressed)\n");
-            } else {
+                if (monotonicity_violations_rad_spline > 20)
+                    fprintf(stderr, "  (Further violations suppressed)\n");
+            } else
                 log_message("DEBUG", "Radius array confirmed strictly monotonic.");
-            }
         }
         // END ADDED DIAGNOSTIC BLOCK
 
@@ -1349,9 +1304,8 @@ cleanup_diag_iteration:
              * @brief Generate particles using rejection sampling.
              */
             for (int k_nfw = 0; k_nfw < npts_initial; k_nfw++) {
-                if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) { // Log for first few & periodically
+                if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) // Log for first few & periodically
                     fflush(stdout);
-                }
 
                 // Sample radius from mass distribution
                 double mass_frac_sample_nfw = gsl_rng_uniform(g_rng) * 0.999999;
@@ -1359,7 +1313,7 @@ cleanup_diag_iteration:
                 particles[0][k_nfw] = evaluatespline(splinerofM_nfw, rofMaccel_nfw, mass_sample_nfw);
 
                 if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) {
-                }
+                } //TODO - ???
 
                 nfw_maxvalue = evaluatespline(splinemaxv2f_nfw, maxv2faccel_nfw, particles[0][k_nfw]);
                 nfw_Psir = evaluatespline(splinePsi, Psiinterp, particles[0][k_nfw]);
@@ -1367,7 +1321,7 @@ cleanup_diag_iteration:
                 // Check for problematic values
                 if (!isfinite(nfw_Psir)) {
                     if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) {
-                    }
+                    } //TODO - ???
                     particles[1][k_nfw] = 0.0; // Assign zero velocity
                     nfw_mu = (2.0 * gsl_rng_uniform(g_rng) - 1.0);
                     particles[2][k_nfw] = 0.0; // L = 0 since v = 0
@@ -1378,66 +1332,59 @@ cleanup_diag_iteration:
 
                 if (nfw_Psir <= Psimin + 1e-9 * fabs(Psimin)) { // Check if Psir is too close to Psimin
                     if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) {
-                    }
+                    } //TODO - ???
                     particles[1][k_nfw] = 0.0; // No kinetic energy possible
                 } else {
                     // Sample velocity using rejection method
                     nfw_maxv = sqrt(fmax(0.0, 2.0 * (nfw_Psir - Psimin)));
-                    if (!isfinite(nfw_maxv) || nfw_maxv < 1e-9) {
+                    if (!isfinite(nfw_maxv) || nfw_maxv < 1e-9)
                         particles[1][k_nfw] = 0.0;
-                    } else {
-
-                        if (!isfinite(nfw_maxvalue) || nfw_maxvalue <= 1e-30) { // If envelope is effectively zero
+                    else {
+                        if (!isfinite(nfw_maxvalue) || nfw_maxvalue <= 1e-30)// If envelope is effectively zero
                             particles[1][k_nfw] = 0.0;
-                        } else {
+                        else {
                             // Velocity Rejection Sampling Loop
                             int vflag_nfw = 0;
                             int v_trials_nfw = 0;
 
-                    while (vflag_nfw == 0 && v_trials_nfw < 20000) {
-                        v_trials_nfw++;
-                        nfw_vel = gsl_rng_uniform(g_rng) * nfw_maxv;
-                        double E_test_nfw = nfw_Psir - 0.5 * nfw_vel * nfw_vel;
-                        double target_func_val_nfw = 0.0;
+                            while (vflag_nfw == 0 && v_trials_nfw < 20000) {
+                                v_trials_nfw++;
+                                nfw_vel = gsl_rng_uniform(g_rng) * nfw_maxv;
+                                double E_test_nfw = nfw_Psir - 0.5 * nfw_vel * nfw_vel;
+                                double target_func_val_nfw = 0.0;
 
-                        double deriv_val_dIdE = 0.0;
-                        if (E_test_nfw >= Psimin - 1e-9*fabs(Psimin) && E_test_nfw <= Psimax + 1e-9*fabs(Psimax)) { // Looser check for spline domain
-                            deriv_val_dIdE = gsl_interp_eval_deriv(g_main_fofEinterp, Evalues,
-                                                                   innerintegrandvalues, E_test_nfw, g_main_fofEacc);
-                        }
+                                double deriv_val_dIdE = 0.0;
+                                if (E_test_nfw >= Psimin - 1e-9*fabs(Psimin) && E_test_nfw <= Psimax + 1e-9*fabs(Psimax)) // Looser check for spline domain
+                                    deriv_val_dIdE = gsl_interp_eval_deriv(g_main_fofEinterp, Evalues, innerintegrandvalues, E_test_nfw, g_main_fofEacc);
 
-                        // Add diagnostic for dI/dE values
-                        if (g_doDebug && v_trials_nfw <= 2 && k_nfw < 5) { // Only for very first few trials of first few particles
-                        }
+                                // Add diagnostic for dI/dE values
+                                if (g_doDebug && v_trials_nfw <= 2 && k_nfw < 5) { // Only for very first few trials of first few particles
+                                } //TODO - ???
 
-                        target_func_val_nfw = nfw_vel * nfw_vel * fabs(deriv_val_dIdE);
-                        if (!isfinite(target_func_val_nfw) || target_func_val_nfw < 0) target_func_val_nfw = 0.0; // Ensure non-negative
+                                target_func_val_nfw = nfw_vel * nfw_vel * fabs(deriv_val_dIdE);
+                                if (!isfinite(target_func_val_nfw) || target_func_val_nfw < 0)
+                                    target_func_val_nfw = 0.0; // Ensure non-negative
 
-                        nfw_ratio = target_func_val_nfw / nfw_maxvalue; // maxvalue should be >0 here
-                        if (nfw_ratio < 0) nfw_ratio = 0;
-                        if (nfw_ratio > 1.001) { // If ratio is slightly > 1 due to numerics
-                            nfw_ratio = 1.0;
-                        }
+                                nfw_ratio = clip(target_func_val_nfw / nfw_maxvalue, 0.0, 1.0); // maxvalue should be >0 here
 
-                        if ((k_nfw < 2 && v_trials_nfw < 5) || (v_trials_nfw % 5000 == 0 && v_trials_nfw > 0) ) {
-                        }
+                                if ((k_nfw < 2 && v_trials_nfw < 5) || (v_trials_nfw % 5000 == 0 && v_trials_nfw > 0) ) {
+                                } //TODO - ???
 
-                        // Enhanced high trial count diagnostics
-                        if (g_doDebug && (v_trials_nfw % 4000 == 0 && v_trials_nfw > 0)) {
-                        }
+                                // Enhanced high trial count diagnostics
+                                if (g_doDebug && (v_trials_nfw % 4000 == 0 && v_trials_nfw > 0)) {
+                                } //TODO - ???
 
-                        // Diagnostic for zero dI/dE in valid energy range
-                        if (g_doDebug && fabs(deriv_val_dIdE) < 1e-20 && (E_test_nfw > Psimin + 1e-6*fabs(Psimin) && E_test_nfw < Psimax - 1e-6*fabs(Psimax)) && (v_trials_nfw % 100 == 0) && v_trials_nfw > 0 && k_nfw < 100) {
-                        }
+                                // Diagnostic for zero dI/dE in valid energy range
+                                if (g_doDebug && fabs(deriv_val_dIdE) < 1e-20 && (E_test_nfw > Psimin + 1e-6*fabs(Psimin) && E_test_nfw < Psimax - 1e-6*fabs(Psimax)) && (v_trials_nfw % 100 == 0) && v_trials_nfw > 0 && k_nfw < 100) {
+                                } //TODO - ???
 
-                        if (gsl_rng_uniform(g_rng) < nfw_ratio) {
-                            particles[1][k_nfw] = nfw_vel;
-                            vflag_nfw = 1;
-                        }
-                    }
-                    if (!vflag_nfw) {
-                        particles[1][k_nfw] = 0.0; // Failed to find velocity
-                    }
+                                if (gsl_rng_uniform(g_rng) < nfw_ratio) {
+                                    particles[1][k_nfw] = nfw_vel;
+                                    vflag_nfw = 1;
+                                }
+                            }
+                            if (!vflag_nfw)
+                                particles[1][k_nfw] = 0.0; // Failed to find velocity
                         } // End else (maxvalue_envelope is finite and positive)
                     } // End else (maxv is finite and positive)
                 } // End else (Psir > Psimin)
@@ -1446,15 +1393,14 @@ cleanup_diag_iteration:
                 nfw_mu = 2.0 * gsl_rng_uniform(g_rng) - 1.0;
                 // Ensure L is non-negative and well-defined even if particles[1][k_nfw] (velocity magnitude) is 0
                 double L_val_nfw = 0.0;
-                if (particles[1][k_nfw] > 1e-9) { // If velocity is non-zero
+                if (particles[1][k_nfw] > 1e-9) // If velocity is non-zero
                     L_val_nfw = particles[1][k_nfw] * particles[0][k_nfw] * sqrt(fmax(0.0, 1.0 - nfw_mu * nfw_mu));
-                }
                 particles[2][k_nfw] = L_val_nfw;
                 particles[3][k_nfw] = (double)k_nfw; // Particle ID
                 particles[4][k_nfw] = nfw_mu;        // Orientation
 
                 if (k_nfw < 5 || k_nfw % (npts_initial / 10 < 1 ? 1 : npts_initial/10) == 0) {
-                }
+                } //TODO - ???
             }
 
             // Clean up NFW sample generator allocations
@@ -1497,7 +1443,6 @@ cleanup_diag_iteration:
      */
     {
         for (int ii_ip = 0; ii_ip < 2; ii_ip++) // Loop over Nintegration values
-        {
             for (int ii_sp = 0; ii_sp < 2; ii_sp++) // Loop over Nspline values
             {
                 int Nintegration = integration_points_array[ii_ip];
@@ -1522,8 +1467,7 @@ cleanup_diag_iteration:
                 double *mass = (double *)malloc(num_points * sizeof(double));
                 double *radius = (double *)malloc(num_points * sizeof(double));
 
-                for (int i = 0; i < num_points; i++)
-                {
+                for (int i = 0; i < num_points; i++) {
                     double r = (double)i * rmax / (num_points);
                     gsl_integration_qag(&F, 0.0, r, 0, 1.0e-12, Nintegration, 5, w, &result, &error);
                     mass[i] = result * g_cored_profile_halo_mass / normalization;
@@ -1543,13 +1487,9 @@ cleanup_diag_iteration:
                 snprintf(base_filename_massprofile, sizeof(base_filename_massprofile), "data/massprofile_Ni%d_Ns%d.dat", Nintegration, Nspline);
                 get_full_filename(base_filename_massprofile, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-                for (r = 0.0; r < rhigh; r += rmax / 900.0)
-                {
+                for (r = 0.0; r < rhigh; r += rmax / 900.0) {
                     if (r < rlow || r > rhigh)
-                    {
-                        printf("r out of range\n");
-                        CLEAN_EXIT(1);
-                    }
+                        raise_error("r out of range\n");
                     fprintf_bin(fp, "%f %f\n", r, gsl_spline_eval(splinemass, r, enclosedmass));
                 }
                 fclose(fp);
@@ -1566,8 +1506,7 @@ cleanup_diag_iteration:
                 F_for_psi_diag.function = &Psiintegrand;
                 F_for_psi_diag.params = &psi_params_diag;
 
-                for (i = 0; i < num_points; i++)
-                {
+                for (i = 0; i < num_points; i++) {
                     double r = (double)i * rmax / ((double)num_points);
                     double r1 = fmax(r, g_cored_profile_rc / 1000000.0);
                     gsl_integration_qagiu(&F_for_psi_diag, r1, 0, 1e-12, Nintegration, w, &result, &error);
@@ -1588,13 +1527,9 @@ cleanup_diag_iteration:
                 snprintf(base_filename_psiprofile, sizeof(base_filename_psiprofile), "data/Psiprofile_Ni%d_Ns%d.dat", Nintegration, Nspline);
                 get_full_filename(base_filename_psiprofile, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-                for (r = 0.0; r < ((double)num_points - 1.0) / ((double)num_points) * rmax; r += rmax / 900.0)
-                {
+                for (r = 0.0; r < ((double)num_points - 1.0) / ((double)num_points) * rmax; r += rmax / 900.0) {
                     if (r < rlow || r > rhigh)
-                    {
-                        printf("r out of range\n");
-                        CLEAN_EXIT(1);
-                    }
+                        raise_error("r out of range\n");
                     fprintf_bin(fp, "%f %f\n", r, evaluatespline(splinePsi, Psiinterp, r));
                 }
                 fclose(fp);
@@ -1618,22 +1553,19 @@ cleanup_diag_iteration:
                 F.function = &fEintegrand;
                 fEintegrand_params params = {calE, splinerofPsi, splinemass, rofPsiinterp, enclosedmass};
                 F.params = &params;
-                for (i = 0; i < num_points; i++)
-                {
+                for (i = 0; i < num_points; i++) {
                     double t = sqrt(calE - Psimin) * ((double)i) / ((double)num_points);
                     fprintf_bin(fp, "%f %f\n", t, fEintegrand(t, &params));
                 }
                 fclose(fp);
 
-                if (Psimax <= Psimin) { // Check for diagnostic loop
-                    if (g_doDebug) log_message("DEBUG", "Diagnostic: Psimax (%.6e) <= Psimin (%.6e) in diagnostic loop", Psimax, Psimin);
-                    // Continue with diagnostic but note the issue
-                }
+                if (Psimax <= Psimin) // Check for diagnostic loop
+                    if (g_doDebug) // Continue with diagnostic but note the issue
+                        log_message("DEBUG", "Diagnostic: Psimax (%.6e) <= Psimin (%.6e) in diagnostic loop", Psimax, Psimin);
 
                 innerintegrandvalues[0] = 0.0;
                 Evalues[0] = Psimin;
-                for (i = 1; i <= num_points; i++)
-                {
+                for (i = 1; i <= num_points; i++) {
                     calE = Psimin + (Psimax - Psimin) * ((double)i) / ((double)num_points);
                     if (i > 0 && calE <= Evalues[i-1]) { // Adjust if not strictly increasing
                         double prev_E_diag = Evalues[i-1];
@@ -1642,9 +1574,8 @@ cleanup_diag_iteration:
                         if(incr_diag == 0.0) incr_diag = DBL_MIN * fabs(prev_E_diag) + DBL_MIN;
                         if(incr_diag == 0.0) incr_diag = 1e-20;
                         calE = prev_E_diag + incr_diag;
-                        if (g_doDebug && (i <= 3 || i > num_points - 3)) {
+                        if (g_doDebug && (i <= 3 || i > num_points - 3))
                             log_message("DEBUG", "Evalues[%d] adjusted to %.6e", i, calE);
-                        }
                     }
                     Evalues[i] = calE;
 
@@ -1666,8 +1597,7 @@ cleanup_diag_iteration:
                 snprintf(base_filename, sizeof(base_filename), "data/density_profile_Ni%d_Ns%d.dat", Nintegration, Nspline);
                 get_full_filename(base_filename, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-                for (i = 0; i < num_points; i++)
-                {
+                for (i = 0; i < num_points; i++) {
                     double rr = radius[i];
                     double rho_r = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(rr / g_cored_profile_rc)));
                     fprintf_bin(fp, "%f %f\n", rr, rho_r);
@@ -1677,11 +1607,9 @@ cleanup_diag_iteration:
                 /** @note Write dPsi/dr file (data/dpsi_dr<suffix>.dat) (overwrites previous if suffix same). */
                 get_full_filename("data/dpsi_dr.dat", 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-                for (i = 0; i < num_points; i++)
-                {
+                for (i = 0; i < num_points; i++) {
                     double rr = radius[i];
-                    if (rr > 0.0)
-                    {
+                    if (rr > 0.0) {
                         double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
                         double dpsidr = -(G_CONST * Menc) / (rr * rr);
                         fprintf_bin(fp, "%f %f\n", rr, dpsidr);
@@ -1692,8 +1620,7 @@ cleanup_diag_iteration:
                 /** @note Write drho/dPsi file (data/drho_dpsi<suffix>.dat) (overwrites previous if suffix same). */
                 get_full_filename("data/drho_dpsi.dat", 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-                for (i = 1; i < num_points - 1; i++)
-                {
+                for (i = 1; i < num_points - 1; i++) {
                     double rr = radius[i];
                     double rho_left = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(radius[i - 1] / g_cored_profile_rc)));
                     double rho_right = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(radius[i + 1] / g_cored_profile_rc)));
@@ -1701,8 +1628,7 @@ cleanup_diag_iteration:
                     double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
                     double dPsidr = -(G_CONST * Menc) / (rr * rr);
 
-                    if (dPsidr != 0.0)
-                    {
+                    if (dPsidr != 0.0) {
                         double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
                         fprintf_bin(fp, "%f %f\n", Psi_val, drho_dr_num / dPsidr);
                     }
@@ -1714,24 +1640,16 @@ cleanup_diag_iteration:
                 snprintf(base_filename_fofe, sizeof(base_filename_fofe), "data/f_of_E_Ni%d_Ns%d.dat", Nintegration, Nspline);
                 get_full_filename(base_filename_fofe, 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-                for (i = 0; i <= num_points; i++)
-                {
+                for (i = 0; i <= num_points; i++) {
                     double E = Evalues[i];
                     double deriv = 0.0;
-                    if (i > 0 && i < num_points + 1)
-                    {
+                    if (i > 0 && i < num_points + 1) {
                         if (i > 0 && i < num_points)
-                        {
                             deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i - 1]) / (Evalues[i + 1] - Evalues[i - 1]);
-                        }
                         else if (i == 0)
-                        {
                             deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i]) / (Evalues[i + 1] - Evalues[i]);
-                        }
                         else if (i == num_points)
-                        {
                             deriv = (innerintegrandvalues[i] - innerintegrandvalues[i - 1]) / (Evalues[i] - Evalues[i - 1]);
-                        }
                     }
                     double fE = fabs(deriv) / (sqrt(8.0) * PI * PI);
                     if (E == 0.0 || !isfinite(fE))
@@ -1742,23 +1660,19 @@ cleanup_diag_iteration:
 
                 get_full_filename("data/df_fixed_radius.dat", 1, fname, sizeof(fname));
                 fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-                {
-                    double r_fixed = 200.0;
-                    double Psi_rf = evaluatespline(splinePsi, Psiinterp, r_fixed);
-                    Psi_rf *= VEL_CONV_SQ;
-                    int vsteps = 100;
-                    for (int vv = 0; vv <= vsteps; vv++)
-                    {
-                        double vtest = (double)vv * (sqrt(2.0 * Psi_rf) / (vsteps));
-                        double Etest = Psi_rf - 0.5 * vtest * vtest;
-                        double fEval = 0.0;
-                        if (Etest > Psimin && Etest < Psimax)
-                        {
-                            double dval = gsl_interp_eval_deriv(fofEinterp, Evalues, innerintegrandvalues, Etest, fofEacc);
-                            fEval = dval / (sqrt(8.0) * PI * PI) * vtest * vtest * r_fixed * r_fixed;
-                        }
-                        fprintf_bin(fp, "%f %f\n", vtest, fEval);
+                double r_fixed = 200.0;
+                double Psi_rf = evaluatespline(splinePsi, Psiinterp, r_fixed);
+                Psi_rf *= VEL_CONV_SQ;
+                int vsteps = 100;
+                for (int vv = 0; vv <= vsteps; vv++) {
+                    double vtest = (double)vv * (sqrt(2.0 * Psi_rf) / (vsteps));
+                    double Etest = Psi_rf - 0.5 * vtest * vtest;
+                    double fEval = 0.0;
+                    if (Etest > Psimin && Etest < Psimax) {
+                        double dval = gsl_interp_eval_deriv(fofEinterp, Evalues, innerintegrandvalues, Etest, fofEacc);
+                        fEval = dval / (sqrt(8.0) * PI * PI) * vtest * vtest * r_fixed * r_fixed;
                     }
+                    fprintf_bin(fp, "%f %f\n", vtest, fEval);
                 }
                 fclose(fp);
 
@@ -1783,7 +1697,6 @@ cleanup_diag_iteration:
                 gsl_integration_workspace_free(w);
                 w = NULL;
             }
-        }
     }
 
     /**
@@ -1813,8 +1726,7 @@ cleanup_diag_iteration:
     mass = (double *)malloc(num_points * sizeof(double));
     radius = (double *)malloc(num_points * sizeof(double));
 
-    for (int i = 0; i < num_points; i++)
-    {
+    for (int i = 0; i < num_points; i++) {
         double r = (double)i * rmax / (num_points);
         gsl_integration_qag(&F, 0.0, r, 0, 1.0e-12, 1000, 5, w, &result, &error);
         mass[i] = result * g_cored_profile_halo_mass / normalization;
@@ -1824,11 +1736,8 @@ cleanup_diag_iteration:
     /** @brief Create mass interpolation spline for M(r). */
     enclosedmass = gsl_interp_accel_alloc();
     splinemass = gsl_spline_alloc(gsl_interp_cspline, num_points);
-    if (!check_strict_monotonicity(radius, num_points, "radius (main splinemass)")) {
-        fprintf(stderr, "CRITICAL: radius array not monotonic for main splinemass\n");
-        fflush(stderr);
-        CLEAN_EXIT(1);
-    }
+    if (!check_strict_monotonicity(radius, num_points, "radius (main splinemass)"))
+        raise_error_flush("CRITICAL: radius array not monotonic for main splinemass\n");
     gsl_spline_init(splinemass, radius, mass, num_points);
     double rlow = radius[0];
     double rhigh = radius[num_points - 1];
@@ -1837,21 +1746,15 @@ cleanup_diag_iteration:
     {
         struct stat st = {0};
         if (stat("data", &st) == -1)
-        {
             mkdir("data", 0755);
-        }
     }
 
     /** @brief Write main mass profile file (data/massprofile<suffix>.dat). */
     get_full_filename("data/massprofile.dat", 1, fname, sizeof(fname));
     fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-    for (r = 0.0; r < rhigh; r += rmax / 900.0)
-    {
+    for (r = 0.0; r < rhigh; r += rmax / 900.0) {
         if (r < rlow || r > rhigh)
-        {
-            printf("r out of range\n");
-            CLEAN_EXIT(1);
-        }
+            raise_error("r out of range\n");
         fprintf_bin(fp, "%f %f\n", r, gsl_spline_eval(splinemass, r, enclosedmass));
     }
     fclose(fp);
@@ -1868,8 +1771,7 @@ cleanup_diag_iteration:
     F_for_psi_cored.function = &Psiintegrand;
     F_for_psi_cored.params = &psi_params_cored;
 
-    for (i = 0; i < num_points; i++)
-    {
+    for (i = 0; i < num_points; i++) {
         double r = (double)i * rmax / ((double)num_points);
         double r1 = fmax(r, g_cored_profile_rc / 1000000.0);
         gsl_integration_qagiu(&F_for_psi_cored, r1, 0, 1e-12, 1000, w, &result, &error);
@@ -1882,24 +1784,17 @@ cleanup_diag_iteration:
     /** @brief Create potential interpolation spline for Psi(r). */
     Psiinterp = gsl_interp_accel_alloc();
     splinePsi = gsl_spline_alloc(gsl_interp_cspline, num_points);
-    if (!check_strict_monotonicity(radius, num_points, "radius (main splinePsi)")) {
-        fprintf(stderr, "CRITICAL: radius array not monotonic for main splinePsi\n");
-        fflush(stderr);
-        CLEAN_EXIT(1);
-    }
+    if (!check_strict_monotonicity(radius, num_points, "radius (main splinePsi)"))
+        raise_error("CRITICAL: radius array not monotonic for main splinePsi\n");
     gsl_spline_init(splinePsi, radius, Psivalues, num_points);
 
 
     /** @brief Write main potential profile file (data/Psiprofile<suffix>.dat). */
     get_full_filename("data/Psiprofile.dat", 1, fname, sizeof(fname));
     fp = fopen(fname, "wb"); // Binary mode for fprintf_bin
-    for (r = 0.0; r < ((double)num_points - 1.0) / ((double)num_points) * rmax; r += rmax / 900.0)
-    {
+    for (r = 0.0; r < ((double)num_points - 1.0) / ((double)num_points) * rmax; r += rmax / 900.0) {
         if (r < rlow || r > rhigh)
-        {
-            printf("r out of range\n");
-            CLEAN_EXIT(1);
-        }
+            raise_error("r out of range\n");
         fprintf_bin(fp, "%f %f\n", r, evaluatespline(splinePsi, Psiinterp, r), evaluatespline(splinemass, enclosedmass, r));
     }
     fclose(fp);
@@ -1921,8 +1816,7 @@ cleanup_diag_iteration:
     F.function = &fEintegrand;
     fEintegrand_params params = {calE, splinerofPsi, splinemass, rofPsiinterp, enclosedmass};
     F.params = &params;
-    for (i = 0; i < num_points; i++)
-    {
+    for (i = 0; i < num_points; i++) {
         double t = sqrt(calE - Psimin) * ((double)i) / ((double)num_points);
         fprintf_bin(fp, "%f %f\n", t, fEintegrand(t, &params));
     }
@@ -1932,8 +1826,7 @@ cleanup_diag_iteration:
     innerintegrandvalues[0] = 0.0;
     Evalues[0] = Psimin;
 
-    for (i = 1; i <= num_points; i++)
-    {
+    for (i = 1; i <= num_points; i++) {
         calE = Psimin + (Psimax - Psimin) * ((double)i) / ((double)num_points);
         fEintegrand_params params2 = {calE, splinerofPsi, splinemass, rofPsiinterp, enclosedmass};
         F.params = &params2;
@@ -1954,8 +1847,7 @@ cleanup_diag_iteration:
      *          Component indices: 0=radius, 1=velocity magnitude (initially), 2=ang. mom.,
      *          3=ID (initial index 0..npts_initial-1), 4=orientation(mu).
      */
-    for (i = 0; i < npts_initial; i++)
-    {
+    for (i = 0; i < npts_initial; i++) {
         particles[0][i] = 0.0;
         particles[1][i] = 0.0;
         particles[2][i] = 0.0;
@@ -2267,20 +2159,14 @@ cleanup_diag_iteration:
         /** @note Allocate new smaller arrays (`final_particles`) for the `npts` particles to keep. */
         double **final_particles = (double **)malloc(5 * sizeof(double *));
         if (final_particles == NULL)
-        {
-            fprintf(stderr, "Memory allocation failed for final_particles\n");
-            CLEAN_EXIT(1);
-        }
+            raise_error("Memory allocation failed for final_particles\n");
 
         /** @brief Copy innermost `npts` particles to final arrays and replace `particles` pointers. */
         for (int i = 0; i < 5; i++) // Loop over components
         {
             final_particles[i] = (double *)malloc(npts * sizeof(double));
             if (final_particles[i] == NULL)
-            {
-                fprintf(stderr, "Memory allocation failed for final_particles[%d]\n", i);
-                CLEAN_EXIT(1);
-            }
+                raise_error("Memory allocation failed for final_particles[%d]\n", i);
             /** @note Copy only the first `npts` elements (innermost after sort). */
             memcpy(final_particles[i], particles[i], npts * sizeof(double));
 
@@ -2346,10 +2232,7 @@ cleanup_diag_iteration:
         get_full_filename("data/particles.dat", 1, filename, sizeof(filename));
         FILE *fpp = fopen(filename, "wb"); // Binary mode for fprintf_bin output
         if (fpp == NULL)
-        {
-            fprintf(stderr, "Error opening file %s for writing initial particles\n", filename);
-            exit(1); // Use CLEAN_EXIT?
-        }
+            raise_error("Error opening file %s for writing initial particles\n", filename);
 
         /** @brief Write each particle's state (using fprintf_bin). */
         for (int i = 0; i < npts; i++) // i is current index (0..npts-1)
@@ -2504,7 +2387,8 @@ cleanup_diag_iteration:
     {
         /** @brief Create temporary LAndIndex array (size npts) to facilitate sorting by L. */
         LAndIndex *LAI = (LAndIndex *)malloc(npts * sizeof(LAndIndex));
-        if (!LAI) { fprintf(stderr, "Error: Failed to allocate LAI array\n"); CLEAN_EXIT(1); }
+        if (!LAI)
+            raise_error("Error: Failed to allocate LAI array\n");
         for (int i = 0; i < npts; i++) // 'i' here is the final_rank_id
         {
             if (use_closest_to_Lcompare) // Mode 1: Closest to Lcompare
@@ -2546,7 +2430,8 @@ cleanup_diag_iteration:
 
         /** @brief Allocate `chosen` array to store the final_rank_ids of the selected particles. */
         chosen = (int *)malloc(nlowest * sizeof(int));
-        if (!chosen) { fprintf(stderr, "Error: Failed to allocate chosen array\n"); CLEAN_EXIT(1); }
+        if (!chosen)
+            raise_error("Error: Failed to allocate chosen array\n");
 
         /** @brief Store the final rank IDs of the nlowest L particles into `chosen`. */
         for (int i = 0; i < nlowest; i++) chosen[i] = LAI[i].idx;
@@ -2586,14 +2471,13 @@ cleanup_diag_iteration:
      */
     /** @brief Allocate index map: `inverse_map[final_rank_id]` will store the current index `i` after sorting. */
     int *inverse_map = (int *)malloc(npts * sizeof(int));
-    if (!inverse_map) { fprintf(stderr, "Error: Failed to allocate inverse_map\n"); CLEAN_EXIT(1); }
+    if (!inverse_map)
+        raise_error("Error: Failed to allocate inverse_map\n");
 
     /** @brief Allocate particle scatter state array for AB3 history management after SIDM scattering. */
     g_particle_scatter_state = (int *)calloc(npts, sizeof(int)); // Use calloc to initialize all to 0
-    if (!g_particle_scatter_state) {
-        fprintf(stderr, "Error: Failed to allocate g_particle_scatter_state array\n");
-        CLEAN_EXIT(1);
-    }
+    if (!g_particle_scatter_state)
+        raise_error("Error: Failed to allocate g_particle_scatter_state array\n");
 
     /** @brief Calculate mass per particle based on *initial* particle count before stripping. Used for M(rank). */
     double deltaM = g_active_halo_mass / (double)npts_initial;
@@ -2615,10 +2499,9 @@ cleanup_diag_iteration:
     Vrad_block = (float *)malloc((size_t)npts * block_size * sizeof(float)); // Radial velocity
     // Check allocation results
     if (!L_block || !Rank_block || !R_block || !Vrad_block) {
-        fprintf(stderr, "Error: Failed to allocate block storage arrays.\n");
         free(L_block); free(Rank_block); free(R_block); free(Vrad_block); // Free any that were allocated
         L_block = NULL; Rank_block = NULL; R_block = NULL; Vrad_block = NULL; // Prevent double free in cleanup
-        CLEAN_EXIT(1);
+        raise_error("Error: Failed to allocate block storage arrays.\n");
     }
 
     /**
@@ -2721,8 +2604,7 @@ cleanup_diag_iteration:
             /** @brief Store initial energy in debug arrays at snapshot index 0. */
             store_debug_approxE(0, E_approx0, time0);
         } else {
-             fprintf(stderr, "Warning: Invalid DEBUG_PARTICLE_ID %d (must be 0 <= ID < %d)\n",
-                     debug_id, npts);
+             fprintf(stderr, "Warning: Invalid DEBUG_PARTICLE_ID %d (must be 0 <= ID < %d)\n", debug_id, npts);
         }
     }
 
@@ -4069,10 +3951,8 @@ cleanup_diag_iteration:
     {
         get_full_filename("data/particlesfinal.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
-        if (fp == NULL) {
-            fprintf(stderr, "Error opening file %s for writing\n", full_filename);
-            exit(1);
-        }
+        if (fp == NULL)
+            raise_error("Error opening file %s for writing\n", full_filename);
 
         for (i = 0; i < npts; i++) {
             fprintf_bin(fp, "%f %f %f  %f\n", particles[0][i], particles[1][i], particles[2][i], particles[3][i]);
@@ -4746,12 +4626,8 @@ cleanup_diag_iteration:
             float *tmpR_partdata_snap = (float *)malloc(npts * sizeof(float));
             float *tmpV_partdata_snap = (float *)malloc(npts * sizeof(float));
 
-            if (!tmpL_partdata_snap || !tmpRank_partdata_snap ||
-                !tmpR_partdata_snap || !tmpV_partdata_snap)
-            {
-                fprintf(stderr, "Error: out of memory in parallel loop.\n");
-                CLEAN_EXIT(1);
-            }
+            if (!tmpL_partdata_snap || !tmpRank_partdata_snap || !tmpR_partdata_snap || !tmpV_partdata_snap)
+                raise_error("Error: out of memory in parallel loop.\n");
 
             retrieve_all_particle_snapshot(
                 apd_filename_for_read,

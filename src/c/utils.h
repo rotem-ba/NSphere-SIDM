@@ -26,6 +26,14 @@
 #define cube(x) ((x) * (x) * (x))
 /** @def in_range(x) Checks if the value x is in the range [gte,lte]. */
 #define in_range(x,gte,lte) (x >= gte && x <= lte)
+/** @def if x<low set x=low, if x>high, set x=high */
+inline double clip(double x, double low, double high) {
+    if (x < low)
+        return low;
+    else if (x > high)
+        return high;
+    return x;
+}
 
 int isInteger(const char *str);
 int isFloat(const char *str);

@@ -230,3 +230,39 @@ void warn_low_memory(long long total_disk_space, long long available_space, doub
     printf("\nWarning: Simulation will use %.1f%% of available disk space!\n", 100.0 * total_disk_space / available_space);
     printf("After simulation: %.1f GB free (%.1f%% remaining)\n", available_gb-total_gb, usage_after * 100.0);
 }
+
+/**
+ * @brief Raises an error
+ */
+void raise_error(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    char* message;
+    if (asprintf(&message, format, args) != -1) {
+        fprintf(stderr, "%s", message);
+        free(message);
+    }
+
+    va_end(args);
+    CLEAN_EXIT(1);
+}
+
+/**
+ * @brief Raises an error and flushes stderr
+ */
+void raise_error_flush(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    char* message;
+    if (asprintf(&message, format, args) != -1) {
+        fprintf(stderr, "%s", message);
+        free(message);
+    }
+
+    fflush(stderr);
+
+    va_end(args);
+    CLEAN_EXIT(1);
+}

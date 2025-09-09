@@ -27,5 +27,7 @@ void log_scattering();
 void log_disk_space(long long size);
 void raise_insufficient_memory(long long total_disk_space, long long available_space);
 void warn_low_memory(long long total_disk_space, long long available_space, double usage_after);
+void raise_error(const char* format, ...);
+void raise_error_flush(const char* format, ...);
 
 #endif // LOGGING_H

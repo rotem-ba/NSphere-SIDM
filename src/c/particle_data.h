@@ -35,11 +35,17 @@ extern float *Vrad_block; ///< Radial velocity block.
 
 /** @brief Variables for tracking low angular momentum particles. */
 extern int nlowest;           ///< Number of lowest angular momentum particles to track.
-extern int *chosen;        ///< Array of indices (original IDs) for selected low-L particles.
-extern double **lowestL_r; ///< Radial positions of tracked low-L particles over time [particle][time_step].
-extern double **lowestL_E; ///< Energy values of tracked low-L particles over time [particle][time_step].
-extern double **lowestL_L; ///< Angular momenta of tracked low-L particles over time [particle][time_step].
+extern int *chosen;           ///< Array of indices (original IDs) for selected low-L particles.
+extern double **lowestL_r;    ///< Radial positions of tracked low-L particles over time [particle][time_step].
+extern double **lowestL_E;    ///< Energy values of tracked low-L particles over time [particle][time_step].
+extern double **lowestL_L;    ///< Angular momenta of tracked low-L particles over time [particle][time_step].
 
+/**
+ * @brief Common IC generation variables shared between profile pathways.
+ * @details These variables are declared before the profile selection block
+ *          and will be populated by whichever profile pathway is chosen.
+ */
+extern double **particles;           ///< Main particle data array
 
 /**
  * @brief Structure to track angular momentum with particle index and direction.
