@@ -551,6 +551,7 @@
   * @see read_initial_conditions
   */
  void write_initial_conditions(double **particles, int npts, const char *filename) {
+     printf("Saving initial conditions to %s...\n", filename);
      FILE *fp = fopen(filename, "wb");
      if (!fp) {
          fprintf(stderr, "Error: cannot open '%s' for writing initial conditions.\n", filename);
@@ -1034,4 +1035,9 @@ void fill_suffix_tags() {
 
     /** @brief Append the parameter tag to the global suffix. */
     strcat(g_file_suffix, temp); // Append temp to g_file_suffix
+}
+
+void free_if_exists(double *pointer) {
+    if (pointer)
+        free(pointer);
 }

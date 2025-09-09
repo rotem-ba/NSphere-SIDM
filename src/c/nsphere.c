@@ -597,22 +597,21 @@ printf("  \n");
                             double rr_k = radius_diag_arr[k];
                             double rs_k = rr_k / current_diag_rc;
                             double term_s_k = rs_k + 0.01;
-                            if (term_s_k <= 1e-9) term_s_k = 1e-9;
+                            if (term_s_k <= 1e-9)
+                                term_s_k = 1e-9;
                             double term_n_k = (1.0 + rs_k) * (1.0 + rs_k);
                             double term_c_base_k = rs_k / current_diag_falloff_C;
                             double term_c_k = 1.0 + pow(term_c_base_k, 10.0);
                             double rho_shape_k = (term_s_k < 1e-9 || term_n_k < 1e-9 || term_c_k < 1e-9) ? 0.0 : (1.0 / (term_s_k * term_n_k * term_c_k));
-                            if (rr_k < 1e-6 && term_s_k < 1e-3 && rho_shape_k == 0.0) {
+                            if (rr_k < 1e-6 && term_s_k < 1e-3 && rho_shape_k == 0.0)
                                rho_shape_k = 1.0 / (term_s_k * term_n_k * term_c_k);
-                            }
                             double rho_r_k = nfw_params_diag[2] * rho_shape_k;
                             fprintf_bin(fp_diag_dens, "%f %f\n", rr_k, rho_r_k);
                         }
                         fclose(fp_diag_dens);
                         log_message("DEBUG", "Wrote diagnostic file: %s", diag_fname_dens);
-                    } else {
+                    } else
                         log_message("ERROR", "Failed to open diagnostic file: %s", diag_fname_dens);
-                    }
 
                     // Write NFW diagnostic dPsi/dr
                     char diag_fname_dpsi[256];
@@ -631,9 +630,8 @@ printf("  \n");
                         }
                         fclose(fp_diag_dpsi);
                         log_message("DEBUG", "Wrote diagnostic file: %s", diag_fname_dpsi);
-                    } else {
+                    } else
                         log_message("ERROR", "Failed to open diagnostic file: %s", diag_fname_dpsi);
-                    }
 
                     // Write NFW diagnostic drho/dPsi
                     char diag_fname_drhodpsi[256];
@@ -644,7 +642,8 @@ printf("  \n");
                     if (fp_diag_drhodpsi) {
                         for (int k = 1; k < num_points_diag - 1; k++) {
                             double rr_k = radius_diag_arr[k];
-                            if (rr_k <= 1e-9) continue;
+                            if (rr_k <= 1e-9)
+                                continue;
 
                             double drhodr_val_k = drhodr_profile_nfwcutoff(rr_k, current_diag_rc, nfw_params_diag[2], current_diag_falloff_C);
                             double Menc_k = gsl_spline_eval(splinemass_diag, rr_k, enclosedmass_diag);
@@ -658,9 +657,8 @@ printf("  \n");
                         }
                         fclose(fp_diag_drhodpsi);
                         log_message("DEBUG", "Wrote diagnostic file: %s", diag_fname_drhodpsi);
-                    } else {
+                    } else
                         log_message("ERROR", "Failed to open diagnostic file: %s", diag_fname_drhodpsi);
-                    }
 
                     log_message("DEBUG", "Finished diagnostic iteration %d, spline_base=%d", Nintegration_diag, Nspline_diag_base);
 
@@ -743,8 +741,7 @@ cleanup_diag_iteration:
         F_nfw_calc.params = nfw_params;
 
         // Calculate normalization for NFW profile
-        int status_norm = gsl_integration_qag(&F_nfw_calc, 0.0, rmax, 1e-12, 1e-12, 1000,
-                            GSL_INTEG_GAUSS51, w, &nfw_result, &nfw_error);
+        int status_norm = gsl_integration_qag(&F_nfw_calc, 0.0, rmax, 1e-12, 1e-12, 1000, GSL_INTEG_GAUSS51, w, &nfw_result, &nfw_error);
         normalization = nfw_result;
 
         if (g_doDebug) {
@@ -766,9 +763,8 @@ cleanup_diag_iteration:
             log_message("DEBUG", "Calculated nt_nfw (density scale factor):");
             log_message("DEBUG", "  current_profile_halo_mass (target M_total) = %.3e Msun", current_profile_halo_mass);
             log_message("DEBUG", "  nt_nfw = %.3e / (4pi * %.3e) = %.6e", current_profile_halo_mass, normalization, nfw_params[2]);
-            if (!isfinite(nfw_params[2]) || (fabs(nfw_params[2]) < 1e-100 && fabs(nfw_params[2]) > 0)) {
+            if (!isfinite(nfw_params[2]) || (fabs(nfw_params[2]) < 1e-100 && fabs(nfw_params[2]) > 0))
                 log_message("WARNING", "nt_nfw is NaN, Inf, or extremely small/large: %.6e", nfw_params[2]);
-            }
         }
 
         log_message("INFO", "NFW Profile: RC=%.3f kpc, Halo Mass=%.3e Msun, Rmax_norm_calc=%.3f kpc, nt_nfw_scaler=%.6e",
@@ -792,8 +788,7 @@ cleanup_diag_iteration:
             double r_current = (double)i_nfw * rmax / (num_points - 1);
             if (i_nfw == num_points - 1) r_current = rmax; // Ensure exact endpoint
 
-            gsl_integration_qag(&F_nfw_calc, 0.0, r_current, 1e-12, 1e-12,
-                                1000, GSL_INTEG_GAUSS51, w, &nfw_result, &nfw_error);
+            gsl_integration_qag(&F_nfw_calc, 0.0, r_current, 1e-12, 1e-12, 1000, GSL_INTEG_GAUSS51, w, &nfw_result, &nfw_error);
             mass[i_nfw] = 4.0 * M_PI * nfw_result;
             radius[i_nfw] = r_current; // This 'radius' array will be sorted with nPsivalues
             radius_monotonic_grid_nfw[i_nfw] = r_current; // This 'radius_monotonic_grid_nfw' stays sorted by r
@@ -806,9 +801,8 @@ cleanup_diag_iteration:
             log_message("DEBUG", "  rmax for M(r) array = %.3e kpc", rmax);
             if (num_points > 0) {
                 log_message("DEBUG", "  Final Mass at rmax (radius[num_points-1]=%.3e kpc): %.3e Msun", radius[num_points-1], mass[num_points-1]);
-                if (fabs(mass[num_points-1] - current_profile_halo_mass) / current_profile_halo_mass > 0.1) {
+                if (fabs(mass[num_points-1] - current_profile_halo_mass) / current_profile_halo_mass > 0.1)
                     log_message("WARNING", "Mass at rmax (%.3e) differs significantly from target halo mass (%.3e)!", mass[num_points-1], current_profile_halo_mass);
-                }
             }
             log_message("DEBUG", "End of M(r) data summary.");
         }
@@ -853,11 +847,11 @@ cleanup_diag_iteration:
             double r_current = radius[i_nfw];
             double r1_psi = fmax(r_current, current_profile_rc / 1000000.0);
 
-            gsl_integration_qagiu(&F_for_psi_nfw, r1_psi, 1e-12, 1e-12,
-                                  1000, w, &nfw_result, &nfw_error);
+            gsl_integration_qagiu(&F_for_psi_nfw, r1_psi, 1e-12, 1e-12, 1000, w, &nfw_result, &nfw_error);
             double first_term_psi = G_CONST * gsl_spline_eval(splinemass, r1_psi, enclosedmass) / r1_psi;
             double second_term_psi = G_CONST * 4.0 * M_PI * nfw_result;
-            if (r1_psi < 1e-9) first_term_psi = 0; // Avoid division by zero
+            if (r1_psi < 1e-9)
+                first_term_psi = 0; // Avoid division by zero
             Psivalues[i_nfw] = (first_term_psi + second_term_psi);
             nPsivalues[i_nfw] = -Psivalues[i_nfw];
         }
@@ -867,9 +861,8 @@ cleanup_diag_iteration:
             if (num_points > 1) {
                 log_message("DEBUG", "  Psivalues[0] (Psimax candidate) = %.6e", Psivalues[0]);
                 log_message("DEBUG", "  Psivalues[num_points-1] (Psimin candidate) = %.6e", Psivalues[num_points-1]);
-                if (Psivalues[0] <= Psivalues[num_points-1]) {
+                if (Psivalues[0] <= Psivalues[num_points-1])
                     log_message("WARNING", "Psi(r) may not be monotonic decreasing (Psivalues[0]=%.3e <= Psivalues[end]=%.3e)!", Psivalues[0], Psivalues[num_points-1]);
-                }
             }
             log_message("DEBUG", "End of Psi(r) data summary.");
         }
@@ -937,12 +930,15 @@ cleanup_diag_iteration:
             int mono_violations_npsi = 0;
             for (int k_chk = 0; k_chk < num_points - 1; ++k_chk) {
                 if (!(nPsivalues_for_rPsi_spline[k_chk+1] > nPsivalues_for_rPsi_spline[k_chk])) {
-                    if (mono_violations_npsi < 5) log_message("DEBUG", "nPsivalues_for_rPsi_spline not strictly increasing at index %d", k_chk);
+                    if (mono_violations_npsi < 5)
+                        log_message("DEBUG", "nPsivalues_for_rPsi_spline not strictly increasing at index %d", k_chk);
                     mono_violations_npsi++;
                 }
             }
-            if (mono_violations_npsi > 0) log_message("WARNING", "Total nPsivalues violations in r(Psi) spline: %d", mono_violations_npsi);
-            else if (g_doDebug) log_message("DEBUG", "nPsivalues_for_rPsi_spline confirmed strictly monotonic for r(Psi) spline.");
+            if (mono_violations_npsi > 0)
+                log_message("WARNING", "Total nPsivalues violations in r(Psi) spline: %d", mono_violations_npsi);
+            else if (g_doDebug)
+                log_message("DEBUG", "nPsivalues_for_rPsi_spline confirmed strictly monotonic for r(Psi) spline.");
         }
 
         // Initialize splinerofPsi with the sorted temporary arrays
@@ -1094,10 +1090,9 @@ cleanup_diag_iteration:
             // Evalues has num_points + 1 elements, indexed 0 to num_points.
             for (int chk_e = 0; chk_e < num_points; ++chk_e) { // Loop up to num_points-1 to check Evalues[chk_e+1] vs Evalues[chk_e]
                 if (!(Evalues[chk_e+1] > Evalues[chk_e])) {
-                    if (monotonicity_violations < 20) { // Print first few violations
+                    if (monotonicity_violations < 20)  // Print first few violations
                         fprintf(stderr, "  MONOTONICITY_VIOLATION_PRE_SPLINE: Evalues[%d]=%.17e, Evalues[%d]=%.17e (Diff: %.3e)\n",
                                chk_e, Evalues[chk_e], chk_e+1, Evalues[chk_e+1], Evalues[chk_e+1] - Evalues[chk_e]);
-                    }
                     monotonicity_violations++;
                 }
             }
@@ -1125,15 +1120,14 @@ cleanup_diag_iteration:
             printf("NFW_PATH: Reading initial conditions from %s...\n", readInitFilename);
             read_initial_conditions(particles, npts_initial, readInitFilename);
         } else if (!g_doRestart) {
-            if (tidal_fraction > 0.0) {
+            if (tidal_fraction > 0.0)
                 log_message("INFO", "NFW IC Gen: Initial particle count before stripping: %d", npts_initial);
-            }
             log_message("INFO", "NFW IC Gen: Generating %d initial particle positions and velocities...", npts_initial);
 
             // Print overall Psimin, Psimax for NFW path once
             if (npts_initial > 0) { // Avoid printing if no particles
                 if (Psimax <= Psimin) {
-                }
+                } // TODO - ?
             }
 
             /**
@@ -1210,9 +1204,8 @@ cleanup_diag_iteration:
                             fabs(gsl_interp_eval_deriv(g_main_fofEinterp, Evalues,
                                                        innerintegrandvalues, E_test_nfw, g_main_fofEacc));
                     }
-                    if (isfinite(currentvalue_nfw) && currentvalue_nfw > nfw_maxvalue) {
+                    if (isfinite(currentvalue_nfw) && currentvalue_nfw > nfw_maxvalue)
                         nfw_maxvalue = currentvalue_nfw;
-                    }
                 }
                 maxv2f_nfw[i_r_nfw] = nfw_maxvalue;
             }
@@ -1220,10 +1213,10 @@ cleanup_diag_iteration:
             // Extrapolate for r=0
             if (num_maxv2f >= 3) {
                 maxv2f_nfw[0] = 2.0 * maxv2f_nfw[1] - maxv2f_nfw[2];
-                if (maxv2f_nfw[0] < 0) maxv2f_nfw[0] = 0;
-            } else {
+                if (maxv2f_nfw[0] < 0)
+                    maxv2f_nfw[0] = 0;
+            } else
                 maxv2f_nfw[0] = maxv2f_nfw[1];
-            }
 
             // Create spline for max v^2 * f(E)
             gsl_interp_accel *maxv2faccel_nfw = gsl_interp_accel_alloc();
@@ -1537,7 +1530,8 @@ cleanup_diag_iteration:
                     F.params = &params2;
                     // Ensure sqrt argument is non-negative
                     double sqrt_arg_diag = calE - Psimin;
-                    if (sqrt_arg_diag < 0) sqrt_arg_diag = 0.0;
+                    if (sqrt_arg_diag < 0)
+                        sqrt_arg_diag = 0.0;
                     gsl_integration_qag(&F, sqrt(sqrt_arg_diag) / 1.0e4, sqrt(sqrt_arg_diag), 1.0e-12, 1.0e-12, Nintegration, 6, w, &result, &error);
                     innerintegrandvalues[i] = result;
                 }
@@ -1824,15 +1818,15 @@ cleanup_diag_iteration:
 
     // Determine Initial Conditions Seed
     if (!g_initial_cond_seed_provided) {
-        if (g_master_seed_provided) {
+        if (g_master_seed_provided)
             g_initial_cond_seed = g_master_seed + 1; // Deterministic offset
-        } else if (g_attempt_load_seeds) {
+        else if (g_attempt_load_seeds) {
             get_full_filename(g_initial_cond_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
             fp_seed = fopen(seed_filepath, "r");
             if (fp_seed) {
-                if (fscanf(fp_seed, "%lu", &g_initial_cond_seed) == 1) {
+                if (fscanf(fp_seed, "%lu", &g_initial_cond_seed) == 1)
                     log_message("INFO", "Loaded initial conditions seed %lu from %s", g_initial_cond_seed, seed_filepath);
-                } else {
+                else {
                     g_initial_cond_seed = current_time_pid_seed + 100; // Fallback if read fails
                     log_message("WARNING", "Failed to read IC seed from %s, generating new: %lu", seed_filepath, g_initial_cond_seed);
                 }
@@ -1845,15 +1839,14 @@ cleanup_diag_iteration:
             g_initial_cond_seed = current_time_pid_seed + 100; // Default generation
             log_message("INFO", "Generating new IC seed: %lu", g_initial_cond_seed);
         }
-    } else {
+    } else
         log_message("INFO", "Using user-provided IC seed: %lu", g_initial_cond_seed);
-    }
 
     // Determine SIDM Seed
     if (!g_sidm_seed_provided) {
-        if (g_master_seed_provided) {
+        if (g_master_seed_provided)
             g_sidm_seed = g_master_seed + 2; // Deterministic offset, different from IC seed
-        } else if (g_attempt_load_seeds) {
+        else if (g_attempt_load_seeds) {
             get_full_filename(g_sidm_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
             fp_seed = fopen(seed_filepath, "r");
             if (fp_seed) {
@@ -1872,9 +1865,8 @@ cleanup_diag_iteration:
             g_sidm_seed = current_time_pid_seed + 200; // Default generation
             log_message("INFO", "Generating new SIDM seed: %lu", g_sidm_seed);
         }
-    } else {
+    } else
         log_message("INFO", "Using user-provided SIDM seed: %lu", g_sidm_seed);
-    }
 
     // If --readinit is used, we should generally use a specified/loaded SIDM seed
     // or a newly generated one, NOT one derived from IC seed, as ICs are fixed.
@@ -1936,22 +1928,19 @@ cleanup_diag_iteration:
             // Windows: use copy
             char copy_cmd[1024];
             sprintf(copy_cmd, "copy \"%s\" \"%s\"", seed_filepath, linkname_sidm);
-            if (system(copy_cmd) != 0) {
+            if (system(copy_cmd) != 0)
                 log_message("WARNING", "Failed to copy SIDM seed file from %s to %s", seed_filepath, linkname_sidm);
-            }
         #else
             // Unix/Linux/macOS: use symbolic link
             unlink(linkname_sidm); // Remove existing link if present
             // Extract basename for relative symlink within data directory
             const char *basename_sidm = strrchr(seed_filepath, '/');
             basename_sidm = basename_sidm ? basename_sidm + 1 : seed_filepath; // Skip the '/' or use full name if no '/'
-            if (symlink(basename_sidm, linkname_sidm) != 0) {
+            if (symlink(basename_sidm, linkname_sidm) != 0)
                 log_message("WARNING", "Failed to create symbolic link from %s to %s", basename_sidm, linkname_sidm);
-            }
         #endif
-    } else {
+    } else
         log_message("ERROR", "Failed to save SIDM seed to %s", seed_filepath);
-    }
 
     /**
      * @brief INITIAL CONDITION HANDLING block.
@@ -1978,7 +1967,8 @@ cleanup_diag_iteration:
          *          Uses inverse transform sampling for radius (via M(r) spline) and rejection
          *          sampling for velocity magnitude (using `f(E)` derivative spline).
          */
-        if (tidal_fraction > 0.0) log_message("INFO", "Cored IC Gen: Initial particle count before stripping: %d", npts_initial);
+        if (tidal_fraction > 0.0)
+            log_message("INFO", "Cored IC Gen: Initial particle count before stripping: %d", npts_initial);
         log_message("INFO", "Cored IC Gen: Generating %d initial particle positions and velocities...", npts_initial);
 
         double vel, ratio, Psir, mu, maxv, maxvalue;
@@ -1988,41 +1978,45 @@ cleanup_diag_iteration:
         gsl_interp_accel *rofMaccel = gsl_interp_accel_alloc();
         gsl_spline *splinerofM = gsl_spline_alloc(gsl_interp_cspline, num_points);
         // Add checks for allocation failure
-        if (!rofMaccel || !splinerofM) { /* Handle error */ CLEAN_EXIT(1); }
+        if (!rofMaccel || !splinerofM) /* Handle error */
+            CLEAN_EXIT(1);
         gsl_spline_init(splinerofM, mass, radius, num_points);
 
         /** @brief Set up GSL spline for the maximum of `v^2 * f(E)` envelope at each radius `r`.
          *         Used for rejection sampling efficiency. f(E) proportional to dI/dE. */
         double *maxv2f = (double *)malloc(num_points * sizeof(double));
-        if (!maxv2f) { /* Handle error */ CLEAN_EXIT(1); }
+        if (!maxv2f) /* Handle error */
+            CLEAN_EXIT(1);
 
-        for (int i_r = 1; i_r < num_points; i_r++)
-        {
+        for (int i_r = 1; i_r < num_points; i_r++) {
             maxvalue = 0.0;
             Psir = evaluatespline(splinePsi, Psiinterp, radius[i_r]);
             maxv = sqrt(2.0 * (Psir - Psimin));
-            for (int j_v = 1; j_v < num_points - 2; j_v++)
-            {
+            for (int j_v = 1; j_v < num_points - 2; j_v++) {
                 vel = maxv * ((double)j_v) / ((double)num_points);
                 double currentvalue = vel * vel * gsl_interp_eval_deriv(g_main_fofEinterp, Evalues, innerintegrandvalues, Psir - (0.5) * vel * vel, g_main_fofEacc);
-                if (currentvalue > maxvalue) maxvalue = currentvalue;
+                if (currentvalue > maxvalue)
+                    maxvalue = currentvalue;
             }
             maxv2f[i_r] = maxvalue;
         }
         // Extrapolate for r=0 assuming linear behavior near origin based on points 1 and 2
         if (num_points >= 3) {
             maxv2f[0] = 2.0 * maxv2f[1] - maxv2f[2];
-            if (maxv2f[0] < 0.0) maxv2f[0] = 0.0; // Ensure non-negative
-        } else if (num_points == 2) {
+            if (maxv2f[0] < 0.0)
+                maxv2f[0] = 0.0; // Ensure non-negative
+        } else if (num_points == 2)
              maxv2f[0] = maxv2f[1]; // Simple fallback
-        } else {
+        else
              maxv2f[0] = 0.0; // Fallback for very few points
-        }
 
         gsl_interp_accel *maxv2faccel = gsl_interp_accel_alloc();
         gsl_spline *splinemaxv2f = gsl_spline_alloc(gsl_interp_cspline, num_points);
         // Add checks for allocation failure
-        if (!maxv2faccel || !splinemaxv2f) { /* Handle error */ free(maxv2f); CLEAN_EXIT(1); }
+        if (!maxv2faccel || !splinemaxv2f) { /* Handle error */
+           free(maxv2f);
+           CLEAN_EXIT(1);
+        }
         gsl_spline_init(splinemaxv2f, radius, maxv2f, num_points);
 
         /**
@@ -2030,8 +2024,7 @@ cleanup_diag_iteration:
          * @note Uses GSL random number generation. For thread-safety in parallel code,
          *       thread-specific RNG states should be used instead of the global state.
          */
-        for (i = 0; i < npts_initial; i++) // Loop over particles to generate
-        {
+        for (i = 0; i < npts_initial; i++) { // Loop over particles to generate
             /** @note 1. Choose radius `r` using inverse transform sampling on M(r). */
             double mass_frac_sample = gsl_rng_uniform(g_rng) * 0.999999; // Avoid sampling exactly M_total
             double mass_sample = mass_frac_sample * g_cored_profile_halo_mass;
@@ -2042,14 +2035,12 @@ cleanup_diag_iteration:
             Psir = evaluatespline(splinePsi, Psiinterp, particles[0][i]);
             maxv = sqrt(2.0 * (Psir - Psimin));
             int vflag = 0;
-            while (vflag == 0)
-            {
+            while (vflag == 0) {
                 vel = gsl_rng_uniform(g_rng) * maxv;
                 // Evaluate target function (proportional to v^2 * f(E))
                 double target_func_val = vel * vel * gsl_interp_eval_deriv(g_main_fofEinterp, Evalues, innerintegrandvalues, Psir - (0.5) * vel * vel, g_main_fofEacc);
                 ratio = (maxvalue > 1e-15) ? (target_func_val / maxvalue) : 0.0; // Avoid division by zero
-                if (gsl_rng_uniform(g_rng) < ratio)
-                {
+                if (gsl_rng_uniform(g_rng) < ratio) {
                     particles[1][i] = vel;
                     vflag = 1; // Accept
                 }
@@ -2086,10 +2077,7 @@ cleanup_diag_iteration:
      * @see write_initial_conditions
      */
     if (doWriteInit && !g_doRestart)
-    {
-        printf("Saving initial conditions to %s...\n", writeInitFilename);
         write_initial_conditions(particles, npts_initial, writeInitFilename);
-    }
 
     /**
      * @brief TIDAL STRIPPING IMPLEMENTATION block.
@@ -2102,10 +2090,10 @@ cleanup_diag_iteration:
      * @see reassign_orig_ids_with_rank
      * @see sort_particles_with_alg
      */
-    if (!g_doRestart) // Skip stripping if restarting
-    {
+    if (!g_doRestart){ // Skip stripping if restarting
         /** @note Only show stripping message if `--ftidal` was used. */
-        if (tidal_fraction > 0.0) printf("Tidal stripping: sorting and retaining inner %.1f%% of particles...\n", (1.0 - tidal_fraction) * 100.0);
+        if (tidal_fraction > 0.0)
+            printf("Tidal stripping: sorting and retaining inner %.1f%% of particles...\n", (1.0 - tidal_fraction) * 100.0);
 
         /** @note Sort all `npts_initial` particles by radius using basic quadsort. */
         sort_particles_with_alg(particles, npts_initial, "quadsort"); // Sorts by particles[0]
@@ -2116,8 +2104,7 @@ cleanup_diag_iteration:
             raise_error("Memory allocation failed for final_particles\n");
 
         /** @brief Copy innermost `npts` particles to final arrays and replace `particles` pointers. */
-        for (int i = 0; i < 5; i++) // Loop over components
-        {
+        for (int i = 0; i < 5; i++){ // Loop over components
             final_particles[i] = (double *)malloc(npts * sizeof(double));
             if (final_particles[i] == NULL)
                 raise_error("Memory allocation failed for final_particles[%d]\n", i);
@@ -2131,8 +2118,7 @@ cleanup_diag_iteration:
         free(final_particles); // Free the temporary ** structure, not the data arrays
 
         /** @note Only show completion message if `--ftidal` was used. */
-        if (tidal_fraction > 0.0)
-        {
+        if (tidal_fraction > 0.0) {
             printf("Tidal stripping complete: %d particles retained.\n\n", npts);
         }
 
@@ -2156,9 +2142,7 @@ cleanup_diag_iteration:
      * @see kmsec_to_kpcmyr
      */
     if (!g_doRestart)
-    {
-        for (i = 0; i < npts; i++) // Loop over final npts particles
-        {
+        for (i = 0; i < npts; i++) { // Loop over final npts particles
             // particles[1] holds velocity magnitude 'v' from Sample Generator
             // particles[4] holds orientation 'mu' from Sample Generator
             particles[1][i] *= particles[4][i]; ///< Apply orientation: v_rad = v * mu
@@ -2167,7 +2151,6 @@ cleanup_diag_iteration:
             particles[2][i] *= kmsec_to_kpcmyr; ///< Convert L [kpc*km/s] to [kpc^2/Myr]
             // particles[4] (mu) is no longer needed after this step.
         }
-    }
 
     /**
      * @brief PARTICLE DATA EXPORT block (Initial State for Simulation).
@@ -2180,8 +2163,7 @@ cleanup_diag_iteration:
      *          Skipped if `skip_file_writes` is true (restart mode).
      * @see fprintf_bin
      */
-    if (!skip_file_writes)
-    {
+    if (!skip_file_writes) {
         char filename[256];
         get_full_filename("data/particles.dat", 1, filename, sizeof(filename));
         FILE *fpp = fopen(filename, "wb"); // Binary mode for fprintf_bin output
@@ -2190,13 +2172,11 @@ cleanup_diag_iteration:
 
         /** @brief Write each particle's state (using fprintf_bin). */
         for (int i = 0; i < npts; i++) // i is current index (0..npts-1)
-        {
             fprintf_bin(fpp, "%f %f %f %f\n", // Format string likely ignored by fprintf_bin beyond types
                         particles[0][i], // Radius (kpc)
                         particles[1][i], // Radial velocity (kpc/Myr)
                         particles[2][i], // Angular momentum (kpc²/Myr)
                         particles[3][i]);// Particle ID (final rank, written as float)
-        }
         fclose(fpp);
         printf("Wrote initial particle state to %s\n", filename);
     } // End skip_file_writes block for particles.dat
@@ -2212,11 +2192,10 @@ cleanup_diag_iteration:
      * @see dt
      */
     double characteristic_radius_for_tdyn;
-    if (g_use_nfw_profile) {
+    if (g_use_nfw_profile)
         characteristic_radius_for_tdyn = g_nfw_profile_rc; // Set from g_scale_radius_param
-    } else {
+    else
         characteristic_radius_for_tdyn = g_cored_profile_rc; // Set from g_scale_radius_param
-    }
     double tdyn = 1.0 / sqrt((VEL_CONV_SQ * G_CONST) * g_active_halo_mass / cube(characteristic_radius_for_tdyn));
     double totaltime = (double)tfinal_factor * tdyn; ///< Total simulation time (Myr)
     double dt = totaltime / ((double)Ntimes);        ///< Individual timestep size (Myr)
@@ -2229,7 +2208,8 @@ cleanup_diag_iteration:
     double start_time = omp_get_wtime(); ///< Wall-clock start time for timing
     /** @brief Setup progress reporting steps (array `print_steps` holding step numbers for 0%, 5%, ..., 100%). */
     int print_steps[21];
-    for (int k = 0; k <= 20; k++) print_steps[k] = (int)floor(k * 0.05 * Ntimes); // Calculate steps for progress output
+    for (int k = 0; k <= 20; k++)
+        print_steps[k] = (int)floor(k * 0.05 * Ntimes); // Calculate steps for progress output
 
 
 
@@ -2252,10 +2232,12 @@ cleanup_diag_iteration:
     // Index `p` corresponds to the particle with final_rank_id `p`.
     double **trajectories = (double **)malloc(upper_npts_num_traj * sizeof(double *)); // Radius (kpc)
     // Add checks for allocation failure
-    for (i = 0; i < upper_npts_num_traj; i++) trajectories[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
+    for (i = 0; i < upper_npts_num_traj; i++)
+        trajectories[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
     double **energies = (double **)malloc(upper_npts_num_traj * sizeof(double *)); // Relative Energy E_rel (per unit mass)
     // Add checks for allocation failure
-    for (i = 0; i < upper_npts_num_traj; i++) energies[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
+    for (i = 0; i < upper_npts_num_traj; i++)
+        energies[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
 
     /** @brief Allocate arrays for additional tracked properties [tracked_particle_index][time_step]. */
     double **velocities_arr = (double **)malloc(upper_npts_num_traj * sizeof(double *)); // Radial velocity (kpc/Myr)
@@ -2269,8 +2251,7 @@ cleanup_diag_iteration:
     // Add checks for allocation failure
 
     // Allocate memory for each particle's timestep history
-    for (i = 0; i < upper_npts_num_traj; i++)
-    {
+    for (i = 0; i < upper_npts_num_traj; i++) {
         velocities_arr[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
         mu_arr[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
         E_arr[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // If kept, needs allocation check
@@ -2295,16 +2276,14 @@ cleanup_diag_iteration:
     // Add checks for allocation failure
 
     /** @brief Calculate initial E_rel and L for each particle and store by final rank ID. */
-    for (i = 0; i < npts; i++) // Loop through particles 0..npts-1 (current index 'i')
-    {
+    for (i = 0; i < npts; i++) { // Loop through particles 0..npts-1 (current index 'i')
         double rr = particles[0][i];            // Radius (at current index i)
         double vrad = particles[1][i];          // Radial velocity (at current index i)
         double ell = particles[2][i];           // Angular momentum (at current index i)
         int final_rank_id = (int)particles[3][i]; // Final rank ID (stored at current index i)
 
         // Ensure final_rank_id is within bounds [0, npts-1]
-        if (final_rank_id < 0 || final_rank_id >= npts)
-        {
+        if (final_rank_id < 0 || final_rank_id >= npts) {
             log_message("ERROR", "Invalid remapped_id %d encountered at index %d during initial E/L calculation.", final_rank_id, i);
             // Handle error appropriately, maybe skip or exit
             continue;
@@ -2343,17 +2322,13 @@ cleanup_diag_iteration:
         LAndIndex *LAI = (LAndIndex *)malloc(npts * sizeof(LAndIndex));
         if (!LAI)
             raise_error("Error: Failed to allocate LAI array\n");
-        for (int i = 0; i < npts; i++) // 'i' here is the final_rank_id
-        {
-            if (use_closest_to_Lcompare) // Mode 1: Closest to Lcompare
-            {
+        for (int i = 0; i < npts; i++) { // 'i' here is the final_rank_id
+            if (use_closest_to_Lcompare) { // Mode 1: Closest to Lcompare
                 double L_initial = L_i_arr[i];
                 LAI[i].L = (L_initial - Lcompare) * (L_initial - Lcompare); // Store squared difference
                 // Store sign of L_initial, used later for reconstruction or potentially unused
                 LAI[i].sign = (L_initial >= 0.0) ? 1 : -1;
-            }
-            else // Mode 0: Lowest absolute L (using signed L for now based on original code)
-            {
+            } else { // Mode 0: Lowest absolute L (using signed L for now based on original code)
                 LAI[i].L = L_i_arr[i]; // Store initial L value (signed)
                 LAI[i].sign = 0;       // Sign field not used for sorting in this mode
             }
@@ -2365,21 +2340,18 @@ cleanup_diag_iteration:
 
         /** @brief If using Mode 1 (closest to Lcompare), reconstruct actual L values in LAI[].L.
          *         Note: This is primarily for the debug log output below; the primary goal is selecting indices. */
-        if (use_closest_to_Lcompare) {
-            for (int i = 0; i < npts; i++) {
+        if (use_closest_to_Lcompare)
+            for (int i = 0; i < npts; i++)
                 // Reconstruct L = Lcompare +/- sqrt(diff^2). The stored sign determines +/-.
                 // Assumes LAI[i].sign stored the sign of (L_initial - Lcompare) or similar intention.
                 // If sign was sign(L_initial), this reconstruction isn't quite right but matches original apparent logic.
                 LAI[i].L = Lcompare + LAI[i].sign * sqrt(LAI[i].L);
-            }
-        }
 
         /** @brief Log the lowest L particles (L value and final_rank_id) if not restarting. */
         if (!g_doRestart) {
              log_message("DEBUG", "Selecting %d lowest L particles (mode=%d):", nlowest, use_closest_to_Lcompare);
-             for (int i = 0; i < nlowest; i++) {
+             for (int i = 0; i < nlowest; i++)
                  log_message("DEBUG", "  Rank %d: L=%.6f ID=%d", i, LAI[i].L, LAI[i].idx);
-             }
         }
 
         /** @brief Allocate `chosen` array to store the final_rank_ids of the selected particles. */
@@ -2470,45 +2442,36 @@ cleanup_diag_iteration:
      * @see skip_simulation
      * @see find_last_processed_snapshot
      */
-    if (g_doRestart)
-    {
+    if (g_doRestart) {
         /** @brief Check for existence and size of the particle data file. */
         FILE *check_file = fopen(apd_filename, "rb");
-        if (check_file)
-        {
+        if (check_file) {
             /** @brief Determine file size by seeking to end and getting position. */
             fseek(check_file, 0, SEEK_END);
             long file_size = ftell(check_file);
             fclose(check_file);
 
-            if (file_size > 0)
-            {
+            if (file_size > 0) {
                 /** @brief Valid data file found - enable simulation phase bypass. */
                 char human_size[32];
                 format_file_size(file_size, human_size, sizeof(human_size));
-                printf("Restart mode: Found existing all_particle_data file '%s' (%s).\n",
-                       apd_filename, human_size);
+                printf("Restart mode: Found existing all_particle_data file '%s' (%s).\n", apd_filename, human_size);
                 skip_simulation = 1;
 
                 /** @brief Display appropriate message based on particle count comparison. */
-                if (npts == npts_initial) {
+                if (npts == npts_initial)
                     printf("Skipping simulation phase and proceeding to post-processing. "
                            "Initial condition generation already performed, skipping these steps.\n\n");
-                } else {
+                else
                     printf("Skipping simulation phase and proceeding to post-processing. "
                            "Initial condition generation and tidal stripping already performed, "
                            "skipping these steps.\n\n");
-                }
-            }
-            else {
+            } else
                 /** @brief File exists but contains no data - simulation required. */
                 printf("Restart mode: Found empty all_particle_data file '%s'. Will run simulation.\n", apd_filename);
-            }
-        }
-        else {
+        } else
             /** @brief File not found - simulation required. */
             printf("Restart mode: all_particle_data file '%s' not found. Will run simulation.\n", apd_filename);
-        }
     } // End restart check block
 
     initialize_output_file(noutsnaps);
@@ -2521,8 +2484,7 @@ cleanup_diag_iteration:
      *          This prepares the block storage for the first chunk of simulation data.
      * @note Assumes L_block is indexed [step_in_block * npts + final_rank_id].
      */
-    for (i = 0; i < npts; i++) // Loop over final_rank_id 'i'
-    {
+    for (i = 0; i < npts; i++) { // Loop over final_rank_id 'i'
         double l_val = L_i_arr[i];
         float lf = (float)l_val;
         // Store initial L in the slot for step 0 for this final_rank_id
@@ -2539,8 +2501,7 @@ cleanup_diag_iteration:
      *       stripping and remapping. Retrieves the initial state using this ID as the index
      *       into the `particles` array *before* the first sort in the main loop.
      */
-    if (g_doDebug)
-    {
+    if (g_doDebug) {
         int debug_id = DEBUG_PARTICLE_ID;
         if (debug_id >= 0 && debug_id < npts) {
             // Retrieve initial state using final_rank_id as index into initial particles array
@@ -2557,9 +2518,8 @@ cleanup_diag_iteration:
 
             /** @brief Store initial energy in debug arrays at snapshot index 0. */
             store_debug_approxE(0, E_approx0, time0);
-        } else {
+        } else
              fprintf(stderr, "Warning: Invalid DEBUG_PARTICLE_ID %d (must be 0 <= ID < %d)\n", debug_id, npts);
-        }
     }
 
     static int nwrite_total = 0; ///< Counter for number of dtwrite-interval writes performed.
@@ -2596,15 +2556,12 @@ cleanup_diag_iteration:
      *          This entire loop is skipped if `skip_simulation` is true (e.g., in restart mode
      *          where only post-processing of existing `all_particle_data.dat` is required).
      */
-    if (!skip_simulation)
-    {
-        for (int j = 0; j < Ntimes + dtwrite; j++) // Main time loop
-        {
+    if (!skip_simulation) {
+        for (int j = 0; j < Ntimes + dtwrite; j++) { // Main time loop
             int current_step;
 
             // Method_select = 1; Flag now.
-            if (method_select == 9)//
-            {
+            if (method_select == 9) {//
 /****************************/
 // EULER METHOD
 /****************************/
@@ -3787,20 +3744,18 @@ cleanup_diag_iteration:
 
 #pragma omp single
             {
-                if ((current_step % dtwrite) == 0)
-                {
+                if ((current_step % dtwrite) == 0) {
+
                     double elapsed = omp_get_wtime() - start_time;
                     printf("Write data at timestep %d after %.2f s.\n",
                            current_step, elapsed);
 
                     // Calculate the write index (0-based) corresponding to this timestep
                     int nwrite = current_step / dtwrite - 1;
-                    if (g_doAllParticleData)
-                    {
+                    if (g_doAllParticleData) {
                         // Calculate index within the current block (0 to block_size-1)
                         int block_index_apd = nwrite % block_size;
-                        for (int pi = 0; pi < npts; pi++)
-                        {
+                        for (int pi = 0; pi < npts; pi++) {
                             int orig_id = pi;
                             int rank = inverse_map[orig_id];
                             double par_r = particles[0][rank];
@@ -3812,14 +3767,11 @@ cleanup_diag_iteration:
                             Vrad_block[block_index_apd * npts + orig_id] = (float)par_vrad;
                             L_block[block_index_apd * npts + orig_id] = (float)par_ell;
 
-                            if (g_doDebug)
-                            {
+                            if (g_doDebug) {
                                 // Check if this write corresponds to a desired snapshot output time
-                                if (nwrite % stepBetweenSnaps == 0)
-                                {
+                                if (nwrite % stepBetweenSnaps == 0) {
                                     int snapIndex = nwrite / stepBetweenSnaps;
-                                    if (snapIndex < noutsnaps) // Ensure snapIndex is valid
-                                    {
+                                    if (snapIndex < noutsnaps) { // Ensure snapIndex is valid
                                         int debug_id = DEBUG_PARTICLE_ID;
 
                                         // Retrieve current state for debug particle from block arrays
@@ -3833,9 +3785,7 @@ cleanup_diag_iteration:
                                         // Evaluate theoretical potential using original spline
                                         double psi_val = 0.0;
                                         if (r_val >= 0.0 && r_val <= rmax)
-                                        {
                                             psi_val = evaluatespline(splinePsi, Psiinterp, r_val) * VEL_CONV_SQ;
-                                        }
 
                                         // Calculate approximate energy E = Psi - KE
                                         double E_approx = psi_val - 0.5 * (v_val * v_val + (l_val * l_val) / (r_val * r_val));
@@ -3849,68 +3799,45 @@ cleanup_diag_iteration:
                         }
                     }
                     if (g_doAllParticleData)
-                    {
                         // Append block to file if block is full
-                        if (((nwrite + 1) % block_size) == 0 && nwrite > 0)
-                        {
-                            append_all_particle_data_chunk_to_file(apd_filename,
-                                                                   npts,
-                                                                   block_size,
-                                                                   L_block,
-                                                                   Rank_block,
-                                                                   R_block,
-                                                                   Vrad_block);
+                        if (((nwrite + 1) % block_size) == 0 && nwrite > 0) {
+                            append_all_particle_data_chunk_to_file(apd_filename, npts, block_size, L_block, Rank_block, R_block, Vrad_block);
                             printf("Appended block ending write index %d to %s\n", nwrite, apd_filename);
                         }
-                    }
                     // Increment count of dtwrite-based writes
                     nwrite_total++;
                 }
             }
 
             for (int k = 0; k <= 20; k++)
-            {
-                if (current_step == print_steps[k])
-                {
+                if (current_step == print_steps[k]) {
                     double elapsed = omp_get_wtime() - start_time;
                     int percent = k * 5;
-                    printf("%d%% complete, timestep %d/%d, time=%f Myr, elapsed=%.2f s\n",
-                           percent, current_step, Ntimes, time, elapsed);
+                    printf("%d%% complete, timestep %d/%d, time=%f Myr, elapsed=%.2f s\n", percent, current_step, Ntimes, time, elapsed);
                     break;
                 }
-            }
         }
         // After the main simulation loop, flush any remaining data in the last partial block.
         {
-            if (g_doAllParticleData)
-            {
-                int leftover = nwrite_total % block_size;
-                if (leftover > 0)
-                {
+            if (g_doAllParticleData) {
+                int leftover = nwrite_total % block_size; // Number of steps in this partial block
+                if (leftover > 0) {
                     printf("Flushing leftover %d steps from block storage...\n", leftover);
-                    append_all_particle_data_chunk_to_file(apd_filename,
-                                                           npts,
-                                                           leftover, // Number of steps in this partial block
-                                                           L_block,
-                                                           Rank_block,
-                                                           R_block,
-                                                           Vrad_block);
+                    append_all_particle_data_chunk_to_file(apd_filename, npts, leftover, L_block, Rank_block, R_block, Vrad_block);
                 }
             }
         }
     } // Close the skip_simulation if block.
 
     // Write final particle state if simulation was run
-    if (!skip_file_writes)
-    {
+    if (!skip_file_writes) {
         get_full_filename("data/particlesfinal.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
         if (fp == NULL)
             raise_error("Error opening file %s for writing\n", full_filename);
 
-        for (i = 0; i < npts; i++) {
+        for (i = 0; i < npts; i++)
             fprintf_bin(fp, "%f %f %f  %f\n", particles[0][i], particles[1][i], particles[2][i], particles[3][i]);
-        }
         fclose(fp);
     }
 
@@ -3931,35 +3858,27 @@ cleanup_diag_iteration:
         get_full_filename("data/massprofile.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0)) {
-                if (r_plot >= radius[0]) {
+            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
+                if (r_plot >= radius[0])
                     fprintf_bin(fp, "%f %f\n", r_plot, gsl_spline_eval(splinemass, r_plot, enclosedmass));
-                }
-            }
-            if (num_points > 0) {
+            if (num_points > 0)
                  fprintf_bin(fp, "%f %f\n", radius[num_points-1], gsl_spline_eval(splinemass, radius[num_points-1], enclosedmass));
-            }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final NFW mass profile", full_filename);
-        }
 
         // Write NFW theoretical potential profile
         get_full_filename("data/Psiprofile.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0)) {
-                if (r_plot >= radius[0]) {
+            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
+                if (r_plot >= radius[0])
                      fprintf_bin(fp, "%f %f\n", r_plot, evaluatespline(splinePsi, Psiinterp, r_plot));
-                }
-            }
-             if (num_points > 0) {
+             if (num_points > 0)
                  fprintf_bin(fp, "%f %f\n", radius[num_points-1], evaluatespline(splinePsi, Psiinterp, radius[num_points-1]));
-             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final NFW Psi profile", full_filename);
-        }
 
         // Write NFW theoretical density profile
         get_full_filename("data/density_profile.dat", 1, full_filename, sizeof(full_filename));
@@ -3975,16 +3894,14 @@ cleanup_diag_iteration:
                 double term_c_base_k = rs_k / g_nfw_profile_falloff_factor;
                 double term_c_k = 1.0 + pow(term_c_base_k, 10.0);
                 double rho_shape_k = (term_s_k < 1e-9 || term_n_k < 1e-9 || term_c_k < 1e-9) ? 0.0 : (1.0 / (term_s_k * term_n_k * term_c_k));
-                if (rr < 1e-6 && term_s_k < 1e-3 && rho_shape_k == 0.0) {
+                if (rr < 1e-6 && term_s_k < 1e-3 && rho_shape_k == 0.0)
                    rho_shape_k = 1.0 / (term_s_k * term_n_k * term_c_k);
-                }
                 double rho_r_k = nt_nfw_scaler_final * rho_shape_k;
                 fprintf_bin(fp, "%f %f\n", rr, rho_r_k);
             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final NFW density profile", full_filename);
-        }
 
         // Write NFW theoretical dPsi/dr profile
         get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
@@ -3999,9 +3916,8 @@ cleanup_diag_iteration:
                 }
             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final NFW dpsi/dr profile", full_filename);
-        }
 
         // Write NFW theoretical drho/dPsi profile
         get_full_filename("data/drho_dpsi.dat", 1, full_filename, sizeof(full_filename));
@@ -4010,7 +3926,8 @@ cleanup_diag_iteration:
             double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * M_PI * normalization);
             for (i = 1; i < num_points - 1; i++) {
                 double rr = radius[i];
-                if (rr <= 1e-9) continue;
+                if (rr <= 1e-9)
+                    continue;
 
                 // Use NFW derivative function
                 double drhodr_val_k = drhodr_profile_nfwcutoff(rr, g_nfw_profile_rc, nt_nfw_scaler_final, g_nfw_profile_falloff_factor);
@@ -4025,9 +3942,8 @@ cleanup_diag_iteration:
                 }
             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final NFW drho/dpsi profile", full_filename);
-        }
 
         // Write NFW theoretical f(E) profile
         get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
@@ -4037,15 +3953,12 @@ cleanup_diag_iteration:
                 double E = Evalues[i];
                 double deriv = 0.0;
                 if (i > 0 && i < num_points + 1) {
-                    if (i > 0 && i < num_points) {
+                    if (i > 0 && i < num_points)
                         deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i - 1]) / (Evalues[i + 1] - Evalues[i - 1]);
-                    }
-                    else if (i == 0) {
+                    else if (i == 0)
                         deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i]) / (Evalues[i + 1] - Evalues[i]);
-                    }
-                    else if (i == num_points) {
+                    else if (i == num_points)
                         deriv = (innerintegrandvalues[i] - innerintegrandvalues[i - 1]) / (Evalues[i] - Evalues[i - 1]);
-                    }
                 }
                 double fE = fabs(deriv) / (sqrt(8.0) * PI * PI);
                 if (E == 0.0 || !isfinite(fE))
@@ -4053,9 +3966,8 @@ cleanup_diag_iteration:
                 fprintf_bin(fp, "%f %f\n", E, fE);
             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final NFW f(E) profile", full_filename);
-        }
 
         // Write NFW distribution function at a fixed radius if simulation was run
         if (!skip_file_writes) {
@@ -4071,7 +3983,8 @@ cleanup_diag_iteration:
                 int reduce_vsteps = 300;
                 for (int vv = 0; vv <= vsteps - reduce_vsteps; vv++) {
                     double sqrt_arg_v = Psi_rf - Psimin_test;
-                    if (sqrt_arg_v < 0) sqrt_arg_v = 0;
+                    if (sqrt_arg_v < 0)
+                        sqrt_arg_v = 0;
                     double vtest = (double)vv * (sqrt(2.0 * sqrt_arg_v) / (vsteps));
                     double Etest = Psi_rf - 0.5 * vtest * vtest;
                     Etest = Etest / VEL_CONV_SQ; // Convert back to code units for bounds check
@@ -4079,17 +3992,15 @@ cleanup_diag_iteration:
                     if (Etest >= Psimin && Etest <= Psimax) { // Bounds check in code units
                         double derivative;
                         int status = gsl_interp_eval_deriv_e(g_main_fofEinterp, Evalues, innerintegrandvalues, Etest, g_main_fofEacc, &derivative);
-                        if (status == GSL_SUCCESS) {
+                        if (status == GSL_SUCCESS)
                             fEval = derivative / (sqrt(8.0) * PI * PI) * vtest * vtest * r_F * r_F;
-                        }
                     }
                     if (!isfinite(fEval)) fEval = 0.0;
                     fprintf_bin(fp, "%f %f\n", vtest, fEval);
                 }
                 fclose(fp);
-            } else {
+            } else
                 log_message("ERROR", "Failed to open %s for final NFW df_fixed_radius", full_filename);
-            }
         }
 
     } else {
@@ -4108,35 +4019,27 @@ cleanup_diag_iteration:
         get_full_filename("data/massprofile.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0)) {
-                if (r_plot >= radius[0]) {
+            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
+                if (r_plot >= radius[0])
                     fprintf_bin(fp, "%f %f\n", r_plot, gsl_spline_eval(splinemass, r_plot, enclosedmass));
-                }
-            }
-            if (num_points > 0) {
+            if (num_points > 0)
                  fprintf_bin(fp, "%f %f\n", radius[num_points-1], gsl_spline_eval(splinemass, radius[num_points-1], enclosedmass));
-            }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final cored mass profile", full_filename);
-        }
 
         // Write Cored theoretical potential profile
         get_full_filename("data/Psiprofile.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0)) {
-                if (r_plot >= radius[0]) {
+            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
+                if (r_plot >= radius[0])
                      fprintf_bin(fp, "%f %f\n", r_plot, evaluatespline(splinePsi, Psiinterp, r_plot));
-                }
-            }
-             if (num_points > 0) {
+             if (num_points > 0)
                  fprintf_bin(fp, "%f %f\n", radius[num_points-1], evaluatespline(splinePsi, Psiinterp, radius[num_points-1]));
-             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final cored Psi profile", full_filename);
-        }
 
         // Write Cored theoretical density profile
         get_full_filename("data/density_profile.dat", 1, full_filename, sizeof(full_filename));
@@ -4148,9 +4051,8 @@ cleanup_diag_iteration:
                 fprintf_bin(fp, "%f %f\n", rr, rho_r);
             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final cored density profile", full_filename);
-        }
 
         // Write Cored theoretical dPsi/dr profile
         get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
@@ -4165,9 +4067,8 @@ cleanup_diag_iteration:
                 }
             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final cored dpsi/dr profile", full_filename);
-        }
 
         // Write Cored theoretical drho/dPsi profile
         get_full_filename("data/drho_dpsi.dat", 1, full_filename, sizeof(full_filename));
@@ -4186,9 +4087,8 @@ cleanup_diag_iteration:
                 }
             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final cored drho/dpsi profile", full_filename);
-        }
 
         // Write theoretical f(E) profile
         get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
@@ -4198,15 +4098,12 @@ cleanup_diag_iteration:
                 double E = Evalues[i];
                 double deriv = 0.0;
                 if (i > 0 && i < num_points + 1) {
-                    if (i > 0 && i < num_points) {
+                    if (i > 0 && i < num_points)
                         deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i - 1]) / (Evalues[i + 1] - Evalues[i - 1]);
-                    }
-                    else if (i == 0) {
+                    else if (i == 0)
                         deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i]) / (Evalues[i + 1] - Evalues[i]);
-                    }
-                    else if (i == num_points) {
+                    else if (i == num_points)
                         deriv = (innerintegrandvalues[i] - innerintegrandvalues[i - 1]) / (Evalues[i] - Evalues[i - 1]);
-                    }
                 }
                 double fE = fabs(deriv) / (sqrt(8.0) * PI * PI);
                 if (E == 0.0 || !isfinite(fE))
@@ -4214,9 +4111,8 @@ cleanup_diag_iteration:
                 fprintf_bin(fp, "%f %f\n", E, fE);
             }
             fclose(fp);
-        } else {
+        } else
             log_message("ERROR", "Failed to open %s for final f(E) profile (%s)", full_filename, g_use_nfw_profile ? "NFW" : "Cored");
-        }
 
         // Write distribution function at a fixed radius if simulation was run
         if (!skip_file_writes) {
@@ -4232,7 +4128,8 @@ cleanup_diag_iteration:
                 int reduce_vsteps = 300;
                 for (int vv = 0; vv <= vsteps - reduce_vsteps; vv++) {
                     double sqrt_arg_v = Psi_rf - Psimin_test;
-                    if (sqrt_arg_v < 0) sqrt_arg_v = 0;
+                    if (sqrt_arg_v < 0)
+                        sqrt_arg_v = 0;
                     double vtest = (double)vv * (sqrt(2.0 * sqrt_arg_v) / (vsteps));
                     double Etest = Psi_rf - 0.5 * vtest * vtest;
                     Etest = Etest / VEL_CONV_SQ; // Convert back to code units for bounds check
@@ -4240,17 +4137,16 @@ cleanup_diag_iteration:
                     if (Etest >= Psimin && Etest <= Psimax) { // Bounds check in code units
                         double derivative;
                         int status = gsl_interp_eval_deriv_e(g_main_fofEinterp, Evalues, innerintegrandvalues, Etest, g_main_fofEacc, &derivative);
-                        if (status == GSL_SUCCESS) {
+                        if (status == GSL_SUCCESS)
                             fEval = derivative / (sqrt(8.0) * PI * PI) * vtest * vtest * r_F * r_F;
-                        }
                     }
-                    if (!isfinite(fEval)) fEval = 0.0;
+                    if (!isfinite(fEval))
+                        fEval = 0.0;
                     fprintf_bin(fp, "%f %f\n", vtest, fEval);
                 }
                 fclose(fp);
-            } else {
+            } else
                 log_message("ERROR", "Failed to open %s for final df_fixed_radius (%s)", full_filename, g_use_nfw_profile ? "NFW" : "Cored");
-            }
         }
     }
 
@@ -4258,30 +4154,22 @@ cleanup_diag_iteration:
     get_full_filename("data/particles.dat", 1, filename, sizeof(filename));
     FILE *finit = fopen(filename, "rb"); // Binary mode for fscanf_bin
     if (!finit)
-    {
-        printf("Error: can't open %s\n", filename);
-        CLEAN_EXIT(1);
-    }
+        raise_error("Error: can't open %s\n", filename);
     double *r_initial = (double *)malloc(npts * sizeof(double));
     double *rv_initial = (double *)malloc(npts * sizeof(double));
     double *v_initial = (double *)malloc(npts * sizeof(double));
     double *l_initial = (double *)malloc(npts * sizeof(double));
     double rank_id;
     for (i = 0; i < npts; i++)
-    {
         fscanf_bin(finit, "%f %f %f %f\n", &r_initial[i], &rv_initial[i], &l_initial[i], &rank_id);
-    }
     fclose(finit);
 
     for (i = 0; i < npts; i++)
-    {
         v_initial[i] = sqrt(rv_initial[i] * rv_initial[i] + l_initial[i] * l_initial[i] / (r_initial[i] * r_initial[i]));
-    }
 
     double *r_final = (double *)malloc(npts * sizeof(double));
     double *v_final = (double *)malloc(npts * sizeof(double));
-    for (i = 0; i < npts; i++)
-    {
+    for (i = 0; i < npts; i++) {
         r_final[i] = particles[0][i];
         v_final[i] = sqrt(particles[1][i] * particles[1][i] + particles[2][i] * particles[2][i] / (particles[0][i] * particles[0][i]));
     }
@@ -4313,14 +4201,14 @@ cleanup_diag_iteration:
     double max_v_all = v_all_sorted[p99_index] * 1.2;
 
     // Ensure minimum ranges for very concentrated distributions
-    if (max_r_all < 50.0) max_r_all = 50.0;   // Minimum 50 kpc
-    if (max_v_all < 50.0) max_v_all = 50.0;   // Minimum 50 km/s
+    if (max_r_all < 50.0)
+        max_r_all = 50.0;   // Minimum 50 kpc
+    if (max_v_all < 50.0)
+        max_v_all = 50.0;   // Minimum 50 km/s
 
     // Log the calculated ranges
-    if (g_enable_logging) {
-        log_message("INFO", "2D Histogram dynamic ranges: r=[0, %.1f] kpc, v=[0, %.1f] km/s",
-                    max_r_all, max_v_all);
-    }
+    if (g_enable_logging)
+        log_message("INFO", "2D Histogram dynamic ranges: r=[0, %.1f] kpc, v=[0, %.1f] km/s", max_r_all, max_v_all);
 
     free(r_all_sorted);
     free(v_all_sorted);
@@ -4351,8 +4239,7 @@ cleanup_diag_iteration:
     int hist_final[HIST_NBINS][HIST_NBINS];
     memset(hist_final, 0, sizeof(hist_final));
 
-    for (i = 0; i < npts; i++)
-    {
+    for (i = 0; i < npts; i++) {
         int rbini = (int)(r_initial[i] / rbin_width);
         int vbini = (int)(fabs(v_initial[i]) * (1.0 / kmsec_to_kpcmyr) / vbin_width);
         if (rbini < HIST_NBINS && vbini < HIST_NBINS && rbini >= 0 && vbini >= 0)
@@ -4365,33 +4252,25 @@ cleanup_diag_iteration:
     }
 
     // Write initial 2D histogram if simulation was run
-    if (!skip_file_writes)
-    {
+    if (!skip_file_writes) {
         char full_filename[256];
         get_full_filename("data/2d_hist_initial.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
-        for (int rr = 0; rr < HIST_NBINS; rr++)
-        {
+        for (int rr = 0; rr < HIST_NBINS; rr++) {
             for (int vv = 0; vv < HIST_NBINS; vv++)
-            {
                 fprintf_bin(fp, "%f %f %d\n", (rr + 0.5) * rbin_width, (vv + 0.5) * vbin_width, hist_initial[rr][vv]);
-            }
             fprintf_bin(fp, "\n");
         }
         fclose(fp);
     } // End skip_file_writes block.
 
     // Write final 2D histogram if simulation was run
-    if (!skip_file_writes)
-    {
+    if (!skip_file_writes) {
         get_full_filename("data/2d_hist_final.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
-        for (int rr = 0; rr < HIST_NBINS; rr++)
-        {
+        for (int rr = 0; rr < HIST_NBINS; rr++) {
             for (int vv = 0; vv < HIST_NBINS; vv++)
-            {
                 fprintf_bin(fp, "%f %f %d\n", (rr + 0.5) * rbin_width, (vv + 0.5) * vbin_width, hist_final[rr][vv]);
-            }
             fprintf_bin(fp, "\n");
         }
         fclose(fp);
@@ -4409,8 +4288,7 @@ cleanup_diag_iteration:
     int hist_f[HIST_NBINS];
     memset(hist_f, 0, sizeof(hist_f));
 
-    for (i = 0; i < npts; i++)
-    {
+    for (i = 0; i < npts; i++) {
         int b = (int)(r_initial[i] / bin_width);
         if (b < HIST_NBINS && b >= 0)
             hist_i[b]++;
@@ -4420,13 +4298,11 @@ cleanup_diag_iteration:
     }
 
     // Write combined 1D radius histogram if simulation was run
-    if (!skip_file_writes)
-    {
+    if (!skip_file_writes) {
         char filename[256];
         get_full_filename("data/combined_histogram.dat", 1, filename, sizeof(filename));
         fp = fopen(filename, "wb"); // Binary mode for fprintf_bin
-        for (i = 0; i < HIST_NBINS; i++)
-        {
+        for (i = 0; i < HIST_NBINS; i++) {
             double bin_center = (i + 0.5) * bin_width;
             fprintf_bin(fp, "%f %d %d\n", bin_center, hist_i[i], hist_f[i]);
         }
@@ -4441,17 +4317,13 @@ cleanup_diag_iteration:
      *          final rank ID after any stripping and remapping.
      *          The data is written to `trajectories.dat`.
      */
-    if (!skip_file_writes)
-    {
+    if (!skip_file_writes) {
         get_full_filename("data/trajectories.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
-        for (int step = 0; step < Ntimes; step++)
-        {
+        for (int step = 0; step < Ntimes; step++) {
             fprintf_bin(fp, "%f", step * dt);
             for (int p = 0; p < num_traj_particles; p++)
-            {
                 fprintf_bin(fp, " %f %f %f", trajectories[p][step], velocities_arr[p][step], mu_arr[p][step]);
-            }
             fprintf_bin(fp, "\n");
         }
         fclose(fp);
@@ -4463,14 +4335,11 @@ cleanup_diag_iteration:
      *          particle that ended up with rank ID 0. This is a subset of the data
      *          in `trajectories.dat`. Written to `single_trajectory.dat`.
      */
-    if (!skip_file_writes)
-    {
+    if (!skip_file_writes) {
         get_full_filename("data/single_trajectory.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
         for (int step = 0; step < Ntimes; step++)
-        {
             fprintf_bin(fp, "%f %f %f %f\n", step * dt, trajectories[0][step], velocities_arr[0][step], mu_arr[0][step]);
-        }
         fclose(fp);
     } // End skip_file_writes block.
 
@@ -4482,15 +4351,12 @@ cleanup_diag_iteration:
      *          Written to `energy_and_angular_momentum_vs_time.dat`.
      */
     // Write energy/angular momentum evolution for low-ID particles if simulation was run
-    if (!skip_file_writes)
-    {
+    if (!skip_file_writes) {
         get_full_filename("data/energy_and_angular_momentum_vs_time.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
-        for (int step = 0; step < Ntimes; step++)
-        {
+        for (int step = 0; step < Ntimes; step++) {
             fprintf_bin(fp, "%f", step * dt);
-            for (int p = 0; p < num_traj_particles; p++)
-            {
+            for (int p = 0; p < num_traj_particles; p++) {
                 double E_i = E_i_arr[p];
                 double l_i = L_i_arr[p];
                 double Ecur = E_arr[p][step];
@@ -4505,8 +4371,7 @@ cleanup_diag_iteration:
     write_low_l_particles(dt, nlowest, lowestL_r, lowestL_E, lowestL_L);
 
     // Free lowest-L tracking arrays
-    for (int p = 0; p < nlowest; p++)
-    {
+    for (int p = 0; p < nlowest; p++) {
         free(lowestL_r[p]);
         free(lowestL_E[p]);
         free(lowestL_L[p]);
@@ -4519,15 +4384,12 @@ cleanup_diag_iteration:
 
     int snapshot_steps[noutsnaps];
     // Determine the timesteps corresponding to the desired snapshot outputs
-    for (int s = 0; s < noutsnaps; s++)
-    {
-        snapshot_steps[s] = (int)floor(
-            s * (total_writes() - 1) / (double)(noutsnaps - 1));
+    for (int s = 0; s < noutsnaps; s++) {
+        snapshot_steps[s] = (int)floor(s * (total_writes() - 1) / (double)(noutsnaps - 1));
         log_message("DEBUG", "snapshot_steps[%d] = %d", s, snapshot_steps[s]);
     }
 
-    if (g_doAllParticleData)
-    {
+    if (g_doAllParticleData) {
         size_t total_outsnaps_size = (size_t)npts * noutsnaps; // Use size_t for large allocations
         log_message("INFO", "Allocating arrays for %zu particles across %d snapshots (total: %zu elements)",
                     (size_t)npts, noutsnaps, total_outsnaps_size);
@@ -4536,8 +4398,7 @@ cleanup_diag_iteration:
         float *R_partdata_outsnaps = (float *)malloc(total_outsnaps_size * sizeof(float));
         float *Vrad_partdata_outsnaps = (float *)malloc(total_outsnaps_size * sizeof(float));
 
-        if (!Rank_partdata_outsnaps || !R_partdata_outsnaps || !Vrad_partdata_outsnaps)
-        {
+        if (!Rank_partdata_outsnaps || !R_partdata_outsnaps || !Vrad_partdata_outsnaps) {
             printf("[ERROR] Failed to allocate memory for output arrays. Aborting.\n");
             fflush(stdout);
             CLEAN_EXIT(1);
@@ -4549,18 +4410,14 @@ cleanup_diag_iteration:
         double fixed_bin_width = 0.0; // Initialized, set during first snapshot processing
 
         int start_index = 0; // Default start index for snapshot processing loop
-        if (g_doRestart)
-        {
+        if (g_doRestart) {
             start_index = find_last_processed_snapshot(snapshot_steps, noutsnaps);
-            if (start_index == -2) // Indicates all snapshots already processed
-            {
+            if (start_index == -2) { // Indicates all snapshots already processed
                 log_message("INFO", "All Rank files already exist for suffix '%s'. Skipping snapshot regeneration.", g_file_suffix);
                 goto cleanup_partdata_outsnaps; // Jump past the processing loop
             }
             else if (start_index < 0) // Indicates error or no files found
-            {
                 start_index = 0; // Default to starting from the beginning
-            }
             // Otherwise, start_index is the index of the first snapshot *to be* processed
             log_message("INFO", "Restart: Starting snapshot processing from index %d.", start_index);
         }
@@ -4571,9 +4428,8 @@ cleanup_diag_iteration:
                     omp_get_max_threads(), noutsnaps - start_index, start_index, noutsnaps - 1);
 
 #pragma omp parallel for schedule(static, 1) ordered
-        for (int s = start_index; s < noutsnaps; s++)
-        {
-            int snap = snapshot_steps[s];
+        for (int s = start_index; s < noutsnaps; s++) {
+            int snap = snapshot_steps[s]; // Which snap to read.
 
             float *tmpL_partdata_snap = (float *)malloc(npts * sizeof(float));
             int *tmpRank_partdata_snap = (int *)malloc(npts * sizeof(int));
@@ -4583,15 +4439,8 @@ cleanup_diag_iteration:
             if (!tmpL_partdata_snap || !tmpRank_partdata_snap || !tmpR_partdata_snap || !tmpV_partdata_snap)
                 raise_error("Error: out of memory in parallel loop.\n");
 
-            retrieve_all_particle_snapshot(
-                apd_filename_for_read,
-                snap,       // Which snap to read.
-                npts,       // #particles
-                block_size, // Block size.
-                tmpL_partdata_snap,
-                tmpRank_partdata_snap,
-                tmpR_partdata_snap,
-                tmpV_partdata_snap);
+            retrieve_all_particle_snapshot(apd_filename_for_read, snap, npts, block_size, tmpL_partdata_snap, tmpRank_partdata_snap, tmpR_partdata_snap,
+                                           tmpV_partdata_snap);
 
 /**
  * Process snapshot data in order.
@@ -4605,28 +4454,17 @@ cleanup_diag_iteration:
 
                 // Check array validity before copying
                 if (!Rank_partdata_outsnaps || !R_partdata_outsnaps || !Vrad_partdata_outsnaps)
-                {
-                    log_message("ERROR", "Thread %d: Output arrays not properly allocated for snapshot %d",
-                                omp_get_thread_num(), snap);
-                }
+                    log_message("ERROR", "Thread %d: Output arrays not properly allocated for snapshot %d", omp_get_thread_num(), snap);
                 else if (!tmpRank_partdata_snap || !tmpR_partdata_snap || !tmpV_partdata_snap)
-                {
-                    log_message("ERROR", "Thread %d: Input arrays not properly allocated for snapshot %d",
-                                omp_get_thread_num(), snap);
-                }
-                else
-                {
+                    log_message("ERROR", "Thread %d: Input arrays not properly allocated for snapshot %d", omp_get_thread_num(), snap);
+                else {
                     // Copy data from thread-local buffers to the large shared output arrays.
-                    for (int ii = 0; ii < npts; ii++)
-                    {
-                        if ((size_t)(s * npts + ii) < total_outsnaps_size)
-                        {
+                    for (int ii = 0; ii < npts; ii++) {
+                        if ((size_t)(s * npts + ii) < total_outsnaps_size) {
                             Rank_partdata_outsnaps[s * npts + ii] = tmpRank_partdata_snap[ii];
                             R_partdata_outsnaps[s * npts + ii] = tmpR_partdata_snap[ii];
                             Vrad_partdata_outsnaps[s * npts + ii] = tmpV_partdata_snap[ii];
-                        }
-                        else
-                        {
+                        } else {
                             log_message("ERROR", "Thread %d: Index %zu out of bounds (%zu) in ordered copy for snapshot %d",
                                         omp_get_thread_num(), (size_t)(s * npts + ii), total_outsnaps_size, snap);
                             break;
@@ -4636,8 +4474,7 @@ cleanup_diag_iteration:
             }
 
             /** @brief Build "unsorted" arrays (Rank, Mass, R, Vrad, L) from local snapshot data. */
-            log_message("INFO", "Thread %d: Allocating arrays for snapshot %d",
-                        omp_get_thread_num(), snap);
+            log_message("INFO", "Thread %d: Allocating arrays for snapshot %d", omp_get_thread_num(), snap);
 
             int *Rank_unsorted = (int *)malloc(npts * sizeof(int));
             double *Mass_unsorted = (double *)malloc(npts * sizeof(double));
@@ -4645,8 +4482,7 @@ cleanup_diag_iteration:
             double *Vrad_unsorted = (double *)malloc(npts * sizeof(double));
             double *L_unsorted = (double *)malloc(npts * sizeof(double));
 
-            if (!Rank_unsorted || !Mass_unsorted || !R_unsorted || !Vrad_unsorted || !L_unsorted)
-            {
+            if (!Rank_unsorted || !Mass_unsorted || !R_unsorted || !Vrad_unsorted || !L_unsorted) {
                 printf("[ERROR] Thread %d: Memory allocation failed for snapshot %d\n",
                        omp_get_thread_num(), snap);
                 // Free any memory that was allocated.
@@ -4663,8 +4499,7 @@ cleanup_diag_iteration:
                 continue; // Skip to next snapshot.
             }
 
-            for (int ii = 0; ii < npts; ii++)
-            {
+            for (int ii = 0; ii < npts; ii++) {
                 int rankval = tmpRank_partdata_snap[ii];
                 double massv = (rankval + 1) * deltaM;
 
@@ -4679,10 +4514,8 @@ cleanup_diag_iteration:
             // --- Prepare data structure for sorting by radius ---
             /** @brief Allocate `partarr` (array of struct PartData) for sorting snapshot data. */
             struct PartData *partarr = malloc(npts * sizeof(struct PartData));
-            if (!partarr)
-            {
-                log_message("ERROR", "Thread %d: Failed to allocate partarr for snapshot %d",
-                            omp_get_thread_num(), snap);
+            if (!partarr) {
+                log_message("ERROR", "Thread %d: Failed to allocate partarr for snapshot %d", omp_get_thread_num(), snap);
                 // Free allocated memory.
                 free(Rank_unsorted);
                 free(Mass_unsorted);
@@ -4693,16 +4526,13 @@ cleanup_diag_iteration:
             }
 
             struct PartData *local_partarr = (struct PartData *)malloc(npts * sizeof(struct PartData));
-            if (!local_partarr)
-            {
-                log_message("ERROR", "Thread %d: Failed to allocate local_partarr for snapshot %d",
-                            omp_get_thread_num(), snap);
+            if (!local_partarr) {
+                log_message("ERROR", "Thread %d: Failed to allocate local_partarr for snapshot %d", omp_get_thread_num(), snap);
                 free(partarr);
                 continue;
             }
 
-            for (int ii = 0; ii < npts; ii++)
-            {
+            for (int ii = 0; ii < npts; ii++) {
                 // Check for invalid values to prevent sort issues.
                 float rad_val = tmpR_partdata_snap[ii];
                 float vrad_val = tmpV_partdata_snap[ii];
@@ -4710,12 +4540,13 @@ cleanup_diag_iteration:
 
                 // Handle potential NaN values before assigning to struct
                 if (rad_val != rad_val) { // Check for NaN (safe with fast-math)
-                    log_message("WARNING", "Thread %d: NaN radius at index %d for snapshot %d, replaced with 0",
-                                omp_get_thread_num(), ii, snap);
+                    log_message("WARNING", "Thread %d: NaN radius at index %d for snapshot %d, replaced with 0", omp_get_thread_num(), ii, snap);
                     rad_val = 0.0f;
                 }
-                if (vrad_val != vrad_val) vrad_val = 0.0f; // Check for NaN (safe with fast-math)
-                if (angmom_val != angmom_val) angmom_val = 0.0f; // Check for NaN (safe with fast-math)
+                if (vrad_val != vrad_val)
+                    vrad_val = 0.0f; // Check for NaN (safe with fast-math)
+                if (angmom_val != angmom_val)
+                    angmom_val = 0.0f; // Check for NaN (safe with fast-math)
 
                 local_partarr[ii].rank = tmpRank_partdata_snap[ii];
                 local_partarr[ii].rad = rad_val;
@@ -4727,50 +4558,42 @@ cleanup_diag_iteration:
             memcpy(partarr, local_partarr, npts * sizeof(struct PartData));
             free(local_partarr);
 
-            log_message("INFO", "Thread %d: Sorting partarr by radius for snapshot %d",
-                        omp_get_thread_num(), snap);
+            log_message("INFO", "Thread %d: Sorting partarr by radius for snapshot %d", omp_get_thread_num(), snap);
 
             // Sort particle data by radius for snapshot processing
             sort_by_rad(partarr, npts);
 
             // If processing the first snapshot (index start_index), write lowest radius IDs
-            if (s == start_index)
-            {
+            if (s == start_index) {
                 // Skip writing if file writes are disabled (e.g., restart post-processing only)
-                if (!skip_file_writes)
-                {
+                if (!skip_file_writes) {
                     char fname_lowest_ids[256];
                     get_full_filename("data/lowest_radius_ids.dat", 1, fname_lowest_ids, sizeof(fname_lowest_ids));
-                    log_message("INFO", "Thread %d: Writing lowest radius IDs to %s",
-                                omp_get_thread_num(), fname_lowest_ids);
+                    log_message("INFO", "Thread %d: Writing lowest radius IDs to %s", omp_get_thread_num(), fname_lowest_ids);
 
                     FILE *id_file = fopen(fname_lowest_ids, "wb"); // Binary mode for fprintf_bin
-                    if (id_file)
-                    {
+                    if (id_file) {
                         fprintf_bin(id_file, "# ID  Initial_Radius\n"); // Header (binary float for radius)
 
                         int num_tracked = (npts < 1000) ? npts : 1000; // Track up to 1000 particles
 
-                        for (int i = 0; i < num_tracked; i++)
-                        {
+                        for (int i = 0; i < num_tracked; i++) {
                             int original_id = partarr[i].original_index;
                             float initial_radius = partarr[i].rad;
                             fprintf_bin(id_file, "%d %f\n", original_id, initial_radius);
                         }
                         fclose(id_file);
-                        log_message("INFO", "Thread %d: Successfully wrote %d lowest-radius particle IDs to %s",
-                                    omp_get_thread_num(), num_tracked, fname_lowest_ids);
+                        log_message("INFO", "Thread %d: Successfully wrote %d lowest-radius particle IDs to %s", omp_get_thread_num(), num_tracked,
+                                    fname_lowest_ids);
                     }
                     else
                     {
-                        log_message("ERROR", "Thread %d: Failed to open %s for writing",
-                                    omp_get_thread_num(), fname_lowest_ids);
+                        log_message("ERROR", "Thread %d: Failed to open %s for writing", omp_get_thread_num(), fname_lowest_ids);
                     }
                 }
                 else
                 {
-                    log_message("INFO", "Thread %d: Skipping lowest radius ID file creation in restart mode",
-                                omp_get_thread_num());
+                    log_message("INFO", "Thread %d: Skipping lowest radius ID file creation in restart mode", omp_get_thread_num());
                 }
             }
 
@@ -4781,10 +4604,8 @@ cleanup_diag_iteration:
             double *Vrad_sorted = (double *)malloc(npts * sizeof(double));
             double *L_sorted = (double *)malloc(npts * sizeof(double));
 
-            if (!Rank_sorted || !Mass_sorted || !R_sorted || !Vrad_sorted || !L_sorted)
-            {
-                log_message("ERROR", "Thread %d: Failed to allocate sorted arrays for snapshot %d",
-                            omp_get_thread_num(), snap);
+            if (!Rank_sorted || !Mass_sorted || !R_sorted || !Vrad_sorted || !L_sorted) {
+                log_message("ERROR", "Thread %d: Failed to allocate sorted arrays for snapshot %d", omp_get_thread_num(), snap);
                 // Free allocated memory.
                 if (Rank_sorted)
                     free(Rank_sorted);
@@ -4806,8 +4627,7 @@ cleanup_diag_iteration:
             }
 
             // Populate the sorted arrays using the sorted partarr
-            for (int ii = 0; ii < npts; ii++)
-            {
+            for (int ii = 0; ii < npts; ii++) {
                 partarr[ii].rank = ii; // Update rank based on sorted position
                 int r_val = partarr[ii].rank; // Rank is now simply the index 'ii'
                 Rank_sorted[ii] = r_val;
@@ -4819,46 +4639,39 @@ cleanup_diag_iteration:
             }
 
             /** @brief Set fixed bin width for density calculation using the first processed snapshot. */
-            log_message("INFO", "Thread %d: Checking fixed bin width for snapshot %d",
-                        omp_get_thread_num(), snap);
-            if (s == start_index) // Only calculate on the first snapshot processed in this run
-            {
+            log_message("INFO", "Thread %d: Checking fixed bin width for snapshot %d", omp_get_thread_num(), snap);
+            if (s == start_index) { // Only calculate on the first snapshot processed in this run
                 // Determine number of bins based on particle count (e.g., proportional to npts^(1/3))
                 int num_bins_fixed = ceil(100 * pow(npts / 10000.0, 0.3333333333));
-                if (num_bins_fixed < 1) num_bins_fixed = 1;
+                if (num_bins_fixed < 1)
+                    num_bins_fixed = 1;
                 // Use the maximum radius found in this first snapshot
                 double r_max_first = R_sorted[npts - 1];
                 if (r_max_first <= 0 || num_bins_fixed <= 0) {
-                    log_message("ERROR", "Thread %d: Invalid r_max (%f) or bins (%d) for fixed_bin_width calc",
-                                omp_get_thread_num(), r_max_first, num_bins_fixed);
+                    log_message("ERROR", "Thread %d: Invalid r_max (%f) or bins (%d) for fixed_bin_width calc", omp_get_thread_num(), r_max_first,
+                                num_bins_fixed);
                     // Set a default or handle error
                     fixed_bin_width = 1.0;
-                } else {
+                } else
                     fixed_bin_width = r_max_first / num_bins_fixed;
-                }
-                log_message("INFO", "Thread %d: Calculated fixed_bin_width=%f for snapshot %d (r_max=%f, bins=%d)",
-                            omp_get_thread_num(), fixed_bin_width, snap, r_max_first, num_bins_fixed);
+                log_message("INFO", "Thread %d: Calculated fixed_bin_width=%f for snapshot %d (r_max=%f, bins=%d)",omp_get_thread_num(), fixed_bin_width,
+                            snap, r_max_first, num_bins_fixed);
             }
 
             double *density_sorted = NULL;
 
-            log_message("INFO", "Thread %d: Starting density calculation for snapshot %d",
-                        omp_get_thread_num(), snap);
+            log_message("INFO", "Thread %d: Starting density calculation for snapshot %d", omp_get_thread_num(), snap);
             {
                 // Free previous allocation if it exists (safety measure)
-                if (density_sorted != NULL)
-                {
+                if (density_sorted != NULL) {
                     free(density_sorted);
                     density_sorted = NULL; // Avoid dangling pointer
-                    log_message("INFO", "Thread %d: Freed previous density_sorted for snapshot %d",
-                                omp_get_thread_num(), snap);
+                    log_message("INFO", "Thread %d: Freed previous density_sorted for snapshot %d", omp_get_thread_num(), snap);
                 }
 
-                log_message("INFO", "Thread %d: Allocating density_sorted for snapshot %d",
-                            omp_get_thread_num(), snap);
+                log_message("INFO", "Thread %d: Allocating density_sorted for snapshot %d", omp_get_thread_num(), snap);
                 density_sorted = malloc(npts * sizeof(double));
-                if (!density_sorted)
-                {
+                if (!density_sorted) {
                     fprintf(stderr, "Error: Failed to allocate memory for density_sorted\n");
                     // Cleanup memory allocated within this snapshot's loop iteration
                     free(tmpL_partdata_snap); free(tmpRank_partdata_snap); free(tmpR_partdata_snap); free(tmpV_partdata_snap);
@@ -4869,29 +4682,23 @@ cleanup_diag_iteration:
                 }
 
                 double bandwidth_factor = 0.08;
-                log_message("INFO", "Thread %d: Checking R_sorted monotonicity for snapshot %d",
-                            omp_get_thread_num(), snap);
+                log_message("INFO", "Thread %d: Checking R_sorted monotonicity for snapshot %d", omp_get_thread_num(), snap);
                 int r_violations = 0;
                 for (int i = 1; i < npts; i++)
-                {
                     if (R_sorted[i] <= R_sorted[i - 1])
                         r_violations++;
-                }
-                log_message("INFO", "Thread %d: Found %d radius violations for snapshot %d",
-                            omp_get_thread_num(), r_violations, snap);
+                log_message("INFO", "Thread %d: Found %d radius violations for snapshot %d", omp_get_thread_num(), r_violations, snap);
 
                 double *R_filtered = NULL;
                 double *Mass_filtered = NULL;
                 int filtered_count = 0;
 
-                if (r_violations > 0)
-                {
+                if (r_violations > 0) {
                     // Allocate arrays to hold strictly monotonic radius/mass data
                     R_filtered = malloc(npts * sizeof(double));
                     Mass_filtered = malloc(npts * sizeof(double));
                     if (!R_filtered || !Mass_filtered) {
-                        log_message("ERROR", "Thread %d: Failed to allocate filtered arrays for snapshot %d",
-                            omp_get_thread_num(), snap);
+                        log_message("ERROR", "Thread %d: Failed to allocate filtered arrays for snapshot %d", omp_get_thread_num(), snap);
                         continue;
                     }
 
@@ -4901,17 +4708,12 @@ cleanup_diag_iteration:
                     filtered_count = 1;
 
                     for (int i = 1; i < npts; i++)
-                    {
-                        if (R_sorted[i] > R_filtered[filtered_count - 1])
-                        {
+                        if (R_sorted[i] > R_filtered[filtered_count - 1]) {
                             R_filtered[filtered_count] = R_sorted[i];
                             Mass_filtered[filtered_count] = Mass_sorted[i];
                             filtered_count++;
                         }
-                    }
-                }
-                else
-                {
+                } else {
                     // If no violations, point directly to the sorted data (no copy needed)
                     R_filtered = R_sorted;
                     Mass_filtered = Mass_sorted;
@@ -4924,25 +4726,23 @@ cleanup_diag_iteration:
                 double *R_decimated = malloc(decimated_size * sizeof(double));
                 double *Mass_decimated = malloc(decimated_size * sizeof(double));
                 if (!R_decimated || !Mass_decimated) {
-                    log_message("ERROR", "Thread %d: Failed to allocate decimated arrays for snapshot %d",
-                        omp_get_thread_num(), snap);
-                    if (r_violations > 0) { free(R_filtered); free(Mass_filtered); }
+                    log_message("ERROR", "Thread %d: Failed to allocate decimated arrays for snapshot %d", omp_get_thread_num(), snap);
+                    if (r_violations > 0) {
+                        free(R_filtered);
+                        free(Mass_filtered);
+                    }
                     continue;
                 }
 
-                if (filtered_count <= decimated_size)
-                {
+                if (filtered_count <= decimated_size) {
                     // Use all filtered points if fewer than desired decimated size
                     decimated_size = filtered_count;
                     memcpy(R_decimated, R_filtered, filtered_count * sizeof(double));
                     memcpy(Mass_decimated, Mass_filtered, filtered_count * sizeof(double));
-                }
-                else
-                {
+                } else {
                     // Sample evenly from the filtered data
                     double step = (double)(filtered_count - 1) / (decimated_size - 1);
-                    for (int i = 0; i < decimated_size; i++)
-                    {
+                    for (int i = 0; i < decimated_size; i++) {
                         int idx = (int)round(i * step); // Use round for potentially better sampling
                         if (idx >= filtered_count)
                             idx = filtered_count - 1;
@@ -4961,9 +4761,14 @@ cleanup_diag_iteration:
                    ) {
                     log_message("ERROR", "Thread %d: Invalid radius range [%f, %f] with %d points after decimation for snapshot %d",
                                 omp_get_thread_num(), min_r_check, max_r_check, decimated_size, snap);
-                    free(R_decimated); free(Mass_decimated);
-                    if (r_violations > 0) { free(R_filtered); free(Mass_filtered); } // Free if allocated
-                    free(density_sorted); density_sorted = NULL;
+                    free(R_decimated);
+                    free(Mass_decimated);
+                    if (r_violations > 0) {
+                        free(R_filtered);
+                        free(Mass_filtered);
+                    } // Free if allocated
+                    free(density_sorted);
+                    density_sorted = NULL;
                     continue;
                 }
 
@@ -4975,7 +4780,8 @@ cleanup_diag_iteration:
 
                 // Define size for the uniform grid (used for convolution)
                 int grid_size = 131072; // Power of 2 often good for FFT, but direct used here
-                if (grid_size <= 1) grid_size = 2; // Ensure at least 2 points
+                if (grid_size <= 1)
+                    grid_size = 2; // Ensure at least 2 points
                 double dlog = (log_max_r - log_min_r) / (grid_size - 1);
 
                 // Allocate arrays for the uniform log-spaced grid
@@ -4984,38 +4790,39 @@ cleanup_diag_iteration:
                 double *mass_grid = malloc(grid_size * sizeof(double));
                 double *density_grid = malloc(grid_size * sizeof(double));
                 if (!r_grid || !log_r_grid || !mass_grid || !density_grid) {
-                    log_message("ERROR", "Thread %d: Failed to allocate grid arrays for snapshot %d",
-                        omp_get_thread_num(), snap);
+                    log_message("ERROR", "Thread %d: Failed to allocate grid arrays for snapshot %d", omp_get_thread_num(), snap);
                     // Free previously allocated resources
                     free(R_decimated); free(Mass_decimated);
-                    if (r_violations > 0) { free(R_filtered); free(Mass_filtered); }
-                    if (r_grid) free(r_grid);
-                    if (log_r_grid) free(log_r_grid);
-                    if (mass_grid) free(mass_grid);
-                    if (density_grid) free(density_grid);
-                    free(density_sorted); density_sorted = NULL;
+                    if (r_violations > 0) {
+                        free(R_filtered);
+                        free(Mass_filtered);
+                    }
+                    free_if_exists(r_grid);
+                    free_if_exists(log_r_grid);
+                    free_if_exists(mass_grid);
+                    free_if_exists(density_grid);
+                    free(density_sorted);
+                    density_sorted = NULL;
                     continue;
                 }
 
                 // Populate the log-spaced grid coordinates
-                for (int i = 0; i < grid_size; i++)
-                {
+                for (int i = 0; i < grid_size; i++) {
                     log_r_grid[i] = log_min_r + i * dlog;
                     r_grid[i] = pow(10.0, log_r_grid[i]);
                 }
 
                 /** @brief Ensure r_grid is strictly monotonic for GSL spline init. */
                 int rgrid_corrections_made = 0;
-                for (int i = 1; i < grid_size; i++) {
+                for (int i = 1; i < grid_size; i++)
                     if (r_grid[i] <= r_grid[i - 1]) {
                         // Ensure strict monotonicity with small absolute increment
                         r_grid[i] = r_grid[i - 1] + 1e-12;
                         rgrid_corrections_made++;
                     }
-                }
-                if (rgrid_corrections_made > 0) {
-                     log_message("WARNING", "Thread %d made %d corrections to r_grid for monotonicity in snapshot %d", omp_get_thread_num(), rgrid_corrections_made, snap);
-                }
+                if (rgrid_corrections_made > 0)
+                     log_message("WARNING", "Thread %d made %d corrections to r_grid for monotonicity in snapshot %d", omp_get_thread_num(),
+                                 rgrid_corrections_made, snap);
 
                 // Interpolate mass from decimated data onto the uniform log-spaced grid
                 gsl_interp_accel *acc = NULL;
@@ -5026,55 +4833,43 @@ cleanup_diag_iteration:
                     acc = gsl_interp_accel_alloc();
                 }
 
-                if (!acc)
-                {
-                    log_message("ERROR", "Thread %d: Failed to allocate GSL interp accel for snapshot %d",
-                                omp_get_thread_num(), snap);
+                if (!acc) {
+                    log_message("ERROR", "Thread %d: Failed to allocate GSL interp accel for snapshot %d", omp_get_thread_num(), snap);
                     continue;
                 }
 
                 /** @brief Ensure R_decimated is strictly monotonic for GSL spline init. */
                 int corrections_made = 0;
-                for (int i = 1; i < decimated_size; i++) {
+                for (int i = 1; i < decimated_size; i++)
                     if (R_decimated[i] <= R_decimated[i - 1]) {
                         // Ensure a strictly larger value using a small absolute increment
                         R_decimated[i] = R_decimated[i - 1] + 1e-12; // Add a small absolute value
                         corrections_made++;
                     }
-                }
-                if (corrections_made > 0) {
-                     log_message("WARNING", "Thread %d made %d corrections to R_decimated for monotonicity in snapshot %d", omp_get_thread_num(), corrections_made, snap);
-                }
+                if (corrections_made > 0)
+                     log_message("WARNING", "Thread %d made %d corrections to R_decimated for monotonicity in snapshot %d", omp_get_thread_num(),
+                                 corrections_made, snap);
 
 #pragma omp critical(gsl_mass_spline)
                 {
                     mass_spline = gsl_spline_alloc(gsl_interp_cspline, decimated_size);
                     if (mass_spline)
-                    {
                         gsl_spline_init(mass_spline, R_decimated, Mass_decimated, decimated_size);
-                    }
                 }
 
-                if (!mass_spline)
-                {
+                if (!mass_spline) {
                     log_message("ERROR", "Thread %d: Failed to allocate or initialize mass spline for snapshot %d",
                                 omp_get_thread_num(), snap);
                     gsl_interp_accel_free(acc);
                     continue;
                 }
 
-                for (int i = 0; i < grid_size; i++)
-                {
+                for (int i = 0; i < grid_size; i++) {
                     if (r_grid[i] < R_decimated[0])
-                    {
                         mass_grid[i] = Mass_decimated[0]; // Extrapolate using first point
-                    }
                     else if (r_grid[i] > R_decimated[decimated_size - 1])
-                    {
                         mass_grid[i] = Mass_decimated[decimated_size - 1]; // Extrapolate using last point
-                    }
-                    else
-                    {
+                    else {
 #pragma omp critical(gsl_mass_eval)
                         {
                             // Use _e version for error checking if needed
@@ -5084,46 +4879,36 @@ cleanup_diag_iteration:
                 }
 
                 // Calculate density = dM/dr on the uniform grid using central differences
-                for (int i = 1; i < grid_size - 1; i++)
-                {
+                for (int i = 1; i < grid_size - 1; i++) {
                     // Avoid division by zero if grid points coincide
                     double dr = r_grid[i + 1] - r_grid[i - 1];
                     if (dr > 1e-15) {
                         double dM = mass_grid[i + 1] - mass_grid[i - 1];
                         density_grid[i] = dM / dr;
-                    } else {
+                    } else
                         // Fallback for coincident points (e.g., use forward/backward difference or average)
                         density_grid[i] = (i > 1) ? density_grid[i-1] : 0.0; // Simple fallback
-                    }
 
                     // Ensure non-negative density, apply floor
                     if (density_grid[i] < 1e-10)
-                    {
                         density_grid[i] = 1e-10;
-                    }
                 }
 
                 // Handle endpoints using one-sided difference or extrapolation
                 if (grid_size >= 2) {
                    density_grid[0] = density_grid[1]; // Simple extrapolation
                    density_grid[grid_size - 1] = density_grid[grid_size - 2]; // Simple extrapolation
-                } else if (grid_size == 1) {
+                } else if (grid_size == 1)
                    density_grid[0] = 0.0; // Or some default
-                }
 
-                log_message("INFO", "Thread %d: Allocating memory for density smoothing arrays for snapshot %d",
-                            omp_get_thread_num(), snap);
+                log_message("INFO", "Thread %d: Allocating memory for density smoothing arrays for snapshot %d", omp_get_thread_num(), snap);
                 double *density_smoothed_direct = malloc(npts * sizeof(double));
                 double *direct_grid_result = malloc(grid_size * sizeof(double));
 
-                if (!density_smoothed_direct || !direct_grid_result)
-                {
-                    log_message("ERROR", "Thread %d: Failed to allocate memory for smoothing arrays for snapshot %d",
-                                omp_get_thread_num(), snap);
-                    if (density_smoothed_direct)
-                        free(density_smoothed_direct);
-                    if (direct_grid_result)
-                        free(direct_grid_result);
+                if (!density_smoothed_direct || !direct_grid_result) {
+                    log_message("ERROR", "Thread %d: Failed to allocate memory for smoothing arrays for snapshot %d", omp_get_thread_num(), snap);
+                    free_if_exists(density_smoothed_direct);
+                    free_if_exists(direct_grid_result);
                     continue;
                 }
 
@@ -5132,14 +4917,11 @@ cleanup_diag_iteration:
                 double sigma_log = sigma; // Apply smoothing in log-space
 
                 // Perform Gaussian convolution on the uniform density grid
-                if (!density_grid || !log_r_grid || !direct_grid_result)
-                {
-                    log_message("ERROR", "Thread %d: NULL arrays detected before gaussian_convolution for snapshot %d",
-                                omp_get_thread_num(), snap);
-                    // Clean up resources
-                    if (density_grid) free(density_grid);
-                    if (log_r_grid) free(log_r_grid);
-                    if (direct_grid_result) free(direct_grid_result);
+                if (!density_grid || !log_r_grid || !direct_grid_result) {
+                    log_message("ERROR", "Thread %d: NULL arrays detected before gaussian_convolution for snapshot %d", omp_get_thread_num(), snap);
+                    free_if_exists(density_grid);
+                    free_if_exists(log_r_grid);
+                    free_if_exists(direct_grid_result);
                     continue;
                 }
 
@@ -5159,8 +4941,7 @@ cleanup_diag_iteration:
 
                 if (!density_spline)
                 {
-                    log_message("ERROR", "Thread %d: Failed to allocate GSL spline for snapshot %d",
-                                omp_get_thread_num(), snap);
+                    log_message("ERROR", "Thread %d: Failed to allocate GSL spline for snapshot %d", omp_get_thread_num(), snap);
                     // Clean up and skip.
                     free(density_smoothed_direct);
                     free(direct_grid_result);
@@ -5176,20 +4957,14 @@ cleanup_diag_iteration:
                 gsl_error_handler_t *old_handler = gsl_set_error_handler_off();
 
                 // Interpolate smoothed density back onto the original sorted particle radii (R_sorted)
-                for (int i = 0; i < npts; i++)
-                {
+                for (int i = 0; i < npts; i++) {
                     double r_val = R_sorted[i]; // Target radius
 
                     if (r_val <= r_grid[0])
-                    {
                         density_smoothed_direct[i] = direct_grid_result[0]; // Extrapolate below range
-                    }
                     else if (r_val >= r_grid[grid_size - 1])
-                    {
                         density_smoothed_direct[i] = direct_grid_result[grid_size - 1]; // Extrapolate above range
-                    }
-                    else
-                    {
+                    else {
                         // For values within range, use spline interpolation with error checking.
                         int status = 0;
                         double result = 0.0;
@@ -5211,30 +4986,23 @@ cleanup_diag_iteration:
                             int left = 0;
                             int right = grid_size - 1;
 
-                            while (left <= right)
-                            {
+                            while (left <= right) {
                                 int mid = left + (right - left) / 2;
 
-                                if (r_grid[mid] <= r_val && (mid == grid_size - 1 || r_grid[mid + 1] > r_val))
-                                {
+                                if (r_grid[mid] <= r_val && (mid == grid_size - 1 || r_grid[mid + 1] > r_val)) {
                                     idx_low = mid;
                                     break;
                                 }
                                 else if (r_grid[mid] > r_val)
-                                {
                                     right = mid - 1;
-                                }
                                 else
-                                {
                                     left = mid + 1;
-                                }
                             }
 
                             int idx_high = idx_low + 1;
 
                             // Safety check.
-                            if (idx_high >= grid_size)
-                            {
+                            if (idx_high >= grid_size) {
                                 idx_high = grid_size - 1;
                                 idx_low = idx_high - 1;
                             }
@@ -5268,8 +5036,7 @@ cleanup_diag_iteration:
                 free(Mass_decimated);
 
                 // Free filtered arrays if they were allocated.
-                if (r_violations > 0)
-                {
+                if (r_violations > 0) {
                     free(R_filtered);
                     free(Mass_filtered);
                 }
@@ -5280,33 +5047,28 @@ cleanup_diag_iteration:
 
             // Density calculation complete using fixed binning from R_sorted min to max with (0,0) anchor point
 
-            if (g_doDynPsi)
-            {
+            if (g_doDynPsi) {
 
                 double *rrA = (double *)malloc(npts * sizeof(double));
                 double *M_rA = (double *)malloc(npts * sizeof(double));
 
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     M_rA[ii] = Mass_sorted[ii];
                     rrA[ii] = R_sorted[ii];
                 }
 
                 double *inv_rA = (double *)malloc(npts * sizeof(double));
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     inv_rA[ii] = 1.0 / rrA[ii];
                 }
                 double *suffix_sum_invrA = (double *)malloc(npts * sizeof(double));
                 suffix_sum_invrA[npts - 1] = inv_rA[npts - 1];
-                for (int jj = npts - 2; jj >= 0; jj--)
-                {
+                for (int jj = npts - 2; jj >= 0; jj--) {
                     suffix_sum_invrA[jj] = suffix_sum_invrA[jj + 1] + inv_rA[jj];
                 }
 
                 double *psiAarr = (double *)malloc(npts * sizeof(double));
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     double rr = rrA[ii];
                     double M_r = M_rA[ii];
                     double outer_sum = 0.0;
@@ -5320,9 +5082,7 @@ cleanup_diag_iteration:
                 // Compute PsiA(0).
                 double sum_invr = 0.0;
                 for (int ii = 0; ii < npts; ii++)
-                {
                     sum_invr += inv_rA[ii];
-                }
                 double PsiA0 = G_CONST * deltaM * sum_invr * VEL_CONV_SQ; // PsiA at r=0.
 
                 // No offset needed for PsiA, we keep psiAarr as is.
@@ -5339,8 +5099,7 @@ cleanup_diag_iteration:
                 // Write the zero point first.
                 double rr_zero = 0.0;
                 fprintf_bin(fA, "%f %f\n", rr_zero, PsiA0);
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     double rr = rrA[ii];
                     fprintf_bin(fA, "%f %f\n", rr, psiAarr[ii]);
                 }
@@ -5351,8 +5110,7 @@ cleanup_diag_iteration:
                 double *psiAarr_spline = (double *)malloc((npts + 1) * sizeof(double));
                 rrA_spline[0] = 0.0;
                 psiAarr_spline[0] = PsiA0;
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     rrA_spline[ii + 1] = rrA[ii];
                     psiAarr_spline[ii + 1] = psiAarr[ii];
                 }
@@ -5361,12 +5119,8 @@ cleanup_diag_iteration:
 
                 // Ensure strictly increasing values for spline initialization:
                 for (int i = 1; i <= npts; i++)
-                {
                     if (rrA_spline[i] <= rrA_spline[i - 1])
-                    {
                         rrA_spline[i] = rrA_spline[i - 1] + 1e-5;
-                    }
-                }
 
                 // End sketchy sorting hack.
 
@@ -5378,15 +5132,13 @@ cleanup_diag_iteration:
 
                 // Compute PsiA for all unsorted and sorted radii using this spline
                 double *PsiA_unsorted = (double *)malloc(npts * sizeof(double));
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     double rr_uf = R_unsorted[ii];
                     PsiA_unsorted[ii] = gsl_spline_eval(splinePsiA, rr_uf, PsiAinterp);
                 }
 
                 double *PsiA_sorted = (double *)malloc(npts * sizeof(double));
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     double rr_sf = R_sorted[ii];
                     PsiA_sorted[ii] = gsl_spline_eval(splinePsiA, rr_sf, PsiAinterp);
                 }
@@ -5406,33 +5158,28 @@ cleanup_diag_iteration:
                 //
                 // Computed separately for both unsorted and sorted distributions
                 double *E_unsorted = (double *)malloc(npts * sizeof(double));
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     double rr = R_unsorted[ii];      // Radius
                     double vrad = Vrad_unsorted[ii]; // Radial velocity
                     double l = L_unsorted[ii];       // Angular momentum
 
-                    // Calculate total energy using the orbital energy equation
-                    E_unsorted[ii] = PsiA_unsorted[ii]           // Potential energy (Ψ)
-                                     - (l * l / (2.0 * rr * rr)) // Rotational energy (L²/2r²)
-                                     - 0.5 * vrad * vrad;        // Kinetic energy (v²/2)
+                    // Calculate total energy using the orbital energy equation:
+                    // Potential energy (Ψ) - Rotational energy (L²/2r²) - Kinetic energy (v²/2)
+                    E_unsorted[ii] = PsiA_unsorted[ii] - (sqr(l) / (2.0 * sqr(rr))) - 0.5 * sqr(vrad);
                 }
 
                 double *E_sorted = (double *)malloc(npts * sizeof(double));
-                for (int ii = 0; ii < npts; ii++)
-                {
+                for (int ii = 0; ii < npts; ii++) {
                     double rr = R_sorted[ii];      // Radius
                     double vrad = Vrad_sorted[ii]; // Radial velocity
                     double l = L_sorted[ii];       // Angular momentum
 
                     // Same energy formula applied to sorted distribution
-                    E_sorted[ii] = PsiA_sorted[ii]             // Potential energy (Ψ)
-                                   - (l * l / (2.0 * rr * rr)) // Rotational energy (L²/2r²)
-                                   - 0.5 * vrad * vrad;        // Kinetic energy (v²/2)
+                    // Potential energy (Ψ) - Rotational energy (L²/2r²) - Kinetic energy (v²/2)
+                    E_sorted[ii] = PsiA_sorted[ii] - (sqr(l) / (2.0 * sqr(rr))) - 0.5 * sqr(vrad);
                 }
 
-                if (g_doDebug)
-                {
+                if (g_doDebug) {
                     // =========================================================================
                     // DEBUG ENERGY COMPUTATION - DYNAMIC ANALYSIS
                     // =========================================================================
@@ -5487,13 +5234,10 @@ cleanup_diag_iteration:
                     }
                 }
 
-                log_message("INFO", "Thread %d: Starting to write rank files for snapshot %d",
-                            omp_get_thread_num(), snap);
+                log_message("INFO", "Thread %d: Starting to write rank files for snapshot %d", omp_get_thread_num(), snap);
 
-                if (g_doDynRank)
-                {
-                    log_message("INFO", "Thread %d: About to write unsorted Rank file for snapshot %d",
-                                omp_get_thread_num(), snap);
+                if (g_doDynRank) {
+                    log_message("INFO", "Thread %d: About to write unsorted Rank file for snapshot %d", omp_get_thread_num(), snap);
 
                     // Unsorted file write
                     char fname_unsorted[256];
@@ -5501,77 +5245,50 @@ cleanup_diag_iteration:
                     snprintf(base_filename, sizeof(base_filename), "data/Rank_Mass_Rad_VRad_unsorted_t%05d.dat", snap);
                     get_full_filename(base_filename, 1, fname_unsorted, sizeof(fname_unsorted));
 
-                    log_message("INFO", "Thread %d: Opening %s for writing",
-                                omp_get_thread_num(), fname_unsorted);
+                    log_message("INFO", "Thread %d: Opening %s for writing", omp_get_thread_num(), fname_unsorted);
 
                     FILE *fun_final = fopen(fname_unsorted, "wb"); // Binary mode for fprintf_bin
 
-                    if (!fun_final)
-                    {
-                        log_message("ERROR", "Thread %d: Failed to open %s for writing",
-                                    omp_get_thread_num(), fname_unsorted);
+                    if (!fun_final) {
+                        log_message("ERROR", "Thread %d: Failed to open %s for writing", omp_get_thread_num(), fname_unsorted);
                         // Skip this file but continue with other operations.
                         goto skip_unsorted_write;
                     }
                     for (int ii = 0; ii < npts; ii++)
-                    {
-                        fprintf_bin(fun_final, "%d %f %f %f %f %f %f\n",
-                                    Rank_unsorted[ii],
-                                    Mass_unsorted[ii],
-                                    R_unsorted[ii],
-                                    Vrad_unsorted[ii],
-                                    PsiA_unsorted[ii],
-                                    E_unsorted[ii],
-                                    L_unsorted[ii]);
-                    }
+                        fprintf_bin(fun_final, "%d %f %f %f %f %f %f\n", Rank_unsorted[ii], Mass_unsorted[ii], R_unsorted[ii], Vrad_unsorted[ii],
+                                    PsiA_unsorted[ii], E_unsorted[ii], L_unsorted[ii]);
                     fclose(fun_final);
-                    log_message("INFO", "Thread %d: Successfully wrote unsorted Rank file for snapshot %d",
-                                omp_get_thread_num(), snap);
+                    log_message("INFO", "Thread %d: Successfully wrote unsorted Rank file for snapshot %d", omp_get_thread_num(), snap);
 
                 skip_unsorted_write:
 
                     // Sorted file write
-                    log_message("INFO", "Thread %d: About to write sorted Rank file for snapshot %d",
-                                omp_get_thread_num(), snap);
+                    log_message("INFO", "Thread %d: About to write sorted Rank file for snapshot %d", omp_get_thread_num(), snap);
 
                     char fname_sorted[256];
                     snprintf(base_filename, sizeof(base_filename), "data/Rank_Mass_Rad_VRad_sorted_t%05d.dat", snap);
                     get_full_filename(base_filename, 1, fname_sorted, sizeof(fname_sorted));
 
-                    log_message("INFO", "Thread %d: Opening %s for writing",
-                                omp_get_thread_num(), fname_sorted);
+                    log_message("INFO", "Thread %d: Opening %s for writing", omp_get_thread_num(), fname_sorted);
 
                     FILE *fsort_final = fopen(fname_sorted, "wb"); // Binary mode for fprintf_bin
 
-                    if (!fsort_final)
-                    {
-                        log_message("ERROR", "Thread %d: Failed to open %s for writing",
-                                    omp_get_thread_num(), fname_sorted);
+                    if (!fsort_final) {
+                        log_message("ERROR", "Thread %d: Failed to open %s for writing", omp_get_thread_num(), fname_sorted);
                         // Skip this file but continue.
                         goto skip_sorted_write;
                     }
 
                     for (int ii = 0; ii < npts; ii++)
-                    {
-                        fprintf_bin(fsort_final, "%d %f %f %f %f %f %f %f\n",
-                                    Rank_sorted[ii],
-                                    Mass_sorted[ii],
-                                    R_sorted[ii],
-                                    Vrad_sorted[ii],
-                                    PsiA_sorted[ii],
-                                    E_sorted[ii],
-                                    L_sorted[ii],
-                                    density_sorted[ii]);
-                    }
+                        fprintf_bin(fsort_final, "%d %f %f %f %f %f %f %f\n", Rank_sorted[ii], Mass_sorted[ii], R_sorted[ii], Vrad_sorted[ii],
+                                    PsiA_sorted[ii], E_sorted[ii], L_sorted[ii], density_sorted[ii]);
                     fclose(fsort_final);
-                    log_message("INFO", "Thread %d: Successfully wrote sorted Rank file for snapshot %d",
-                                omp_get_thread_num(), snap);
+                    log_message("INFO", "Thread %d: Successfully wrote sorted Rank file for snapshot %d", omp_get_thread_num(), snap);
 
                 skip_sorted_write:; // Empty statement needed after label.
                 } // END if (g_doDynRank).
 
-                log_message("INFO", "Thread %d: Completed writing rank files for snapshot %d, freeing memory",
-                            omp_get_thread_num(), snap);
+                log_message("INFO", "Thread %d: Completed writing rank files for snapshot %d, freeing memory", omp_get_thread_num(), snap);
 
                 free(inv_rA);
                 free(suffix_sum_invrA);
@@ -5615,21 +5332,18 @@ cleanup_diag_iteration:
             // Free density_sorted array which was allocated during density calculation
             if (density_sorted != NULL) {
                 free(density_sorted);
-                log_message("INFO", "Thread %d: Freed density_sorted for snapshot %d",
-                           omp_get_thread_num(), snap);
+                log_message("INFO", "Thread %d: Freed density_sorted for snapshot %d", omp_get_thread_num(), snap);
             }
 
             // Free the initial local buffers
-            log_message("INFO", "Thread %d: FINAL cleanup for snapshot %d",
-                        omp_get_thread_num(), snap);
+            log_message("INFO", "Thread %d: FINAL cleanup for snapshot %d", omp_get_thread_num(), snap);
 
             free(tmpL_partdata_snap);
             free(tmpRank_partdata_snap);
             free(tmpR_partdata_snap);
             free(tmpV_partdata_snap);
 
-            log_message("INFO", "Thread %d COMPLETED processing of snapshot index %d (snapshot number %d)",
-                        omp_get_thread_num(), s, snap);
+            log_message("INFO", "Thread %d COMPLETED processing of snapshot index %d (snapshot number %d)", omp_get_thread_num(), s, snap);
         }
 
         log_message("INFO", "All snapshot processing completed. Cleaning up.");
@@ -5644,16 +5358,12 @@ cleanup_diag_iteration:
         log_message("INFO", "Final operations using file suffix: %s", g_file_suffix);
 
         for (int s = 0; s < noutsnaps; s++)
-        {
-            snapshot_steps[s] = (int)floor(
-                s * (total_writes() - 1) / (double)(noutsnaps - 1));
-        }
+            snapshot_steps[s] = (int)floor(s * (total_writes() - 1) / (double)(noutsnaps - 1));
     }
 
     free(inverse_map);
 
-    for (i = 0; i < num_traj_particles; i++)
-    {
+    for (i = 0; i < num_traj_particles; i++) {
         free(trajectories[i]);
         free(energies[i]);
         free(velocities_arr[i]);
@@ -5689,9 +5399,8 @@ cleanup_diag_iteration:
     free(nPsivalues);
     free(innerintegrandvalues);
     free(Evalues);
-    if (w != NULL) {
+    if (w != NULL)
         gsl_integration_workspace_free(w);
-    }
     // Free GSL RNG resources
     if (g_rng != NULL) {
         gsl_rng_free(g_rng);
@@ -5702,15 +5411,11 @@ cleanup_diag_iteration:
 
     // Move the freeing of particles *outside* the if-block.
     for (i = 0; i < 5; i++)
-    {
         free(particles[i]);
-    }
     free(particles);
 
     if (g_doDebug)
-    {
         finalize_debug_energy_output(); // Ensures all data is collected first
-    }
 
     gsl_spline_free(splinemass);
     gsl_spline_free(splinePsi);
@@ -5732,11 +5437,9 @@ cleanup_diag_iteration:
 
     // Free per-thread GSL RNG resources
     if (g_rng_per_thread != NULL) {
-        for (int i_rng = 0; i_rng < g_max_omp_threads_for_rng; ++i_rng) {
-            if (g_rng_per_thread[i_rng] != NULL) {
+        for (int i_rng = 0; i_rng < g_max_omp_threads_for_rng; ++i_rng)
+            if (g_rng_per_thread[i_rng] != NULL)
                 gsl_rng_free(g_rng_per_thread[i_rng]);
-            }
-        }
         free(g_rng_per_thread);
         g_rng_per_thread = NULL;
         log_message("INFO", "Freed per-thread GSL RNGs.");
@@ -5744,9 +5447,8 @@ cleanup_diag_iteration:
 
     // Cleanup for the conditionally declared persistent sort buffer.
     if (g_sort_columns_buffer != NULL) {
-        for (int i = 0; i < g_sort_columns_buffer_npts; i++) {
-            if (g_sort_columns_buffer[i]) free(g_sort_columns_buffer[i]);
-        }
+        for (int i = 0; i < g_sort_columns_buffer_npts; i++)
+            free_if_exists(g_sort_columns_buffer[i]);
         free(g_sort_columns_buffer);
         g_sort_columns_buffer = NULL; // Mark as freed.
         g_sort_columns_buffer_npts = 0; // Reset size.

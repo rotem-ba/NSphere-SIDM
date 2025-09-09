@@ -64,5 +64,6 @@ inline int total_writes() {
 
 void initialize_output_file(int noutsnaps);
 void fill_suffix_tags();
+void free_if_exists(double *pointer);
 
 #endif // IO_H
