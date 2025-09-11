@@ -15,6 +15,8 @@
  */
 
 #include <string.h>
+#include <stdlib.h>
+#include "logging.h"
 
 // =========================================================================
 // GLOBAL PARTICLE DATA ARRAYS
@@ -40,3 +42,40 @@ double **lowestL_E = NULL;
 double **lowestL_L = NULL;
 
 double **particles = NULL;           ///< Main particle data array
+
+/**
+ * @brief Allocate main particle data array.
+ */
+void allocate_particles_memory(int npts_initial) {
+    particles = (double **)malloc(5 * sizeof(double *));
+    if (particles == NULL)
+        raise_error("ERROR: Memory allocation failed for particle array pointer\n");
+    for (int i = 0; i < 5; i++) {
+        particles[i] = (double *)malloc(npts_initial * sizeof(double));
+        if (particles[i] == NULL)
+            raise_error("ERROR: Memory allocation failed for particles[%d]\n", i);
+    }
+}
+
+/**
+ * @brief Allocate new smaller arrays (`final_particles`) for the `npts` particles to keep.
+ */
+void trim_particles(int npts) {
+    double **final_particles = (double **)malloc(5 * sizeof(double *));
+    if (final_particles == NULL)
+        raise_error("Memory allocation failed for final_particles\n");
+
+    /** @brief Copy innermost `npts` particles to final arrays and replace `particles` pointers. */
+    for (int i = 0; i < 5; i++){ // Loop over components
+        final_particles[i] = (double *)malloc(npts * sizeof(double));
+        if (final_particles[i] == NULL)
+            raise_error("Memory allocation failed for final_particles[%d]\n", i);
+        /** @note Copy only the first `npts` elements (innermost after sort). */
+        memcpy(final_particles[i], particles[i], npts * sizeof(double));
+
+        /** @note Free original oversized array and update `particles[i]` pointer. */
+        free(particles[i]);                // Free the original oversized array
+        particles[i] = final_particles[i]; // particles[i] now points to the smaller array
+    }
+    free(final_particles); // Free the temporary ** structure, not the data arrays
+}
