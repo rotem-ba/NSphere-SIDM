@@ -94,7 +94,7 @@ endif
 # ================================================================
 
 # Compiler optimization flags for best performance with generated code
-CFLAGS = -Wall -Wextra -O3 -ffast-math $(ARCH_FLAGS) -funroll-loops -fvectorize \
+CFLAGS = -Wall -Wextra -O3 -ffast-math -fno-finite-math-only $(ARCH_FLAGS) -funroll-loops -fvectorize \
          -DQUAD_CACHE=$(QUAD_CACHE_BYTES) $(DEBUG_FLAGS) $(OPENMP_FLAGS)
 
 # macOS-specific library paths using Homebrew
@@ -167,7 +167,7 @@ $(ROOT_DIR)/$(TARGET): $(SRC) Makefile.MacOS
 # --- Configuration for Single-Threaded Build ---
 # ================================================================
 # Flag set for explicitly requested non-OpenMP builds
-NO_OMP_CFLAGS = -Wall -Wextra -O3 -ffast-math $(ARCH_FLAGS) -funroll-loops -fvectorize $(DEBUG_FLAGS) \
+NO_OMP_CFLAGS = -Wall -Wextra -O3 -ffast-math -fno-finite-math-only $(ARCH_FLAGS) -funroll-loops -fvectorize $(DEBUG_FLAGS) \
                 -I$(GSL_PREFIX)/include -I$(FFTW_PREFIX)/include -I$(C_SRC_DIR)
 NO_OMP_LDFLAGS = -L$(GSL_PREFIX)/lib -L$(FFTW_PREFIX)/lib $(DEBUG_FLAGS)
 

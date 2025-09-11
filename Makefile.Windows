@@ -91,7 +91,7 @@ ifeq ($(USE_CLANG),1)
 
     # CLANG64 Compiler Flags
     # Includes optimization, OpenMP support, and Windows-specific settings
-    CFLAGS = $(CFLAGS_OPT) $(OPENMP_FLAGS) $(DEBUG_FLAGS) -funroll-loops -ffast-math -Wall -Wextra -Wno-macro-redefined
+    CFLAGS = $(CFLAGS_OPT) $(OPENMP_FLAGS) $(DEBUG_FLAGS) -funroll-loops -ffast-math -fno-finite-math-only -Wall -Wextra -Wno-macro-redefined
     CFLAGS += -I$(GSL_DIR)/include -I$(FFTW_DIR)/include -I$(C_SRC_DIR)
     CFLAGS += -D_WIN32 $(OPENMP_DEFINE) # Add conditional OpenMP define
 
@@ -211,7 +211,7 @@ no-openmp: python_executables
 	@echo "Building $(TARGET) without OpenMP ($(BUILD_TYPE))..."
 ifeq ($(USE_CLANG),1)
 	@# Define NO_OMP flags specifically for CLANG64
-	$(eval NO_OMP_CFLAGS = $(CFLAGS_OPT) $(DEBUG_FLAGS) -funroll-loops -ffast-math -Wall -Wextra -Wno-macro-redefined -I$(GSL_DIR)/include -I$(FFTW_DIR)/include -I$(C_SRC_DIR) -D_WIN32)
+	$(eval NO_OMP_CFLAGS = $(CFLAGS_OPT) $(DEBUG_FLAGS) -funroll-loops -ffast-math -fno-finite-math-only -Wall -Wextra -Wno-macro-redefined -I$(GSL_DIR)/include -I$(FFTW_DIR)/include -I$(C_SRC_DIR) -D_WIN32)
 	$(eval NO_OMP_LDFLAGS = -L$(GSL_DIR)/lib -L$(FFTW_DIR)/lib -lgsl -lgslcblas -lfftw3 -lfftw3_threads -lm $(DEBUG_FLAGS))
 	@$(CC) $(NO_OMP_CFLAGS) $(SRC) -o $(ROOT_DIR)/$(TARGET) $(NO_OMP_LDFLAGS)
 else
