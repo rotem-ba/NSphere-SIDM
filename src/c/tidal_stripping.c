@@ -16,6 +16,7 @@
 
 #include "globals.h"
 #include "particle_array_ops.h"
+#include "particle_data.h"
 
 /**
  * @brief TIDAL STRIPPING IMPLEMENTATION block.
