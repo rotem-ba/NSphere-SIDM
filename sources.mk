@@ -16,4 +16,6 @@ SOURCES = nsphere.c \
           cli.c \
           io.c \
           debug.c \
-          timesteps.c
+          timesteps.c \
+          rng.c \
+          tidal_stripping.c
