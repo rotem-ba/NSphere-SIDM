@@ -102,7 +102,6 @@ extern double g_nfw_profile_halo_mass;          ///< NFW-specific halo mass (Msu
 extern double g_nfw_profile_rmax_norm_factor;   ///< NFW-specific r_max factor for IC norm/grid; set by `--cutoff-factor` if NFW active, else defaults to CUTOFF_FACTOR_NFW_DEFAULT.
 extern double g_nfw_profile_falloff_factor;     ///< NFW-specific falloff transition C factor; set by `--falloff-factor` if NFW active, else defaults to FALLOFF_FACTOR_NFW_DEFAULT.
 
-
 // Generalized Profile Parameters (set by new command line flags)
 extern double g_scale_radius_param;         ///< Generalized scale radius (kpc), defaults to RC macro.
 extern double g_halo_mass_param;            ///< Generalized halo mass (Msun), defaults to HALO_MASS macro.
