@@ -23,27 +23,17 @@
 #include <math.h>
 
 /**
- * @brief Three-dimensional vector structure for SIDM calculations.
- * @details Used for representing velocity vectors and performing vector operations
- *          in SIDM scattering calculations.
- */
-typedef struct {
-    double x; ///< x-component of the vector.
-    double y; ///< y-component of the vector.
-    double z; ///< z-component of the vector.
-} threevector;
-
-/**
  * @brief Structure for buffering SIDM scatter events in parallel execution.
  * @details Used to store scatter event information before applying updates
  *          to the main particle array, ensuring thread safety in parallel SIDM.
  */
-typedef struct {
+struct ScatterEvent{
     int i;              ///< Index of the first particle in the scattering pair.
     int m_offset;       ///< Offset of the scattering partner relative to particle i.
     threevector Vifinal;///< Final 3D velocity vector of particle i.
     threevector Vmfinal;///< Final 3D velocity vector of the partner particle.
-} ScatterEvent;
+};
+typedef struct ScatterEvent ScatterEvent;
 
 /**
  * @brief Global simulation feature flags.
@@ -54,11 +44,6 @@ typedef struct {
 // Global variables (extern declarations - defined in sidm.c)
 extern double g_sidm_kappa;                    ///< SIDM opacity kappa (cm^2/g).
 extern int *g_particle_scatter_state;          ///< Particle scatter state tracking.
-
-// Vector mathematics functions
-threevector make_threevector(double x, double y, double z);
-double dotproduct(threevector X, threevector Y);
-threevector crossproduct(threevector X, threevector Y);
 
 // SIDM physics functions
 double sigmatotal(double vrel, int npts, double halo_mass_for_calc, double rc_for_calc);

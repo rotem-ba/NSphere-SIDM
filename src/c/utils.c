@@ -20,6 +20,7 @@
 #include <math.h>
 #include "logging.h"
 #include "globals.h"
+#include "utils.h"
 
 /**
  * @brief Checks if a given string represents a valid integer.

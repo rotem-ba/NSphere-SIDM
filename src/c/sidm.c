@@ -17,58 +17,9 @@
 #include "sidm.h"
 #include "globals.h"
 #include "logging.h"
+#include "utils.h"
 #include <math.h>
 #include <gsl/gsl_rng.h>
-
-/**
- * @brief Constructs a three-dimensional vector from its Cartesian components.
- * @details This utility function initializes a `threevector` structure with the
- *          provided x, y, and z components. It serves as a convenient constructor.
- *
- * @param x [in] The x-component of the vector.
- * @param y [in] The y-component of the vector.
- * @param z [in] The z-component of the vector.
- * @return threevector An initialized `threevector` structure.
- */
-threevector make_threevector(double x, double y, double z) {
-    return (threevector){x, y, z};
-}
-
-/**
- * @brief Computes the scalar dot product of two three-dimensional vectors.
- * @details Calculates \f$X \cdot Y = X_x Y_x + X_y Y_y + X_z Y_z\f$.
- *          The dot product is a measure of the projection of one vector onto another
- *          and is used in various physics calculations, such as determining the
- *          magnitude squared of a vector (\f$V \cdot V = |V|^2\f$) or the angle between vectors.
- *
- * @param X [in] The first threevector operand.
- * @param Y [in] The second threevector operand.
- * @return double The scalar result of the dot product \f$X \cdot Y\f$.
- */
-double dotproduct(threevector X, threevector Y) {
-    return X.x * Y.x + X.y * Y.y + X.z * Y.z;
-}
-
-/**
- * @brief Computes the vector cross product of two three-dimensional vectors.
- * @details Calculates \f$Z = X \times Y\f$, where \f$X = (X_x, X_y, X_z)\f$ and \f$Y = (Y_x, Y_y, Y_z)\f$.
- *          The components of the resulting vector \f$Z\f$ are determined by:
- *          \f$Z_x = X_y Y_z - X_z Y_y\f$
- *          \f$Z_y = X_z Y_x - X_x Y_z\f$
- *          \f$Z_z = X_x Y_y - X_y Y_x\f$
- *          This follows the standard right-hand rule for vector cross products.
- *
- * @param X [in] The first threevector operand.
- * @param Y [in] The second threevector operand.
- * @return threevector The resulting vector \f$Z = X \times Y\f$.
- */
-threevector crossproduct(threevector X, threevector Y) {
-    threevector Z;
-    Z.x = X.y * Y.z - X.z * Y.y;
-    Z.y = X.z * Y.x - X.x * Y.z;
-    Z.z = X.x * Y.y - X.y * Y.x;
-    return Z;
-}
 
 /**
  * @brief Calculates the total SIDM cross-section for a given relative velocity.
@@ -215,7 +166,7 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
         // Random azimuthal orientation for transverse velocity component
         double phii = 2.0 * PI * gsl_rng_uniform(rng);
         double Viperp = particles[2][i] / particles[0][i]; // v_perp = L/r
-        threevector Vi = make_threevector(Viperp * cos(phii), Viperp * sin(phii), particles[1][i]);
+        threevector Vi = to_vector(Viperp * cos(phii), Viperp * sin(phii), particles[1][i]);
 
         // Calculate interaction rates with neighboring particles
         for (int m = 1; m <= nscat; m++) {
@@ -224,9 +175,9 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
             // Construct 3D velocity for scattering partner
             // Assumes fixed azimuthal alignment for partner particle
             double Vmperp = particles[2][partner_idx] / particles[0][partner_idx];
-            threevector Vm = make_threevector(Vmperp, 0.0, particles[1][partner_idx]);
+            threevector Vm = to_vector(Vmperp, 0.0, particles[1][partner_idx]);
 
-            threevector Vrel_vec = make_threevector(Vi.x - Vm.x, Vi.y - Vm.y, Vi.z - Vm.z);
+            threevector Vrel_vec = vector_diff(Vi, Vm);
             double vrel_val = sqrt(dotproduct(Vrel_vec, Vrel_vec));
 
             // Calculate interaction rate: σ × v_rel
@@ -294,8 +245,8 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
 
             // Reconstruct velocities for selected scattering pair
             double Vmperp_scatter = particles[2][actual_partner_idx] / particles[0][actual_partner_idx];
-            threevector Vm_scatter = make_threevector(Vmperp_scatter, 0.0, particles[1][actual_partner_idx]);
-            threevector Vrel_scatter_vec = make_threevector(Vi.x - Vm_scatter.x, Vi.y - Vm_scatter.y, Vi.z - Vm_scatter.z);
+            threevector Vm_scatter = to_vector(Vmperp_scatter, 0.0, particles[1][actual_partner_idx]);
+            threevector Vrel_scatter_vec = vector_diff(Vi, Vm_scatter);
             double vrel_scatter_val = sqrt(dotproduct(Vrel_scatter_vec, Vrel_scatter_vec));
 
             if (vrel_scatter_val < 1e-15) {
@@ -312,21 +263,15 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
 
             // Construct orthonormal coordinate system for scattering transformation
             threevector nhat0, nhat1, nhat2, nhatref;
-            nhat0 = make_threevector(Vrel_scatter_vec.x / vrel_scatter_val, Vrel_scatter_vec.y / vrel_scatter_val, Vrel_scatter_vec.z / vrel_scatter_val);
+            nhat0 = vector_scalar(Vrel_scatter_vec, 1/vrel_scatter_val);
 
-            if (fabs(nhat0.z) < 0.999)
-                nhatref = make_threevector(0.0, 0.0, 1.0);
-            else
-                nhatref = make_threevector(1.0, 0.0, 0.0);
+            nhatref = (fabs(nhat0.z) < 0.999) ? to_vector(0.0, 0.0, 1.0) : to_vector(1.0, 0.0, 0.0);
 
             nhat1 = crossproduct(nhat0, nhatref);
             double normnhat1 = sqrt(dotproduct(nhat1, nhat1));
             if (normnhat1 < 1e-15) {
                 // Fallback for parallel vectors
-                if (fabs(nhat0.x) < 0.999)
-                    nhatref = make_threevector(1.0, 0.0, 0.0);
-                else
-                    nhatref = make_threevector(0.0, 1.0, 0.0);
+                nhatref = (fabs(nhat0.z) < 0.999) ? to_vector(1.0, 0.0, 0.0) : to_vector(0.0, 1.0, 0.0);
                 nhat1 = crossproduct(nhat0, nhatref);
                 normnhat1 = sqrt(dotproduct(nhat1, nhat1));
                 if (normnhat1 < 1e-15) {
@@ -334,20 +279,16 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
                      continue;
                 }
             }
-            nhat1 = make_threevector(nhat1.x / normnhat1, nhat1.y / normnhat1, nhat1.z / normnhat1);
+            nhat1 = vector_scalar(nhat1, 1/normnhat1);
             nhat2 = crossproduct(nhat0, nhat1);
 
             // Transform scattered velocities from CM frame to lab frame
-            threevector nhat_perp_rotated = make_threevector(nhat1.x * cf + nhat2.x * sf, nhat1.y * cf + nhat2.y * sf, nhat1.z * cf + nhat2.z * sf);
-            threevector V_rel_final_half = make_threevector(
-                (vrel_scatter_val / 2.0) * (costheta * nhat0.x + sintheta * nhat_perp_rotated.x),
-                (vrel_scatter_val / 2.0) * (costheta * nhat0.y + sintheta * nhat_perp_rotated.y),
-                (vrel_scatter_val / 2.0) * (costheta * nhat0.z + sintheta * nhat_perp_rotated.z)
-            );
-            threevector V_cm = make_threevector((Vi.x + Vm_scatter.x) / 2.0, (Vi.y + Vm_scatter.y) / 2.0, (Vi.z + Vm_scatter.z) / 2.0);
+            threevector nhat_perp_rotated = vector_sum(vector_scalar(nhat1, cf), vector_scalar(nhat2, sf));
+            threevector V_rel_final_half = vector_scalar(vector_sum(vector_scalar(nhat0,costheta), vector_scalar(nhat_perp_rotated,sintheta)),vrel_scatter_val/2.0);
+            threevector V_cm = vector_scalar(vector_sum(Vi,Vm_scatter), 0.5);
 
-            threevector Vifinal_vec = make_threevector(V_cm.x + V_rel_final_half.x, V_cm.y + V_rel_final_half.y, V_cm.z + V_rel_final_half.z);
-            threevector Vmfinal_vec = make_threevector(V_cm.x - V_rel_final_half.x, V_cm.y - V_rel_final_half.y, V_cm.z - V_rel_final_half.z);
+            threevector Vifinal_vec = vector_sum(V_cm, V_rel_final_half);
+            threevector Vmfinal_vec = vector_diff(V_cm, V_rel_final_half);
 
             // Apply velocity changes to particle data arrays
             particles[1][i] = Vifinal_vec.z;
@@ -483,13 +424,13 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
 
             double phii = 2.0 * PI * gsl_rng_uniform(local_rng);
             double Viperp = particles[2][i] / particles[0][i];
-            threevector Vi = make_threevector(Viperp * cos(phii), Viperp * sin(phii), particles[1][i]);
+            threevector Vi = to_vector(Viperp * cos(phii), Viperp * sin(phii), particles[1][i]);
 
             for (int m = 1; m <= nscat; m++) {
                 int partner_idx = i + m;
                 double Vmperp = particles[2][partner_idx] / particles[0][partner_idx];
-                threevector Vm = make_threevector(Vmperp, 0.0, particles[1][partner_idx]);
-                threevector Vrel_vec = make_threevector(Vi.x - Vm.x, Vi.y - Vm.y, Vi.z - Vm.z);
+                threevector Vm = to_vector(Vmperp, 0.0, particles[1][partner_idx]);
+                threevector Vrel_vec = vector_diff(Vi, Vm);
                 double vrel_val = sqrt(dotproduct(Vrel_vec, Vrel_vec));
                 partialprobability[m] = sigmatotal(vrel_val, npts, halo_mass_for_sidm, rc_for_sidm) * vrel_val;
                 probability_sum_term += partialprobability[m];
@@ -537,8 +478,8 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
                     continue; // Should be rare with nscat logic
 
                 double Vmperp_scatter = particles[2][actual_partner_idx] / particles[0][actual_partner_idx];
-                threevector Vm_scatter = make_threevector(Vmperp_scatter, 0.0, particles[1][actual_partner_idx]);
-                threevector Vrel_scatter_vec = make_threevector(Vi.x - Vm_scatter.x, Vi.y - Vm_scatter.y, Vi.z - Vm_scatter.z);
+                threevector Vm_scatter = to_vector(Vmperp_scatter, 0.0, particles[1][actual_partner_idx]);
+                threevector Vrel_scatter_vec = vector_diff(Vi, Vm_scatter);
                 double vrel_scatter_val = sqrt(dotproduct(Vrel_scatter_vec, Vrel_scatter_vec));
                 if (vrel_scatter_val < 1e-15)
                     continue;
@@ -548,31 +489,29 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
                 double phif_scatter = 2.0 * PI * gsl_rng_uniform(local_rng);
                 double cf = cos(phif_scatter); double sf = sin(phif_scatter);
                 threevector nhat0, nhat1, nhat2, nhatref; // Orthonormal basis construction (as in serial)
-                nhat0 = make_threevector(Vrel_scatter_vec.x/vrel_scatter_val, Vrel_scatter_vec.y/vrel_scatter_val, Vrel_scatter_vec.z/vrel_scatter_val);
-                nhatref = (fabs(nhat0.z) < 0.999) ? make_threevector(0.0,0.0,1.0) : make_threevector(1.0,0.0,0.0);
+                nhat0 = vector_scalar(Vrel_scatter_vec, 1/vrel_scatter_val);
+                nhatref = (fabs(nhat0.z) < 0.999) ? to_vector(0.0,0.0,1.0) : to_vector(1.0,0.0,0.0);
                 nhat1 = crossproduct(nhat0,nhatref);
                 double normnhat1 = sqrt(dotproduct(nhat1,nhat1));
                 if (normnhat1 < 1e-15) {
-                    nhatref = (fabs(nhat0.x) < 0.999) ? make_threevector(1.0,0.0,0.0) : make_threevector(0.0,1.0,0.0);
+                    nhatref = (fabs(nhat0.x) < 0.999) ? to_vector(1.0,0.0,0.0) : to_vector(0.0,1.0,0.0);
                     nhat1 = crossproduct(nhat0,nhatref);
                     normnhat1 = sqrt(dotproduct(nhat1,nhat1));
                     if (normnhat1 < 1e-15)
                         continue;
                 }
-                nhat1 = make_threevector(nhat1.x/normnhat1, nhat1.y/normnhat1, nhat1.z/normnhat1);
+                nhat1 = vector_scalar(nhat1, 1/normnhat1);
                 nhat2 = crossproduct(nhat0,nhat1);
 
-                threevector nhat_perp_rotated = make_threevector(nhat1.x*cf+nhat2.x*sf, nhat1.y*cf+nhat2.y*sf, nhat1.z*cf+nhat2.z*sf);
-                threevector V_rel_final_half = make_threevector((vrel_scatter_val/2.0)*(costheta*nhat0.x+sintheta*nhat_perp_rotated.x),
-                                                                (vrel_scatter_val/2.0)*(costheta*nhat0.y+sintheta*nhat_perp_rotated.y),
-                                                                (vrel_scatter_val/2.0)*(costheta*nhat0.z+sintheta*nhat_perp_rotated.z));
-                threevector V_cm = make_threevector((Vi.x+Vm_scatter.x)/2.0, (Vi.y+Vm_scatter.y)/2.0, (Vi.z+Vm_scatter.z)/2.0);
+                threevector nhat_perp_rotated = vector_sum(vector_scalar(nhat1, cf), vector_scalar(nhat2, sf));
+                threevector V_rel_final_half = vector_scalar(vector_sum(vector_scalar(nhat0,costheta), vector_scalar(nhat_perp_rotated,sintheta)),vrel_scatter_val/2.0);
+                threevector V_cm = vector_scalar(vector_sum(Vi,Vm_scatter),0.5);
 
                 ScatterEvent current_event;
                 current_event.i = i;
                 current_event.m_offset = m_scatter; // Store offset, not absolute index
-                current_event.Vifinal = make_threevector(V_cm.x+V_rel_final_half.x, V_cm.y+V_rel_final_half.y, V_cm.z+V_rel_final_half.z);
-                current_event.Vmfinal = make_threevector(V_cm.x-V_rel_final_half.x, V_cm.y-V_rel_final_half.y, V_cm.z-V_rel_final_half.z);
+                current_event.Vifinal = vector_sum(V_cm,V_rel_final_half);
+                current_event.Vmfinal = vector_diff(V_cm,V_rel_final_half);
 
                 #pragma omp critical (add_scatter_result_sidm)
                 {

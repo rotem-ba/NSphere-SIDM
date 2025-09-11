@@ -14,73 +14,72 @@
  * limitations under the License.
  */
 
- #ifndef DENSITY_H
- #define DENSITY_H
+#ifndef DENSITY_H
+#define DENSITY_H
 
- #include <gsl/gsl_spline.h>
- #include <gsl/gsl_interp.h>
+#include <gsl/gsl_spline.h>
+#include <gsl/gsl_interp.h>
 
- // =========================================================================
- //  Shared data variables
- // =========================================================================
- /**
-  * @brief Common IC generation variables shared between profile pathways.
-  * @details These variables are declared before the profile selection block
-  *          and will be populated by whichever profile pathway is chosen.
-  */
+// =========================================================================
+//  Shared data variables
+// =========================================================================
+/**
+ * @brief Common IC generation variables shared between profile pathways.
+ * @details These variables are declared before the profile selection block
+ *          and will be populated by whichever profile pathway is chosen.
+ */
 
- // Common data arrays
- extern double *radius;                     ///< Radial grid points
- extern double *mass;                       ///< Mass values at radial points
- extern double *Psivalues;                  ///< Potential values at radial points
- extern double *nPsivalues;                 ///< Negative potential values (for r(Psi) spline)
- extern double *Evalues;                    ///< Energy grid points
- extern double *innerintegrandvalues;       ///< f(E) integrand values
- extern double *radius_monotonic_grid_nfw;  ///< Monotonic radial grid for NFW calculations
+// Common data arrays
+extern double *radius;                     ///< Radial grid points
+extern double *mass;                       ///< Mass values at radial points
+extern double *Psivalues;                  ///< Potential values at radial points
+extern double *nPsivalues;                 ///< Negative potential values (for r(Psi) spline)
+extern double *Evalues;                    ///< Energy grid points
+extern double *innerintegrandvalues;       ///< f(E) integrand values
+extern double *radius_monotonic_grid_nfw;  ///< Monotonic radial grid for NFW calculations
 
- // Key scalar values
- extern double Psimin;                      ///< Minimum potential (at rmax)
- extern double Psimax;                      ///< Maximum potential (at r=0)
- extern double rmax;                        ///< Maximum radius for profile calculations
- extern int num_points;                     ///< Number of points for spline interpolation
+// Key scalar values
+extern double Psimin;                      ///< Minimum potential (at rmax)
+extern double Psimax;                      ///< Maximum potential (at r=0)
+extern double rmax;                        ///< Maximum radius for profile calculations
+extern int num_points;                     ///< Number of points for spline interpolation
 
 
- // =========================================================================
- // ENERGY CALCULATION AND INTEGRATION STRUCTURES
- // =========================================================================
+// =========================================================================
+// ENERGY CALCULATION AND INTEGRATION STRUCTURES
+// =========================================================================
 
- /**
-  * @brief Parameters for energy integration calculations.
-  * @details Used as `void* params` argument in GSL integration routines,
-  *          specifically for distribution function calculations (`fEintegrand`).
-  */
-  struct fEintegrand_params
-  {
-      double E;                      ///< Energy value (relative energy).
-      gsl_spline *splinePsi;         ///< Interpolation spline for potential Psi(r).
-      gsl_spline *splinemass;        ///< Interpolation spline for enclosed mass M(r).
-      gsl_interp_accel *rofPsiarray; ///< Accelerator for radius lookup from potential r(Psi).
-      gsl_interp_accel *massarray;   ///< Accelerator for mass lookups M(r).
-  };
-  typedef struct fEintegrand_params fEintegrand_params;
+/**
+ * @brief Parameters for energy integration calculations.
+ * @details Used as `void* params` argument in GSL integration routines,
+ *          specifically for distribution function calculations (`fEintegrand`).
+ */
+struct fEintegrand_params {
+    double E;                      ///< Energy value (relative energy).
+    gsl_spline *splinePsi;         ///< Interpolation spline for potential Psi(r).
+    gsl_spline *splinemass;        ///< Interpolation spline for enclosed mass M(r).
+    gsl_interp_accel *rofPsiarray; ///< Accelerator for radius lookup from potential r(Psi).
+    gsl_interp_accel *massarray;   ///< Accelerator for mass lookups M(r).
+};
+typedef struct fEintegrand_params fEintegrand_params;
 
-  /**
-   * @brief Parameters for Psiintegrand to support profile-specific mass integrands.
-   * @details Allows Psiintegrand to call the appropriate mass integrand function
-   *          based on the selected density profile.
-   */
-  struct Psiintegrand_params{
-      double (*massintegrand_func)(double, void *); ///< Function pointer to profile-specific mass integrand
-      void *params_for_massintegrand;               ///< Parameters for the mass integrand function
-  };
-  typedef struct Psiintegrand_params Psiintegrand_params;
+/**
+ * @brief Parameters for Psiintegrand to support profile-specific mass integrands.
+ * @details Allows Psiintegrand to call the appropriate mass integrand function
+ *          based on the selected density profile.
+ */
+struct Psiintegrand_params {
+    double (*massintegrand_func)(double, void *); ///< Function pointer to profile-specific mass integrand
+    void *params_for_massintegrand;               ///< Parameters for the mass integrand function
+};
+typedef struct Psiintegrand_params Psiintegrand_params;
 
-  double fEintegrand(double t, void *params);
-  double Psiintegrand(double rp, void *params);
+double fEintegrand(double t, void *params);
+double Psiintegrand(double rp, void *params);
 
-  double drhodr(double r);
-  double massintegrand(double r, void *params __attribute__((unused)));
+double drhodr(double r);
+double massintegrand(double r, void *params __attribute__((unused)));
 
-  void set_global_density_params();
+void set_global_density_params();
 
 #endif // DENSITY_H
