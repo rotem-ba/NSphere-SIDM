@@ -18,9 +18,9 @@
 #define CLI_H
 
 void printUsage(const char *prog);
-static int validate_int_input(int *i, int argc, char **argv, const char *param_name);
-static float validate_float_input(int *i, int argc, char **argv, const char *param_name);
-static void raise_incompatible_choice_error(const char *main_param, const char *param2, int condition);
+int validate_int_input(int *i, int argc, char **argv, const char *param_name);
+float validate_float_input(int *i, int argc, char **argv, const char *param_name);
+void raise_incompatible_choice_error(const char *main_param, const char *param2, int condition);
 int prompt_yes_no(const char *prompt);
 void prompt_quit(const char *prompt, const char *exit_message);
 void parseSaveArgs(int argc, char *argv[], int *pIndex);

@@ -121,7 +121,7 @@ void printUsage(const char *prog)
 /**
  * @brief Validates the param at location i+1 is a valid int and raises an error otherwise.
  */
-static int validate_int_input(int *i, int argc, char **argv, const char *param_name) {
+int validate_int_input(int *i, int argc, char **argv, const char *param_name) {
     if (*i + 1 >= argc)
         raise_error("--%s requires an integer argument", param_name);
     if (!isInteger(argv[*i + 1]))
@@ -132,7 +132,7 @@ static int validate_int_input(int *i, int argc, char **argv, const char *param_n
 /**
  * @brief Validates the param at location i+1 is a valid int and raises an error otherwise.
  */
-static float validate_float_input(int *i, int argc, char **argv, const char *param_name) {
+float validate_float_input(int *i, int argc, char **argv, const char *param_name) {
     if (*i + 1 >= argc)
         raise_error("--%s requires an float argument", param_name);
     if (!isFloat(argv[*i + 1]))
@@ -143,7 +143,7 @@ static float validate_float_input(int *i, int argc, char **argv, const char *par
 /**
  * @brief Raises an error if 2 incompatible options were chosen.
  */
-static void raise_incompatible_choice_error(const char *main_param, const char *param2, int condition) {
+void raise_incompatible_choice_error(const char *main_param, const char *param2, int condition) {
     if (condition)
         raise_error("--%s is incompatible with --%s. These options cannot be used together. Use either --%s OR --%s, not both.", main_param, param2, param2, main_param);
 }
