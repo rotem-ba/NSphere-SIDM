@@ -14,28 +14,28 @@
  * limitations under the License.
  */
 
- #ifndef IO_H
- #define IO_H
+#ifndef IO_H
+#define IO_H
 
- #include <string.h>
- #include <stdio.h>
- #include "globals.h"
+#include <string.h>
+#include <stdio.h>
+#include "globals.h"
 
- // =========================================================================
- // Windows‑compatibility shims
- // =========================================================================
- // Provide POSIX‑style helpers for MinGW/Clang:
- //   • mkdir(path,mode)   → _mkdir(path)
- //   • drand48 / srand48  → wrappers around ANSI rand
- #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
-   #include <direct.h>
-   #include <stdlib.h>
+// =========================================================================
+// Windows‑compatibility shims
+// =========================================================================
+// Provide POSIX‑style helpers for MinGW/Clang:
+//   • mkdir(path,mode)   → _mkdir(path)
+//   • drand48 / srand48  → wrappers around ANSI rand
+#if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
+    #include <direct.h>
+    #include <stdlib.h>
 
-   /** Accept 1‑ or 2‑argument forms of mkdir on Windows. */
-   #define mkdir(path, ...) _mkdir(path)
+    /** Accept 1‑ or 2‑argument forms of mkdir on Windows. */
+    #define mkdir(path, ...) _mkdir(path)
 
-   #define NSPHERE_WINDOWS_SHIMS_DONE 1
- #endif
+    #define NSPHERE_WINDOWS_SHIMS_DONE 1
+#endif
 
 long long get_available_disk_space(const char *path);
 void get_full_filename(const char *base_filename, int with_suffix, char *buffer, size_t bufsize);
@@ -64,6 +64,7 @@ inline int total_writes() {
 
 void initialize_output_file(int noutsnaps);
 void fill_suffix_tags();
-void free_if_exists(double *pointer);
+int validate_snapshot_memory_allocation(double *r_grid, double *log_r_grid, double *mass_grid, double *density_grid, double *density_sorted,
+                                        double *R_decimated, double *Mass_decimated, double *R_filtered, double *Mass_filtered, int r_violations, int snap);
 
 #endif // IO_H

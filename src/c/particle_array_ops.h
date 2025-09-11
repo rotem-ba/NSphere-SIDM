@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
- #ifndef PARTICLE_ARRAY_OPS_H
- #define PARTICLE_ARRAY_OPS_H
+#ifndef PARTICLE_ARRAY_OPS_H
+#define PARTICLE_ARRAY_OPS_H
 
- #include "particle_data.h"
+#include "particle_data.h"
 
 int check_strict_monotonicity(const double *arr, int n, const char *name);
 

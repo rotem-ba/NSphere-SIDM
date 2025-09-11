@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
- #include "globals.h"
- #include "particle_array_ops.h"
- #include "exit.h"
- #include "nsphere_sort.h"
- #include "globals.h"
- #include <string.h>
+#include "globals.h"
+#include "particle_array_ops.h"
+#include "exit.h"
+#include "logging.h"
+#include "nsphere_sort.h"
+#include "globals.h"
+#include <string.h>
 
 // =========================================================================
 // PARTICLE DATA STRUCTURES AND OPERATIONS
@@ -37,8 +38,7 @@ int check_strict_monotonicity(const double *arr, int n, const char *name) {
     int i;
     for (i = 1; i < n; i++) {
         if (arr[i] <= arr[i-1]) {
-            fprintf(stderr, "MONOTONICITY_CHECK FAILED for '%s': arr[%d]=%.17e <= arr[%d]=%.17e\n",
-                       name, i, arr[i], i-1, arr[i-1]);
+            fprintf(stderr, "MONOTONICITY_CHECK FAILED for '%s': arr[%d]=%.17e <= arr[%d]=%.17e\n", name, i, arr[i], i-1, arr[i-1]);
             fflush(stderr);
             // Print a few surrounding values for context
             for (int k = (i > 2 ? i - 2 : 0); k < (i + 3 < n ? i + 3 : n); k++) {
@@ -62,11 +62,13 @@ int check_strict_monotonicity(const double *arr, int n, const char *name) {
  * @return int -1 if pa->rad < pb->rad, 1 if pa->rad > pb->rad, 0 otherwise.
  *             Specific return for NaNs ensures consistent ordering.
  */
-int compare_partdata_by_rad(const void *a, const void *b)
-{
-    if (!a && !b) return 0;
-    if (!a) return -1;
-    if (!b) return 1;
+int compare_partdata_by_rad(const void *a, const void *b) {
+    if (!a && !b)
+        return 0;
+    if (!a)
+        return -1;
+    if (!b)
+        return 1;
 
     const struct PartData *pa = (const struct PartData *)a;
     const struct PartData *pb = (const struct PartData *)b;
@@ -74,12 +76,17 @@ int compare_partdata_by_rad(const void *a, const void *b)
     int pa_is_nan = (pa->rad != pa->rad); // Check for NaN (safe with fast-math)
     int pb_is_nan = (pb->rad != pb->rad); // Check for NaN (safe with fast-math)
 
-    if (pa_is_nan && pb_is_nan) return 0;
-    if (pa_is_nan) return -1;
-    if (pb_is_nan) return 1;
+    if (pa_is_nan && pb_is_nan)
+        return 0;
+    if (pa_is_nan)
+        return -1;
+    if (pb_is_nan)
+        return 1;
 
-    if (pa->rad < pb->rad) return -1;
-    if (pa->rad > pb->rad) return 1;
+    if (pa->rad < pb->rad)
+        return -1;
+    if (pa->rad > pb->rad)
+        return 1;
     return 0;
 }
 
@@ -94,8 +101,7 @@ int compare_partdata_by_rad(const void *a, const void *b)
  * @param b Pointer to the second RrPsiPair structure.
  * @return int -1 if pa->rr < pb->rr, 1 if pa->rr > pb->rr, 0 otherwise.
  */
-int compare_by_rr(const void *a, const void *b)
-{
+int compare_by_rr(const void *a, const void *b) {
     const struct RrPsiPair *pa = (const struct RrPsiPair *)a;
     const struct RrPsiPair *pb = (const struct RrPsiPair *)b;
     if (pa->rr < pb->rr)
@@ -116,8 +122,7 @@ int compare_by_rr(const void *a, const void *b)
  * @param b [in] Pointer to the second LAndIndex structure.
  * @return int -1 if a->L < b->L, 1 if a->L > b->L, 0 if equal.
  */
-int cmp_LAI(const void *a, const void *b)
-{
+int cmp_LAI(const void *a, const void *b) {
     double La = ((const LAndIndex *)a)->L;
     double Lb = ((const LAndIndex *)b)->L;
 
@@ -137,19 +142,13 @@ int cmp_LAI(const void *a, const void *b)
  * @param array [in,out] Array of PartData structures to be sorted.
  * @param npts  [in] Number of elements in the array.
  */
-void sort_by_rad(struct PartData *array, int npts)
-{
-    if (!array)
-    {
+void sort_by_rad(struct PartData *array, int npts) {
+    if (!array) {
         fprintf(stderr, "ERROR: sort_by_rad called with NULL array\n");
         return;
     }
-    if (npts <= 0)
-    {
-        // Sorting an empty or negatively sized array is meaningless or an error.
-        // fprintf(stderr, "Warning: sort_by_rad called with npts <= 0: %d\n", npts);
+    if (npts <= 0) // Sorting an empty or negatively sized array is meaningless or an error.
         return; // Nothing to sort
-    }
 
     qsort(array, (size_t)npts, sizeof(struct PartData), compare_partdata_by_rad);
 }
@@ -167,8 +166,7 @@ void sort_by_rad(struct PartData *array, int npts)
  *              1 if the first double is greater than the second,
  *              0 if they are equal.
  */
-int double_cmp(const void *a, const void *b)
-{
+int double_cmp(const void *a, const void *b) {
     double da = *(const double *)a;
     double db = *(const double *)b;
 
@@ -201,8 +199,7 @@ int double_cmp(const void *a, const void *b)
  * @note Assumes the particle data is structured as [particle_index][component_index]
  *       when passed via `columns` array in sorting functions, and compares `columns[i][0]`.
  */
-int compare_particles(const void *a, const void *b)
-{
+int compare_particles(const void *a, const void *b) {
     double *col_a = *(double **)a;
     double *col_b = *(double **)b;
     if (col_a[0] < col_b[0])
@@ -229,52 +226,38 @@ int compare_particles(const void *a, const void *b)
  * @note Uses `qsort` and a temporary array for sorting. Exits via `exit(1)` if memory
  *       allocation for the temporary array fails.
  */
-void reassign_orig_ids_with_rank(double *orig_ids, int n)
-{
+void reassign_orig_ids_with_rank(double *orig_ids, int n) {
     if (n <= 0) return; // Handle empty or invalid input
 
     double *temp = (double *)malloc(n * sizeof(double));
-    if (temp == NULL)
-    {
+    if (temp == NULL) {
         fprintf(stderr, "Error: Memory allocation failed in reassign_orig_ids_with_rank\n");
         exit(1);
     }
 
     // Step 1: Copy original IDs to temporary array
     for (int i = 0; i < n; i++)
-    {
         temp[i] = orig_ids[i];
-    }
 
     // Step 2: Sort temporary array to establish rank order
     qsort(temp, n, sizeof(double), double_cmp);
 
     // Step 3: Find rank of each original ID using binary search
-    for (int i = 0; i < n; i++)
-    {
+    for (int i = 0; i < n; i++) {
         int low = 0, high = n - 1, rank = -1;
-        while (low <= high)
-        {
+        while (low <= high) {
             int mid = (low + high) / 2;
-            if (temp[mid] == orig_ids[i])
-            {
+            if (temp[mid] == orig_ids[i]) {
                 rank = mid;
                 break;
             }
             else if (temp[mid] < orig_ids[i])
-            {
                 low = mid + 1;
-            }
             else
-            {
                 high = mid - 1;
-            }
         }
-        if (rank == -1)
-        {
-            // Use insertion point as fallback if exact match not found
+        if (rank == -1) // Use insertion point as fallback if exact match not found
             rank = low;
-        }
 
         // Step 4: Replace original ID with its rank
         orig_ids[i] = (double)rank;
@@ -292,14 +275,11 @@ void reassign_orig_ids_with_rank(double *orig_ids, int n)
  * @param columns 2D array of particle data to be sorted
  * @param n Number of elements to sort
  */
-void insertion_sort(double **columns, int n)
-{
-    for (int i = 1; i < n; i++)
-    {
+void insertion_sort(double **columns, int n) {
+    for (int i = 1; i < n; i++) {
         double *temp = columns[i];
         int j = i - 1;
-        while (j >= 0 && compare_particles(&columns[j], &temp) > 0)
-        {
+        while (j >= 0 && compare_particles(&columns[j], &temp) > 0) {
             columns[j + 1] = columns[j];
             j--;
         }
@@ -316,8 +296,7 @@ void insertion_sort(double **columns, int n)
  * @param columns 2D array of particle data to be sorted (passed as `double**`).
  * @param n Number of elements (particles) to sort.
  */
-void stdlib_qsort_wrapper(double **columns, int n)
-{
+void stdlib_qsort_wrapper(double **columns, int n) {
     qsort(columns, n, sizeof(double *), compare_particles);
 }
 
@@ -330,8 +309,7 @@ void stdlib_qsort_wrapper(double **columns, int n)
  * @param columns 2D array of particle data to be sorted
  * @param n Number of elements to sort
  */
-void quadsort_wrapper(double **columns, int n)
-{
+void quadsort_wrapper(double **columns, int n) {
     quadsort(columns, n, sizeof(double *), compare_particles);
 }
 
@@ -345,14 +323,11 @@ void quadsort_wrapper(double **columns, int n)
  * @param start Starting index of the subarray (inclusive).
  * @param end Ending index of the subarray (inclusive).
  */
-static void insertion_sort_sub(double **columns, int start, int end)
-{
-    for (int i = start + 1; i <= end; i++)
-    {
+static void insertion_sort_sub(double **columns, int start, int end) {
+    for (int i = start + 1; i <= end; i++) {
         double *temp = columns[i];
         int j = i - 1;
-        while (j >= start && compare_particles(&columns[j], &temp) > 0)
-        {
+        while (j >= start && compare_particles(&columns[j], &temp) > 0) {
             columns[j + 1] = columns[j];
             j--;
         }
@@ -380,31 +355,32 @@ static void insertion_sort_sub(double **columns, int start, int end)
  * @param columns Column-major data array [particle][component]
  * @param n Number of particles to sort
  */
-void insertion_parallel_sort(double **columns, int n)
-{
+void insertion_parallel_sort(double **columns, int n) {
     // Dynamically determine number of sections based on runtime threads and constants.
     int active_num_sort_sections;
     #ifdef _OPENMP
         int n_runtime_threads = omp_get_max_threads();
-        if (n_runtime_threads <= 0) n_runtime_threads = 1;
+        if (n_runtime_threads <= 0)
+            n_runtime_threads = 1;
         active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD;
         active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD;
-        if (active_num_sort_sections <= 0) active_num_sort_sections = PARALLEL_SORT_DEFAULT_SECTIONS;
+        if (active_num_sort_sections <= 0)
+            active_num_sort_sections = PARALLEL_SORT_DEFAULT_SECTIONS;
     #else
         active_num_sort_sections = 1; // Force serial behavior if OpenMP is not compiled in
     #endif
 
     // Ensure a reasonable number of sections
-    if (active_num_sort_sections < 1) active_num_sort_sections = 1;
-    if (n > 0 && active_num_sort_sections > n) active_num_sort_sections = n;
+    if (active_num_sort_sections < 1)
+        active_num_sort_sections = 1;
+    if (n > 0 && active_num_sort_sections > n)
+        active_num_sort_sections = n;
     // Optional: Add a hard cap for maximum sections if desired, e.g.:
     // if (active_num_sort_sections > 96) active_num_sort_sections = 96;
 
     // Fallback to serial sort for small N or if chunks would be too small
     int estimated_avg_chunk_size = (n > 0 && active_num_sort_sections > 0) ? (n / active_num_sort_sections) : n;
-    if (n < PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD || \
-        active_num_sort_sections <= 1 || \
-        estimated_avg_chunk_size < PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD) {
+    if (n < PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD || active_num_sort_sections <= 1 || estimated_avg_chunk_size < PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD) {
         // If PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD is set carefully (e.g. >= 2 * PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP),
         // this also helps ensure chunks are large enough for meaningful overlap.
         insertion_sort(columns, n); // Call serial insertion sort
@@ -416,11 +392,11 @@ void insertion_parallel_sort(double **columns, int n)
     int remainder = n % active_num_sort_sections;
     int *startIdx = (int *)malloc(active_num_sort_sections * sizeof(int));
     int *endIdx = (int *)malloc(active_num_sort_sections * sizeof(int));
-    if (!startIdx || !endIdx) { /* Handle error */ CLEAN_EXIT(1); }
+    if (!startIdx || !endIdx)
+        CLEAN_EXIT(1);
 
     int offset = 0;
-    for (int c = 0; c < active_num_sort_sections; c++)
-    {
+    for (int c = 0; c < active_num_sort_sections; c++) {
         int size_c = base_chunk_size + (c < remainder ? 1 : 0);
         startIdx[c] = offset;
         endIdx[c] = offset + size_c - 1;
@@ -430,9 +406,7 @@ void insertion_parallel_sort(double **columns, int n)
     // Sort each chunk in parallel using insertion sort
 #pragma omp parallel for schedule(dynamic)
     for (int c = 0; c < active_num_sort_sections; c++)
-    {
         insertion_sort_sub(columns, startIdx[c], endIdx[c]);
-    }
 
     // Calculate minChunkSize based on actual chunk distribution using active_num_sort_sections
     int minChunkSize = n;
@@ -443,78 +417,76 @@ void insertion_parallel_sort(double **columns, int n)
             if (csize < minChunkSize) minChunkSize = csize;
         }
     }
-    if (minChunkSize <= 0 && n > 0) minChunkSize = 1; // Safety for valid n
+    if (minChunkSize <= 0 && n > 0)
+        minChunkSize = 1; // Safety for valid n
 
     int overlapSize;
-    if (n <= 1 || active_num_sort_sections <= 1 || minChunkSize <= 0) {
+    if (n <= 1 || active_num_sort_sections <= 1 || minChunkSize <= 0)
         overlapSize = 0;
-    } else {
+    else {
         int proportional_overlap = minChunkSize / PARALLEL_SORT_OVERLAP_DIVISOR;
-        if (proportional_overlap == 0 && minChunkSize > 0) {
+        if (proportional_overlap == 0 && minChunkSize > 0)
             proportional_overlap = 1;
-        }
 
         // Ensure overlap is at least the minimum required for correctness,
         // but only if that minimum isn't itself making the overlap too large for the chunk.
-        if (PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP > 0 && proportional_overlap < PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP) {
+        if (PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP > 0 && proportional_overlap < PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP)
             overlapSize = PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP;
-        } else {
+        else
             overlapSize = proportional_overlap;
-        }
 
         // Cap the overlap: It should not be an excessive fraction of the smallest chunk.
         // This also handles cases where MIN_CORRECTNESS_OVERLAP might be too large for a small chunk.
         int max_permissible_relative_overlap = minChunkSize / 2; // Example: Cap at 50% of chunk
-        if (max_permissible_relative_overlap < 1 && minChunkSize > 0) max_permissible_relative_overlap = 1; // Ensure cap is at least 1 if chunk exists
+        if (max_permissible_relative_overlap < 1 && minChunkSize > 0)
+            max_permissible_relative_overlap = 1; // Ensure cap is at least 1 if chunk exists
 
-        if (overlapSize > max_permissible_relative_overlap && minChunkSize > 1) {
+        if (overlapSize > max_permissible_relative_overlap && minChunkSize > 1)
             overlapSize = max_permissible_relative_overlap;
-        }
 
         // If, after all logic, overlap is 0 but we have multiple sections and data, ensure minimal overlap.
-        if (overlapSize == 0 && minChunkSize > 0 && active_num_sort_sections > 1) {
+        if (overlapSize == 0 && minChunkSize > 0 && active_num_sort_sections > 1)
              overlapSize = 1;
-        }
     }
-    if (overlapSize < 0) overlapSize = 0; // Final safety check
+    if (overlapSize < 0)
+        overlapSize = 0; // Final safety check
     // Additional absolute cap based on total N, mostly for sanity with very few sections.
-    if (n > 1 && overlapSize > n / 2) overlapSize = n / 2;
+    if (n > 1 && overlapSize > n / 2)
+        overlapSize = n / 2;
 
 
     // Optional debug print (controlled by -DDEBUG_SORT_PARAMS compile flag)
     #ifdef DEBUG_SORT_PARAMS
-    #ifdef _OPENMP
-    if (omp_get_thread_num() == 0) // Print only from one thread
-    #endif
-    {
-        printf("[NSPHERE_IS_PARALLEL_DEBUG] N=%d, Sections=%d, MinChunkSz=%d, OverlapSize=%d (Using DIV:%d, MIN_CORRECT:%d)\n",
-               n, active_num_sort_sections, minChunkSize, overlapSize,
-               PARALLEL_SORT_OVERLAP_DIVISOR, PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP);
-        fflush(stdout);
-    }
+        #ifdef _OPENMP
+        if (omp_get_thread_num() == 0) // Print only from one thread
+        #endif
+        {
+            printf("[NSPHERE_IS_PARALLEL_DEBUG] N=%d, Sections=%d, MinChunkSz=%d, OverlapSize=%d (Using DIV:%d, MIN_CORRECT:%d)\n",
+                   n, active_num_sort_sections, minChunkSize, overlapSize, PARALLEL_SORT_OVERLAP_DIVISOR, PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP);
+            fflush(stdout);
+        }
     #endif
 
     // Merge/fix the seams in parallel
     int nSeams = active_num_sort_sections - 1;
     if (overlapSize > 0 && nSeams > 0) {
 #pragma omp parallel for schedule(dynamic)
-        for (int s = 0; s < nSeams; s++)
-        {
+        for (int s = 0; s < nSeams; s++) {
             int c_left = s;
             int c_right = s + 1;
 
             // Robust boundary calculations for seam sorting
             int seam_sort_start = endIdx[c_left] - overlapSize + 1;
-            if (seam_sort_start < startIdx[c_left]) seam_sort_start = startIdx[c_left];
+            if (seam_sort_start < startIdx[c_left])
+                seam_sort_start = startIdx[c_left];
 
             int seam_sort_end = startIdx[c_right] + overlapSize - 1;
-            if (seam_sort_end > endIdx[c_right]) seam_sort_end = endIdx[c_right];
+            if (seam_sort_end > endIdx[c_right])
+                seam_sort_end = endIdx[c_right];
 
             // Sort the combined overlap region
             if (seam_sort_start <= seam_sort_end)
-            {
                 insertion_sort_sub(columns, seam_sort_start, seam_sort_end);
-            }
         }
     }
 
@@ -542,31 +514,32 @@ void insertion_parallel_sort(double **columns, int n)
  * @param columns Column-major data array [particle][component]
  * @param n Number of particles to sort
  */
-void quadsort_parallel_sort(double **columns, int n)
-{
+void quadsort_parallel_sort(double **columns, int n) {
     // Dynamically determine number of sections based on runtime threads and constants.
     int active_num_sort_sections;
     #ifdef _OPENMP
         int n_runtime_threads = omp_get_max_threads();
-        if (n_runtime_threads <= 0) n_runtime_threads = 1;
+        if (n_runtime_threads <= 0)
+            n_runtime_threads = 1;
         active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD;
         active_num_sort_sections = n_runtime_threads * PARALLEL_SORT_SECTIONS_PER_THREAD;
-        if (active_num_sort_sections <= 0) active_num_sort_sections = PARALLEL_SORT_DEFAULT_SECTIONS;
+        if (active_num_sort_sections <= 0)
+            active_num_sort_sections = PARALLEL_SORT_DEFAULT_SECTIONS;
     #else
         active_num_sort_sections = 1; // Force serial behavior if OpenMP is not compiled in
     #endif
 
     // Ensure a reasonable number of sections
-    if (active_num_sort_sections < 1) active_num_sort_sections = 1;
-    if (n > 0 && active_num_sort_sections > n) active_num_sort_sections = n;
+    if (active_num_sort_sections < 1)
+        active_num_sort_sections = 1;
+    if (n > 0 && active_num_sort_sections > n)
+        active_num_sort_sections = n;
     // Optional: Add a hard cap for maximum sections if desired, e.g.:
     // if (active_num_sort_sections > 96) active_num_sort_sections = 96;
 
     // Fallback to serial sort for small N or if chunks would be too small
     int estimated_avg_chunk_size = (n > 0 && active_num_sort_sections > 0) ? (n / active_num_sort_sections) : n;
-    if (n < PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD || \
-        active_num_sort_sections <= 1 || \
-        estimated_avg_chunk_size < PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD) {
+    if (n < PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD || active_num_sort_sections <= 1 || estimated_avg_chunk_size < PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD) {
         // If PARALLEL_SORT_MIN_CHUNK_SIZE_THRESHOLD is set carefully (e.g. >= 2 * PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP),
         // this also helps ensure chunks are large enough for meaningful overlap.
         quadsort_wrapper(columns, n); // Call serial quadsort wrapper
@@ -578,11 +551,11 @@ void quadsort_parallel_sort(double **columns, int n)
     int remainder = n % active_num_sort_sections;
     int *startIdx = (int *)malloc(active_num_sort_sections * sizeof(int));
     int *endIdx = (int *)malloc(active_num_sort_sections * sizeof(int));
-    if (!startIdx || !endIdx) { /* Handle error */ CLEAN_EXIT(1); }
+    if (!startIdx || !endIdx)
+        CLEAN_EXIT(1);
 
     int offset = 0;
-    for (int c = 0; c < active_num_sort_sections; c++)
-    {
+    for (int c = 0; c < active_num_sort_sections; c++) {
         int size_c = base_chunk_size + (c < remainder ? 1 : 0);
         startIdx[c] = offset;
         endIdx[c] = offset + size_c - 1;
@@ -592,9 +565,7 @@ void quadsort_parallel_sort(double **columns, int n)
     // Sort each chunk in parallel using quadsort
 #pragma omp parallel for schedule(dynamic)
     for (int c = 0; c < active_num_sort_sections; c++)
-    {
         quadsort(&columns[startIdx[c]], endIdx[c] - startIdx[c] + 1, sizeof(double *), compare_particles);
-    }
 
     // Calculate minChunkSize based on actual chunk distribution using active_num_sort_sections
     int minChunkSize = n;
@@ -602,83 +573,83 @@ void quadsort_parallel_sort(double **columns, int n)
         minChunkSize = (endIdx[0] - startIdx[0] + 1);
         for (int c = 1; c < active_num_sort_sections; c++) {
             int csize = endIdx[c] - startIdx[c] + 1;
-            if (csize < minChunkSize) minChunkSize = csize;
+            if (csize < minChunkSize)
+                minChunkSize = csize;
         }
     }
-    if (minChunkSize <= 0 && n > 0) minChunkSize = 1; // Safety for valid n
+    if (minChunkSize <= 0 && n > 0)
+        minChunkSize = 1; // Safety for valid n
 
     int overlapSize;
-    if (n <= 1 || active_num_sort_sections <= 1 || minChunkSize <= 0) {
+    if (n <= 1 || active_num_sort_sections <= 1 || minChunkSize <= 0)
         overlapSize = 0;
-    } else {
+    else {
         int proportional_overlap = minChunkSize / PARALLEL_SORT_OVERLAP_DIVISOR;
-        if (proportional_overlap == 0 && minChunkSize > 0) {
+        if (proportional_overlap == 0 && minChunkSize > 0)
             proportional_overlap = 1;
-        }
 
         // Ensure overlap is at least the minimum required for correctness,
         // but only if that minimum isn't itself making the overlap too large for the chunk.
-        if (PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP > 0 && proportional_overlap < PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP) {
+        if (PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP > 0 && proportional_overlap < PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP)
             overlapSize = PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP;
-        } else {
+        else
             overlapSize = proportional_overlap;
-        }
 
         // Cap the overlap: It should not be an excessive fraction of the smallest chunk.
         // This also handles cases where MIN_CORRECTNESS_OVERLAP might be too large for a small chunk.
         int max_permissible_relative_overlap = minChunkSize / 2; // Example: Cap at 50% of chunk
-        if (max_permissible_relative_overlap < 1 && minChunkSize > 0) max_permissible_relative_overlap = 1; // Ensure cap is at least 1 if chunk exists
+        if (max_permissible_relative_overlap < 1 && minChunkSize > 0)
+            max_permissible_relative_overlap = 1; // Ensure cap is at least 1 if chunk exists
 
-        if (overlapSize > max_permissible_relative_overlap && minChunkSize > 1) {
+        if (overlapSize > max_permissible_relative_overlap && minChunkSize > 1)
             overlapSize = max_permissible_relative_overlap;
-        }
 
         // If, after all logic, overlap is 0 but we have multiple sections and data, ensure minimal overlap.
-        if (overlapSize == 0 && minChunkSize > 0 && active_num_sort_sections > 1) {
+        if (overlapSize == 0 && minChunkSize > 0 && active_num_sort_sections > 1)
              overlapSize = 1;
-        }
     }
-    if (overlapSize < 0) overlapSize = 0; // Final safety check
+    if (overlapSize < 0)
+        overlapSize = 0; // Final safety check
     // Additional absolute cap based on total N, mostly for sanity with very few sections.
-    if (n > 1 && overlapSize > n / 2) overlapSize = n / 2;
+    if (n > 1 && overlapSize > n / 2)
+        overlapSize = n / 2;
 
 
     // Optional debug print (controlled by -DDEBUG_SORT_PARAMS compile flag)
     #ifdef DEBUG_SORT_PARAMS
-    #ifdef _OPENMP
-    if (omp_get_thread_num() == 0) // Print only from one thread
-    #endif
-    {
-        printf("[NSPHERE_QS_PARALLEL_DEBUG] N=%d, Sections=%d, MinChunkSz=%d, OverlapSize=%d (Using DIV:%d, MIN_CORRECT:%d)\n",
-               n, active_num_sort_sections, minChunkSize, overlapSize,
-               PARALLEL_SORT_OVERLAP_DIVISOR, PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP);
-        fflush(stdout);
-    }
+        #ifdef _OPENMP
+        if (omp_get_thread_num() == 0) // Print only from one thread
+        #endif
+        {
+            printf("[NSPHERE_QS_PARALLEL_DEBUG] N=%d, Sections=%d, MinChunkSz=%d, OverlapSize=%d (Using DIV:%d, MIN_CORRECT:%d)\n",
+                   n, active_num_sort_sections, minChunkSize, overlapSize, PARALLEL_SORT_OVERLAP_DIVISOR, PARALLEL_SORT_MIN_CORRECTNESS_OVERLAP);
+            fflush(stdout);
+        }
     #endif
 
     // Merge/fix the seams in parallel using quadsort
     int nSeams = active_num_sort_sections - 1;
     if (overlapSize > 0 && nSeams > 0) {
 #pragma omp parallel for schedule(dynamic)
-        for (int s = 0; s < nSeams; s++)
-        {
+        for (int s = 0; s < nSeams; s++) {
             int c_left = s;
             int c_right = s + 1;
 
             // Robust boundary calculations for seam sorting
             int seam_sort_start = endIdx[c_left] - overlapSize + 1;
-            if (seam_sort_start < startIdx[c_left]) seam_sort_start = startIdx[c_left];
+            if (seam_sort_start < startIdx[c_left])
+                seam_sort_start = startIdx[c_left];
 
             int seam_sort_end = startIdx[c_right] + overlapSize - 1;
-            if (seam_sort_end > endIdx[c_right]) seam_sort_end = endIdx[c_right];
+            if (seam_sort_end > endIdx[c_right])
+                seam_sort_end = endIdx[c_right];
 
             // Sort the combined overlap region
             if (seam_sort_start <= seam_sort_end)
             {
                 int seam_len = seam_sort_end - seam_sort_start + 1;
-                if (seam_len > 1) {  // Only sort if there's more than one element
+                if (seam_len > 1)  // Only sort if there's more than one element
                     quadsort(&columns[seam_sort_start], seam_len, sizeof(double *), compare_particles);
-                }
             }
         }
     }
@@ -698,39 +669,29 @@ void quadsort_parallel_sort(double **columns, int n)
  * @param n Number of elements in the array
  * @param label Name of the sorting algorithm for diagnostic output
  */
-void verify_sort_results(double **columns, int n, const char *label)
-{
+void verify_sort_results(double **columns, int n, const char *label) {
     // Create a temporary array of pointers to the columns
     double **tempCopy = (double **)malloc(n * sizeof(double *));
-    if (!tempCopy) { fprintf(stderr, "Malloc failed in verify_sort_results\n"); return; }
-    for (int i = 0; i < n; i++)
-    {
-        tempCopy[i] = columns[i];
+    if (!tempCopy) {
+        fprintf(stderr, "Malloc failed in verify_sort_results\n");
+        return;
     }
+    for (int i = 0; i < n; i++)
+        tempCopy[i] = columns[i];
 
     // Sort the temporary pointer array using standard qsort
     stdlib_qsort_wrapper(tempCopy, n);
 
     // Compare the original sorted array with the qsort-ed copy
     long mismatches = 0;
-    for (int i = 0; i < n; i++)
-    {
-        // Compare based on the actual data pointed to
+    for (int i = 0; i < n; i++) // Compare based on the actual data pointed to
         if (compare_particles(&columns[i], &tempCopy[i]) != 0)
-        {
             mismatches++;
-        }
-    }
 
     if (mismatches == 0)
-    {
         fprintf(stderr, "[DEBUG] SortAlg='%s': Verified => Results match standard qsort.\n", label);
-    }
     else
-    {
-        fprintf(stderr, "[DEBUG] SortAlg='%s': *** MISMATCH *** => %ld rows differ from qsort.\n",
-                label, mismatches);
-    }
+        fprintf(stderr, "[DEBUG] SortAlg='%s': *** MISMATCH *** => %ld rows differ from qsort.\n", label, mismatches);
 
     free(tempCopy);
 }
@@ -760,9 +721,7 @@ void verify_sort_results(double **columns, int n, const char *label)
  * @param sortAlg Sorting algorithm to use ("quadsort", "quadsort_parallel",
  *               "insertion", or "insertion_parallel")
  */
-void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
-{
-
+void sort_particles_with_alg(double **particles, int npts, const char *sortAlg) {
     /**
      * Phase 1: Memory allocation and data transposition
      * Prepares the column-major data format required for efficient sorting.
@@ -779,18 +738,16 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
     if (g_sort_columns_buffer == NULL || g_sort_columns_buffer_npts != npts) {
         // Free existing buffer if size has changed
         if (g_sort_columns_buffer != NULL) {
-            for (int i = 0; i < g_sort_columns_buffer_npts; i++) {
-                if (g_sort_columns_buffer[i]) free(g_sort_columns_buffer[i]);
-            }
+            for (int i = 0; i < g_sort_columns_buffer_npts; i++)
+                if (g_sort_columns_buffer[i])
+                    free(g_sort_columns_buffer[i]);
             free(g_sort_columns_buffer);
         }
 
         // Allocate new buffer with the required size
         g_sort_columns_buffer = (double **)malloc(npts * sizeof(double *));
-        if (!g_sort_columns_buffer) {
-            fprintf(stderr, "ERROR: Malloc failed for g_sort_columns_buffer in sort_particles_with_alg\n");
-            CLEAN_EXIT(1);
-        }
+        if (!g_sort_columns_buffer)
+            raise_error("ERROR: Malloc failed for g_sort_columns_buffer in sort_particles_with_alg\n");
 
         // Allocate sub-arrays for each particle's components
         for (int i = 0; i < npts; i++) {
@@ -798,7 +755,8 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
             if (!g_sort_columns_buffer[i]) {
                 fprintf(stderr, "ERROR: Malloc failed for g_sort_columns_buffer[%d] in sort_particles_with_alg\n", i);
                 // Clean up partial allocation
-                for(int k=0; k<i; ++k) free(g_sort_columns_buffer[k]);
+                for(int k=0; k<i; ++k)
+                    free(g_sort_columns_buffer[k]);
                 free(g_sort_columns_buffer);
                 g_sort_columns_buffer = NULL;
                 CLEAN_EXIT(1);
@@ -809,11 +767,9 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
 
     // Transpose data from row-major (particles) to column-major (g_sort_columns_buffer)
     #pragma omp parallel for
-    for (int i = 0; i < npts; i++) {
-        for (int j = 0; j < 5; j++) {
+    for (int i = 0; i < npts; i++)
+        for (int j = 0; j < 5; j++)
             g_sort_columns_buffer[i][j] = particles[j][i];
-        }
-    }
     columns_to_sort_on = g_sort_columns_buffer;
 
 
@@ -827,19 +783,14 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
     // Select and apply the sorting algorithm
     const char *method = (sortAlg ? sortAlg : "insertion_parallel"); // Default if NULL
 
-    if (strcmp(method, "quadsort") == 0) {
+    if (strcmp(method, "quadsort") == 0)
         quadsort_wrapper(columns_to_sort_on, npts);
-    }
-    else if (strcmp(method, "quadsort_parallel") == 0) {
+    else if (strcmp(method, "quadsort_parallel") == 0)
         quadsort_parallel_sort(columns_to_sort_on, npts);
-    }
-    else if (strcmp(method, "insertion") == 0) {
+    else if (strcmp(method, "insertion") == 0)
         insertion_sort(columns_to_sort_on, npts);
-    }
-    else { // Default to parallel insertion sort
+    else // Default to parallel insertion sort
         insertion_parallel_sort(columns_to_sort_on, npts);
-    }
-
 
     /**
      * Phase 3: Data transposition and memory cleanup
@@ -848,15 +799,11 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
 
     // Transpose sorted data back to the original format
     #pragma omp parallel for
-    for (int i = 0; i < npts; i++) {
-        for (int j = 0; j < 5; j++) {
+    for (int i = 0; i < npts; i++)
+        for (int j = 0; j < 5; j++)
             particles[j][i] = columns_to_sort_on[i][j];
-        }
-    }
     // Note: The persistent buffer g_sort_columns_buffer is NOT freed here.
     // It will be reused for subsequent sort operations and freed at program exit.
-
-
 }
 
 /**
@@ -870,8 +817,7 @@ void sort_particles_with_alg(double **particles, int npts, const char *sortAlg)
  * npts : int
  *     Number of particles to sort
  */
-void sort_particles(double **particles, int npts)
-{
+void sort_particles(double **particles, int npts) {
     sort_particles_with_alg(particles, npts, g_defaultSortAlg);
 }
 
@@ -899,19 +845,14 @@ void sort_particles(double **particles, int npts)
  * @param psiAarr_spline [in,out] Array of corresponding Psi values. Modified in-place in tandem with `rrA_spline`.
  * @param npts          The number of points, typically meaning arrays are of size `npts + 1`.
  */
-void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts)
-{
+void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts) {
     // Allocate temporary array of pairs
     struct RrPsiPair *pairs = (struct RrPsiPair *)malloc((npts + 1) * sizeof(struct RrPsiPair));
     if (!pairs)
-    {
-        perror("malloc failed in sort_rr_psi_arrays");
-        CLEAN_EXIT(EXIT_FAILURE);
-    }
+        raise_error("malloc failed in sort_rr_psi_arrays");
 
     // Populate the pairs array
-    for (int i = 0; i <= npts; i++)
-    {
+    for (int i = 0; i <= npts; i++) {
         pairs[i].rr = rrA_spline[i];
         pairs[i].psi = psiAarr_spline[i];
     }
@@ -920,8 +861,7 @@ void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts)
     qsort(pairs, npts + 1, sizeof(struct RrPsiPair), compare_by_rr);
 
     // Copy the sorted data back into the original arrays
-    for (int i = 0; i <= npts; i++)
-    {
+    for (int i = 0; i <= npts; i++) {
         rrA_spline[i] = pairs[i].rr;
         psiAarr_spline[i] = pairs[i].psi;
     }
@@ -940,8 +880,7 @@ void sort_rr_psi_arrays(double *rrA_spline, double *psiAarr_spline, int npts)
  * @return const char* A descriptive name for the algorithm. If no match is found,
  *                     the input `sort_alg` string itself is returned as a fallback.
  */
-const char *get_sort_description(const char *sort_alg)
-{
+const char *get_sort_description(const char *sort_alg) {
     if (strcmp(sort_alg, "quadsort_parallel") == 0)
         return "Parallel Quadsort";
     if (strcmp(sort_alg, "quadsort") == 0)

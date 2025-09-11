@@ -49,29 +49,18 @@
  * @param r_out               [out] Pointer to store the output radial position (kpc) after time `h`.
  * @param v_out               [out] Pointer to store the output radial velocity (kpc/Myr) after time `h`.
  */
-void doMicroLeapfrog(
-    int i, int npts,
-    double r_in, double v_in, double ell,
-    double h,     // Total "big step".
-    int N,        // Micro-subdivision.
-    int subSteps, // 2N+1 or 4N+1.
-    double grav,
-    double *r_out, double *v_out)
-{
+void doMicroLeapfrog(int i, int npts, double r_in, double v_in, double ell, double h, int N, int subSteps, double grav, double *r_out, double *v_out) {
     // Initialize current state with input values
     double r_curr = r_in;
     double v_curr = v_in;
 
     // Set up timestep sizes based on subdivision level
     double halfKick, midStep;
-    if (subSteps == (2 * N + 1))
-    {
+    if (subSteps == (2 * N + 1)) {
         // Coarse integration (2N+1 substeps)
         halfKick = h / (2.0 * N);
         midStep = h / (1.0 * N);
-    }
-    else
-    {
+    } else {
         // Fine integration (4N+1 substeps)
         halfKick = h / (4.0 * N);
         midStep = h / (2.0 * N);
@@ -85,8 +74,7 @@ void doMicroLeapfrog(
     // Middle pattern of drift-kick pairs
     int pairs = (subSteps - 1) / 2; // Total number of drift-kick pairs
     // Execute all but the last pair (last kick handled separately)
-    for (int pp = 1; pp <= (pairs - 1); pp++)
-    {
+    for (int pp = 1; pp <= (pairs - 1); pp++) {
         // Drift: update position using current velocity
         r_curr += midStep * v_curr;
 
@@ -137,90 +125,52 @@ void doMicroLeapfrog(
  * @param r_out         [out] Pointer to store the final radial position (kpc) after time `h`.
  * @param v_out         [out] Pointer to store the final radial velocity (kpc/Myr) after time `h`.
  */
-void doAdaptiveFullLeap(
-    int i,               // Particle index for force computation
-    int npts,            // Total number of particles in simulation
-    double r_in,         // Initial radius at start of step
-    double v_in,         // Initial velocity at start of step
-    double ell,          // Angular momentum (conserved during integration)
-    double h,            // Full physical timestep size ΔT
-    double radius_tol,   // Convergence tolerance for radius
-    double velocity_tol, // Convergence tolerance for velocity
-    int max_subdiv,      // Maximum subdivision factor allowed
-    double grav,         // Gravitational constant (renamed from G to avoid macro collision)
-    int out_type,        // Result selection: 0=coarse, 1=fine, 2=Richardson extrapolation
-    double *r_out,       // Output parameter for final radius
-    double *v_out        // Output parameter for final velocity
-)
-{
+void doAdaptiveFullLeap(int i, int npts, double r_in, double v_in, double ell, double h, double radius_tol, double velocity_tol, int max_subdiv,
+                        double grav, int out_type, double *r_out, double *v_out ) {
     int N = 1; // Start with N=1 micro-steps.
 
     // Initialize coarse/fine results (first coarse pass).
     double r_coarse = r_in, v_coarse = v_in;
     double r_fine = r_in, v_fine = v_in;
 
-    while (N <= max_subdiv)
-    {
+    while (N <= max_subdiv) {
         // Coarse pass (2N+1 steps)
-        doMicroLeapfrog(
-            i, npts, r_in, v_in, ell,
-            h, N, (2 * N + 1),
-            grav,
-            &r_coarse, &v_coarse);
+        doMicroLeapfrog( i, npts, r_in, v_in, ell, h, N, (2 * N + 1), grav, &r_coarse, &v_coarse);
 
         // Fine pass (4N+1 steps)
-        doMicroLeapfrog(
-            i, npts, r_in, v_in, ell,
-            h, N, (4 * N + 1),
-            grav,
-            &r_fine, &v_fine);
+        doMicroLeapfrog( i, npts, r_in, v_in, ell, h, N, (4 * N + 1), grav, &r_fine, &v_fine);
 
         // Compare radius, velocity.
         double radius_diff = fabs(r_fine - r_coarse) / (fabs(r_fine) + 1.0e-30);
         double velocity_diff = fabs(v_fine - v_coarse) / (fabs(v_fine) + 1.0e-30);
 
-        if ((radius_diff < radius_tol) && (velocity_diff < velocity_tol))
-        {
+        if ((radius_diff < radius_tol) && (velocity_diff < velocity_tol)) {
             // Tolerances met => output according to out_type.
-            if (out_type == 0)
-            {
+            if (out_type == 0) {
                 *r_out = r_coarse;
                 *v_out = v_coarse;
-            }
-            else if (out_type == 1)
-            {
+            } else if (out_type == 1) {
                 *r_out = r_fine;
                 *v_out = v_fine;
-            }
-            else
-            {
+            } else {
                 // Richardson extrapolation for higher-order result
                 *r_out = 4.0 * r_fine - 3.0 * r_coarse;
                 *v_out = 4.0 * v_fine - 3.0 * v_coarse;
             }
             return; // Done.
-        }
-        else
-        {
-            // Not converged, increase refinement
+        } else // Not converged, increase refinement
             N *= 2;
-        }
     }
 
     // If we exit the while(N <= max_subdiv) loop, it means we never converged.
     // Return the last available result based on out_type.
-    if (out_type == 0)
-    {
+    if (out_type == 0) {
         *r_out = r_coarse;
         *v_out = v_coarse;
-    }
-    else if (out_type == 1)
-    {
+    } else if (out_type == 1) {
         *r_out = r_fine;
         *v_out = v_fine;
-    }
-    else
-    {
+    } else {
         *r_out = 4.0 * r_fine - 3.0 * r_coarse;
         *v_out = 4.0 * v_fine - 3.0 * v_coarse;
     }
@@ -259,18 +209,7 @@ void doAdaptiveFullLeap(
  * @param r_out     [out] Pointer to store the final physical radial position (kpc) after time `dt`.
  * @param v_out     [out] Pointer to store the final physical radial velocity (kpc/Myr) after time `dt`.
  */
-void doLeviCivitaLeapfrog(
-    int i,
-    int npts,
-    double r_in,
-    double v_in,
-    double ell,
-    double dt,
-    int N_taumin,
-    double grav,
-    double *r_out,
-    double *v_out)
-{
+void doLeviCivitaLeapfrog(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double grav, double *r_out, double *v_out) {
     // Transform to Levi-Civita coordinates: rho = sqrt(r)
     double rho = sqrt(r_in);
     double v_rad = v_in;
@@ -280,13 +219,9 @@ void doLeviCivitaLeapfrog(
     // Estimate initial tau step size based on N_taumin
     double deltaTau = 0.0;
     if (r_in > 1.0e-30 && N_taumin > 0)
-    {
         deltaTau = dt / (2.0 * r_in * N_taumin);
-    }
     else
-    {
         deltaTau = dt / 100.0;
-    }
 
     // Initialize integration state variables
     double rho_cur = rho;
@@ -297,13 +232,9 @@ void doLeviCivitaLeapfrog(
     int stepCount = 0;
     int stepMax = 200000000; // Maximum step count to prevent infinite loops.
 
-    while (1)
-    {
-        if (t_phys >= dt)
-        {
-            // Exit loop when physical time reaches target
+    while (1) {
+        if (t_phys >= dt) // Exit loop when physical time reaches target
             break;
-        }
 
         // Leapfrog step 1: Evaluate force at current position
         double fval = forceLCfun(i, npts, g_active_halo_mass, grav, ell, rho_cur);
@@ -325,17 +256,12 @@ void doLeviCivitaLeapfrog(
         double tau_next = tau_cur + deltaTau;
 
         // Handle case where step overshoots target time
-        if (t_next >= dt)
-        {
+        if (t_next >= dt) {
             double alpha = 0.0;
             if (fabs(t_next - t_phys) > 1.0e-30)
-            {
                 alpha = (dt - t_phys) / (t_next - t_phys);
-            }
             else
-            {
                 alpha = 1.0;
-            }
 
             // Interpolate state to exact target time
             double rho_f = rho_cur + alpha * (rho_next - rho_cur);
@@ -355,8 +281,7 @@ void doLeviCivitaLeapfrog(
         t_phys = t_next;
 
         stepCount++;
-        if (stepCount > stepMax)
-        {
+        if (stepCount > stepMax) {
             // Safety exit if maximum iteration count exceeded
             *r_out = rho_cur * rho_cur;
             *v_out = v_cur;
@@ -401,28 +326,14 @@ void doLeviCivitaLeapfrog(
  * @param v_out     [out] Pointer to store the final \f$v_{rad}\f$ after `h_tau`.
  * @param t_out     [out] Pointer to store the final accumulated \f$t_{phys}\f$ after `h_tau`.
  */
-void doMicroLeviCivita(
-    int i,
-    int npts,
-    double rho_in,
-    double v_in,
-    double t_in,
-    int subSteps,
-    double h_tau,
-    double grav,
-    double ell,
-    double *rho_out,
-    double *v_out,
-    double *t_out)
-{
-
+void doMicroLeviCivita(int i, int npts, double rho_in, double v_in, double t_in, int subSteps, double h_tau, double grav, double ell, double *rho_out,
+                       double *v_out, double *t_out) {
     double dtau = h_tau / (double)subSteps;
     double rho_curr = rho_in;
     double v_curr = v_in;
     double t_curr = t_in;
 
-    for (int ss = 0; ss < subSteps; ss++)
-    {
+    for (int ss = 0; ss < subSteps; ss++) {
         // Half-kick.
         double fLC = forceLCfun(i, npts, g_active_halo_mass, grav, ell, rho_curr);
         double v_half = v_curr + 0.5 * dtau * fLC;
@@ -479,50 +390,19 @@ void doMicroLeviCivita(
  * @param v_out         [out] Pointer to store the final \f$v_{rad}\f$ after the adaptive \f$Δτ_{guess}\f$ step.
  * @param t_out         [out] Pointer to store the final accumulated physical time \f$t_{phys}\f$ after this step.
  */
-void doSingleTauStepAdaptiveLeviCivita(
-    int i, int npts,
-    double rho_in,
-    double v_in,
-    double t_in,
-    double h_guess,
-    double radius_tol,
-    double velocity_tol,
-    int max_subdiv,
-    double grav,
-    double ell,
-    int out_type,
-    double *rho_out,
-    double *v_out,
-    double *t_out)
-{
+void doSingleTauStepAdaptiveLeviCivita(int i, int npts, double rho_in, double v_in, double t_in, double h_guess, double radius_tol, double velocity_tol,
+                                       int max_subdiv, double grav, double ell, int out_type, double *rho_out, double *v_out, double *t_out) {
     // Initialize with the smallest subdivision factor N=1
     int N = 1;
 
-    while (N <= max_subdiv)
-    {
+    while (N <= max_subdiv) {
         // COARSE integration: use subSteps = 2N+1
         double rhoC, vC, tC;
-        doMicroLeviCivita(
-            i, npts,
-            rho_in, v_in,
-            t_in,
-            (2 * N + 1),
-            h_guess,
-            grav,
-            ell,
-            &rhoC, &vC, &tC);
+        doMicroLeviCivita(i, npts, rho_in, v_in, t_in, (2 * N + 1), h_guess, grav, ell, &rhoC, &vC, &tC);
 
         // FINE integration: use subSteps = 4N+1
         double rhoF, vF, tF;
-        doMicroLeviCivita(
-            i, npts,
-            rho_in, v_in,
-            t_in,
-            (4 * N + 1),
-            h_guess,
-            grav,
-            ell,
-            &rhoF, &vF, &tF);
+        doMicroLeviCivita(i, npts, rho_in, v_in, t_in, (4 * N + 1), h_guess, grav, ell, &rhoF, &vF, &tF);
 
         // Compare final radius and velocity for convergence
         // Calculate relative differences between coarse and fine solutions
@@ -532,22 +412,16 @@ void doSingleTauStepAdaptiveLeviCivita(
         double rhodif = fabs(rhoF - rhoC) / (fabs(rF) + 1.0e-30); // Relative radial difference
         double vdif = fabs(vF - vC) / (fabs(vF) + 1.0e-30);       // Relative velocity difference
 
-        if ((rhodif < radius_tol) && (vdif < velocity_tol))
-        {
-            if (out_type == 0)
-            {
+        if ((rhodif < radius_tol) && (vdif < velocity_tol)) {
+            if (out_type == 0) {
                 *rho_out = rhoC;
                 *v_out = vC;
                 *t_out = tC;
-            }
-            else if (out_type == 1)
-            {
+            } else if (out_type == 1) {
                 *rho_out = rhoF;
                 *v_out = vF;
                 *t_out = tF;
-            }
-            else
-            {
+            } else {
                 // Apply Richardson extrapolation formula: result = 4*fine - 3*coarse
                 // This provides a higher-order approximation by eliminating leading error terms
                 double rho_rich = 4.0 * rhoF - 3.0 * rhoC; // Extrapolated ρ value
@@ -562,32 +436,18 @@ void doSingleTauStepAdaptiveLeviCivita(
                 *t_out = t_rich;
             }
             return;
-        }
-        else
-        {
-            // Not converged, double subdivision factor and try again
+        } else // Not converged, double subdivision factor and try again
             N *= 2;
-        }
     }
 
     // Convergence not achieved within max_subdiv iterations
     // Use highest-resolution fine integration as fallback result
-    {
-        double rhoF, vF, tF;
-        doMicroLeviCivita(
-            i, npts,
-            rho_in, v_in,
-            t_in,
-            (4 * N + 1),
-            h_guess,
-            grav,
-            ell,
-            &rhoF, &vF, &tF);
+    double rhoF, vF, tF;
+    doMicroLeviCivita(i, npts, rho_in, v_in, t_in, (4 * N + 1), h_guess, grav, ell, &rhoF, &vF, &tF);
 
-        *rho_out = rhoF;
-        *v_out = vF;
-        *t_out = tF;
-    }
+    *rho_out = rhoF;
+    *v_out = vF;
+    *t_out = tF;
 }
 
 /**
@@ -620,25 +480,10 @@ void doSingleTauStepAdaptiveLeviCivita(
  * @param r_out         [out] Pointer to store the final physical radial position (kpc) after time `dt`.
  * @param v_out         [out] Pointer to store the final physical radial velocity (kpc/Myr) after time `dt`.
  */
-void doAdaptiveFullLeviCivita(
-    int i,
-    int npts,
-    double r_in,
-    double v_in,
-    double ell,
-    double dt, // big step in physical time
-    int N_taumin,
-    double radius_tol,
-    double velocity_tol,
-    int max_subdiv,
-    double grav,
-    int out_type, // 0=coarse,1=fine,2=Richardson
-    double *r_out,
-    double *v_out)
-{
+void doAdaptiveFullLeviCivita(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double radius_tol, double velocity_tol,
+                              int max_subdiv, double grav, int out_type, double *r_out, double *v_out) {
     // Handle near-zero radius edge case
-    if (r_in < 1.0e-30)
-    {
+    if (r_in < 1.0e-30) {
         *r_out = r_in;
         *v_out = v_in;
         return;
@@ -653,38 +498,22 @@ void doAdaptiveFullLeviCivita(
     // Estimate initial fictitious time step deltaTau
     double deltaTau = 0.0;
     if (r_in > 1.0e-30 && N_taumin > 0)
-    {
         deltaTau = dt / (2.0 * r_in * N_taumin);
-    }
     else
-    {
         deltaTau = dt / 100.0;
-    }
 
     int stepCount = 0;
     int stepMax = 100000000; // Safety limit on iteration count
 
-    while (1)
-    {
+    while (1) {
         if (t_cur >= dt)
             break; // Exit when physical time target is reached
 
         double rho_next, v_next, t_next;
-        doSingleTauStepAdaptiveLeviCivita(
-            i, npts,
-            rho_current, v_current,
-            t_cur,    // physical time in
-            deltaTau, // guess for τ
-            radius_tol,
-            velocity_tol,
-            max_subdiv,
-            grav,
-            ell,
-            out_type,
-            &rho_next, &v_next, &t_next);
+        doSingleTauStepAdaptiveLeviCivita(i, npts, rho_current, v_current, t_cur, deltaTau, radius_tol, velocity_tol, max_subdiv, grav, ell, out_type,
+                                          &rho_next, &v_next, &t_next);
 
-        if (t_next > dt)
-        {
+        if (t_next > dt) {
             // Handle overshoot case with linear interpolation
             double alpha = 0.0;
             if (fabs(t_next - t_cur) > 1.0e-30)
@@ -698,9 +527,7 @@ void doAdaptiveFullLeviCivita(
             *r_out = r_fin;
             *v_out = v_final;
             return;
-        }
-        else
-        {
+        } else {
             // Update state variables for next iteration
             rho_current = rho_next;
             v_current = v_next;
@@ -709,8 +536,7 @@ void doAdaptiveFullLeviCivita(
 
         // Check for iteration limit
         stepCount++;
-        if (stepCount > stepMax)
-        {
+        if (stepCount > stepMax) {
             // Return best available result if maximum iterations reached
             double r_fin = rho_current * rho_current;
             *r_out = r_fin;

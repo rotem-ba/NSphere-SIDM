@@ -22,6 +22,24 @@
  #include <math.h>
  #include <string.h>
 
+ // =========================================================================
+ //  Shared data variables
+ // =========================================================================
+ // Common data arrays
+ double *radius = NULL;
+ double *mass = NULL;
+ double *Psivalues = NULL;
+ double *nPsivalues = NULL;
+ double *Evalues = NULL;
+ double *innerintegrandvalues = NULL;
+ double *radius_monotonic_grid_nfw = NULL;
+
+ // Key scalar values
+ double Psimin = 0.0;
+ double Psimax = 0.0;
+ double rmax = 0.0;
+ int num_points = 0;
+
  double fEintegrand(double t, void *params)
  {
      fEintegrand_params *p = (fEintegrand_params *)params;

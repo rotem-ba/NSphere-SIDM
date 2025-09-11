@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
- #ifndef SIGNAL_PROCESSING_H
- #define SIGNAL_PROCESSING_H
+#ifndef SIGNAL_PROCESSING_H
+#define SIGNAL_PROCESSING_H
 
- #include <fftw3.h>
+#include <fftw3.h>
 
- void fft_gaussian_convolution(const double *density_grid, int grid_size, const double *log_r_grid, double sigma_log, double *result);
- void direct_gaussian_convolution(const double *density_grid, int grid_size, const double *log_r_grid, double sigma_log, double *result);
- void gaussian_convolution(const double *density_grid, int grid_size, const double *log_r_grid, double sigma_log, double *result);
+void fft_gaussian_convolution(const double *density_grid, int grid_size, const double *log_r_grid, double sigma_log, double *result);
+void direct_gaussian_convolution(const double *density_grid, int grid_size, const double *log_r_grid, double sigma_log, double *result);
+void gaussian_convolution(const double *density_grid, int grid_size, const double *log_r_grid, double sigma_log, double *result);
 
- #endif // SIGNAL_PROCESSING_H
+#endif // SIGNAL_PROCESSING_H

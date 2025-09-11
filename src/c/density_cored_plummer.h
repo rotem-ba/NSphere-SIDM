@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
- #ifndef DENSITY_CORED_PLUMMER_H
- #define DENSITY_CORED_PLUMMER_H
+#ifndef DENSITY_CORED_PLUMMER_H
+#define DENSITY_CORED_PLUMMER_H
 
- #include "density.h"
+#include "density.h"
 
- double drhodr_cored_plummer(double r);
- double massintegrand_cored_plummer(double r, void *params __attribute__((unused)));
+double drhodr_cored_plummer(double r);
+double massintegrand_cored_plummer(double r, void *params __attribute__((unused)));
 
 #endif // DENSITY_CORED_PLUMMER_H

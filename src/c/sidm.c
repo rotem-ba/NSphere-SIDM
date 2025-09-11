@@ -85,13 +85,11 @@ threevector crossproduct(threevector X, threevector Y) {
 double sigmatotal(double vrel __attribute__((unused)), int npts, double halo_mass_for_calc, double rc_for_calc __attribute__((unused))) {
     double kappa = g_sidm_kappa; // Self-interaction opacity parameter (cm²/g)
     // Ensure npts is positive to prevent division by zero or negative particle mass
-    if (npts <= 0) {
+    if (npts <= 0)
         return 0.0;
-    }
     double particle_mass_Msun = halo_mass_for_calc / ((double)npts);
-    if (particle_mass_Msun <= 0) {
+    if (particle_mass_Msun <= 0)
         return 0.0;
-    }
     return 2.089e-10 * kappa * particle_mass_Msun; // Cross-section (kpc²)
 }
 
@@ -120,23 +118,19 @@ double sigmatotal(double vrel __attribute__((unused)), int npts, double halo_mas
  *       `g_rng_per_thread`, `g_max_omp_threads_for_rng`, `g_rng`, `g_total_sidm_scatters`,
  *       `g_active_halo_mass`, `g_doDebug`, and `g_particle_scatter_state`.
  */
-void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time,
-                             double active_profile_rc, int current_method_display_num,
-                             int bootstrap_phase_active)
-{
-    if (!g_enable_sidm_scattering || bootstrap_phase_active) {
+void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time, double active_profile_rc, int current_method_display_num,
+                      int bootstrap_phase_active) {
+    if (!g_enable_sidm_scattering || bootstrap_phase_active)
         return; // Skip SIDM if disabled or in a bootstrap phase that should skip SIDM
-    }
 
     long long Nscatters_in_this_step = 0;
 
     if (g_sidm_execution_mode == 1) { // Parallel
         #ifdef _OPENMP
-            if (g_rng_per_thread != NULL && g_max_omp_threads_for_rng > 0) {
-                perform_sidm_scattering_parallel(particles, npts, dt, current_sim_time,
-                                               g_rng_per_thread, g_max_omp_threads_for_rng,
-                                               &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
-            } else {
+            if (g_rng_per_thread != NULL && g_max_omp_threads_for_rng > 0)
+                perform_sidm_scattering_parallel(particles, npts, dt, current_sim_time, g_rng_per_thread, g_max_omp_threads_for_rng,
+                                                 &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
+            else {
                 log_message("ERROR", "SIDM Parallel mode selected but per-thread RNGs not available. Skipping SIDM for step.");
                 Nscatters_in_this_step = 0;
             }
@@ -144,20 +138,20 @@ void handle_sidm_step(double **particles, int npts, double dt, double current_si
             // Serial fallback if OpenMP not compiled but parallel mode selected
             log_message("WARNING", "SIDM Parallel mode selected but OpenMP not enabled. Running SIDM serially.");
             gsl_rng *rng_for_serial_fallback = (g_rng_per_thread != NULL && g_rng_per_thread[0] != NULL) ? g_rng_per_thread[0] : g_rng;
-            if (rng_for_serial_fallback != NULL) {
-                perform_sidm_scattering_serial(particles, npts, dt, current_sim_time, rng_for_serial_fallback,
-                                             &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
-            } else {
+            if (rng_for_serial_fallback != NULL)
+                perform_sidm_scattering_serial(particles, npts, dt, current_sim_time, rng_for_serial_fallback, &Nscatters_in_this_step,
+                                               g_active_halo_mass, active_profile_rc);
+            else {
                 log_message("ERROR", "SIDM Serial fallback: No suitable RNG available. Skipping SIDM for step.");
                 Nscatters_in_this_step = 0;
             }
         #endif
     } else { // Serial SIDM execution
         gsl_rng *rng_for_serial = (g_rng_per_thread != NULL && g_rng_per_thread[0] != NULL) ? g_rng_per_thread[0] : g_rng;
-        if (rng_for_serial != NULL) {
-            perform_sidm_scattering_serial(particles, npts, dt, current_sim_time, rng_for_serial,
-                                         &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
-        } else {
+        if (rng_for_serial != NULL)
+            perform_sidm_scattering_serial(particles, npts, dt, current_sim_time, rng_for_serial, &Nscatters_in_this_step, g_active_halo_mass,
+                                           active_profile_rc);
+        else {
             log_message("ERROR", "SIDM Serial mode: No suitable RNG available. Skipping SIDM for step.");
             Nscatters_in_this_step = 0;
         }
@@ -165,10 +159,9 @@ void handle_sidm_step(double **particles, int npts, double dt, double current_si
 
     g_total_sidm_scatters += Nscatters_in_this_step;
 
-    if (Nscatters_in_this_step > 0 && g_doDebug) {
-        log_message("DEBUG", "Method %d Step: %lld SIDM scatters this step, %lld total",
-                    current_method_display_num, Nscatters_in_this_step, g_total_sidm_scatters);
-    }
+    if (Nscatters_in_this_step > 0 && g_doDebug)
+        log_message("DEBUG", "Method %d Step: %lld SIDM scatters this step, %lld total", current_method_display_num, Nscatters_in_this_step,
+                    g_total_sidm_scatters);
 }
 
 /**
@@ -211,9 +204,8 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
     // Iterate through each particle as potential scatterer
     for (i = 0; i < npts - 1; i++) {
         int nscat = 10; // Consider 10 nearest neighbors as scattering candidates
-        if (npts - 1 - i < nscat) {
+        if (npts - 1 - i < nscat)
             nscat = npts - 1 - i; // Limit to available particles
-        }
         if (nscat <= 0) continue;
 
         double partialprobability[nscat + 1]; // Interaction rates for each candidate
@@ -248,36 +240,31 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
         int use_nscat_plus_1_for_shell = 1; // Set to 1 for current method, 0 for alternative
         int outer_shell_particle_idx_for_vol;
 
-        if (use_nscat_plus_1_for_shell) {
+        if (use_nscat_plus_1_for_shell)
             outer_shell_particle_idx_for_vol = i + nscat + 1;
-        } else {
+        else
             outer_shell_particle_idx_for_vol = i + nscat;
-        }
 
         // Ensure the chosen outer index is within bounds
         if (outer_shell_particle_idx_for_vol >= npts) {
             // If out of bounds, try to use the last available particle as the boundary
-            if (i + nscat < npts) {
+            if (i + nscat < npts)
                 outer_shell_particle_idx_for_vol = i + nscat;
-            } else {
-                // No valid shell can be formed
+            else // No valid shell can be formed
                 probability_sum_term = 0.0; // Force no scatter, skip probability calculation
-            }
         }
 
         double radius_diff = 0.0;
         // Calculate radius_diff only if there's a chance to scatter and a valid shell
-        if (probability_sum_term > 1e-30 && (outer_shell_particle_idx_for_vol > i)) {
+        if (probability_sum_term > 1e-30 && (outer_shell_particle_idx_for_vol > i))
             radius_diff = particles[0][outer_shell_particle_idx_for_vol] - particles[0][i];
-        } else {
+        else
             probability_sum_term = 0.0; // Ensure no scatter if shell is invalid
-        }
 
         double probability = 0.0;
-        if (radius_diff > 1e-15 && particles[0][i] > 1e-15 && probability_sum_term > 1e-30) {
-            // Calculate scattering probability using shell volume approximation
+        // Calculate scattering probability using shell volume approximation
+        if (radius_diff > 1e-15 && particles[0][i] > 1e-15 && probability_sum_term > 1e-30)
             probability = probability_sum_term * (0.5) * dt / (4.0 * PI * sqr(particles[0][i]) * radius_diff);
-        }
 
         // Stochastic scattering determination
         if (gsl_rng_uniform(rng) < probability) {
@@ -288,17 +275,15 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
             if (nscat > 1 && probability_sum_term > 1e-15) {
                 double cumulative_prob[nscat + 1];
                 cumulative_prob[0] = 0.0;
-                for (int k = 1; k <= nscat; k++) {
+                for (int k = 1; k <= nscat; k++)
                     cumulative_prob[k] = (k > 1 ? cumulative_prob[k - 1] : 0.0) + partialprobability[k] / probability_sum_term;
-                }
                 if (nscat > 0) cumulative_prob[nscat] = 1.0;
 
                 double random_select = gsl_rng_uniform(rng);
                 m_scatter = 1;
                 // Select partner based on cumulative probability distribution
-                while (m_scatter < nscat && random_select > cumulative_prob[m_scatter]) {
+                while (m_scatter < nscat && random_select > cumulative_prob[m_scatter])
                     m_scatter++;
-                }
             }
 
             int actual_partner_idx = i + m_scatter;
@@ -329,25 +314,24 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
             threevector nhat0, nhat1, nhat2, nhatref;
             nhat0 = make_threevector(Vrel_scatter_vec.x / vrel_scatter_val, Vrel_scatter_vec.y / vrel_scatter_val, Vrel_scatter_vec.z / vrel_scatter_val);
 
-            if (fabs(nhat0.z) < 0.999) {
+            if (fabs(nhat0.z) < 0.999)
                 nhatref = make_threevector(0.0, 0.0, 1.0);
-            } else {
+            else
                 nhatref = make_threevector(1.0, 0.0, 0.0);
-            }
 
             nhat1 = crossproduct(nhat0, nhatref);
             double normnhat1 = sqrt(dotproduct(nhat1, nhat1));
             if (normnhat1 < 1e-15) {
                 // Fallback for parallel vectors
-                if (fabs(nhat0.x) < 0.999) {
+                if (fabs(nhat0.x) < 0.999)
                     nhatref = make_threevector(1.0, 0.0, 0.0);
-                } else {
+                else
                     nhatref = make_threevector(0.0, 1.0, 0.0);
-                }
                 nhat1 = crossproduct(nhat0, nhatref);
                 normnhat1 = sqrt(dotproduct(nhat1, nhat1));
                 if (normnhat1 < 1e-15) {
-                     Nscatters_this_call--; continue;
+                     Nscatters_this_call--;
+                     continue;
                 }
             }
             nhat1 = make_threevector(nhat1.x / normnhat1, nhat1.y / normnhat1, nhat1.z / normnhat1);
@@ -379,8 +363,10 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
             int orig_id1 = (int)particles[3][i];
             int orig_id2 = (int)particles[3][actual_partner_idx];
             if (g_particle_scatter_state != NULL) {
-                if (orig_id1 >= 0 && orig_id1 < npts) g_particle_scatter_state[orig_id1] = 1;
-                if (orig_id2 >= 0 && orig_id2 < npts) g_particle_scatter_state[orig_id2] = 1;
+                if (orig_id1 >= 0 && orig_id1 < npts)
+                    g_particle_scatter_state[orig_id1] = 1;
+                if (orig_id2 >= 0 && orig_id2 < npts)
+                    g_particle_scatter_state[orig_id2] = 1;
             }
         }
     }
@@ -435,7 +421,8 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
     // Initial capacity can be a small fraction of npts, e.g., npts/100 or a fixed moderate number
     // Adjust if typical scatter rates are known.
     size_t initial_capacity = (npts > 1000) ? (npts / 100) : 100;
-    if (initial_capacity == 0) initial_capacity = 10; // Ensure non-zero for very small npts
+    if (initial_capacity == 0)
+        initial_capacity = 10; // Ensure non-zero for very small npts
 
     global_scatter_results = (ScatterEvent *)malloc(initial_capacity * sizeof(ScatterEvent));
     if (global_scatter_results == NULL) {
@@ -454,9 +441,9 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
             thread_id_for_rng = omp_get_thread_num();
         #endif
 
-        if (rng_per_thread_list != NULL && thread_id_for_rng < num_threads_for_rng && rng_per_thread_list[thread_id_for_rng] != NULL) {
+        if (rng_per_thread_list != NULL && thread_id_for_rng < num_threads_for_rng && rng_per_thread_list[thread_id_for_rng] != NULL)
             local_rng = rng_per_thread_list[thread_id_for_rng];
-        } else {
+        else {
             // Critical issue: Per-thread RNG not available for an active thread.
             // This should not happen if g_rng_per_thread is sized to omp_get_max_threads()
             // and num_threads_for_rng passed to this function matches that.
@@ -482,13 +469,14 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
         #pragma omp for schedule(static,1)
         for (int i = 0; i < npts - 1; i++) {
             // Check if this thread has a valid RNG before proceeding
-            if (local_rng == NULL) {
+            if (local_rng == NULL)
                 continue; // This thread skips its assigned SIDM work
-            }
 
             int nscat = 10;
-            if (npts - 1 - i < nscat) nscat = npts - 1 - i;
-            if (nscat <= 0) continue;
+            if (npts - 1 - i < nscat)
+                nscat = npts - 1 - i;
+            if (nscat <= 0)
+                continue;
 
             double partialprobability[nscat + 1]; // Max nscat=10, stack is fine
             double probability_sum_term = 0.0;
@@ -509,27 +497,26 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
 
             int use_nscat_plus_1_for_shell_par = 1; // Consistent with serial for now
             int outer_shell_particle_idx_for_vol_par;
-            if (use_nscat_plus_1_for_shell_par) {
+            if (use_nscat_plus_1_for_shell_par)
                 outer_shell_particle_idx_for_vol_par = i + nscat + 1;
-            } else {
+            else
                 outer_shell_particle_idx_for_vol_par = i + nscat;
-            }
             if (outer_shell_particle_idx_for_vol_par >= npts) {
-                if (i + nscat < npts) outer_shell_particle_idx_for_vol_par = i + nscat;
-                else probability_sum_term = 0.0;
+                if (i + nscat < npts)
+                    outer_shell_particle_idx_for_vol_par = i + nscat;
+                else
+                    probability_sum_term = 0.0;
             }
 
             double radius_diff_par = 0.0;
-            if (probability_sum_term > 1e-30 && (outer_shell_particle_idx_for_vol_par > i) ) {
+            if (probability_sum_term > 1e-30 && (outer_shell_particle_idx_for_vol_par > i) )
                 radius_diff_par = particles[0][outer_shell_particle_idx_for_vol_par] - particles[0][i];
-            } else {
+            else
                 probability_sum_term = 0.0;
-            }
 
             double probability_par = 0.0;
-            if (radius_diff_par > 1e-15 && particles[0][i] > 1e-15 && probability_sum_term > 1e-30) {
+            if (radius_diff_par > 1e-15 && particles[0][i] > 1e-15 && probability_sum_term > 1e-30)
                 probability_par = probability_sum_term * (0.5) * dt / (4.0 * PI * sqr(particles[0][i]) * radius_diff_par);
-            }
 
             if (gsl_rng_uniform(local_rng) < probability_par) {
                 Nscatters_this_call_atomic++; // Atomically increment shared counter
@@ -537,23 +524,24 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
                 if (nscat > 1 && probability_sum_term > 1e-15) {
                     double cumulative_prob[nscat + 1];
                     cumulative_prob[0] = 0.0;
-                    for (int k_cs = 1; k_cs <= nscat; k_cs++) {
+                    for (int k_cs = 1; k_cs <= nscat; k_cs++)
                         cumulative_prob[k_cs] = (k_cs > 1 ? cumulative_prob[k_cs - 1] : 0.0) + partialprobability[k_cs] / probability_sum_term;
-                    }
-                    if (nscat > 0) cumulative_prob[nscat] = 1.0;
+                    if (nscat > 0)
+                        cumulative_prob[nscat] = 1.0;
                     double random_select = gsl_rng_uniform(local_rng);
-                    while (m_scatter < nscat && random_select > cumulative_prob[m_scatter]) {
+                    while (m_scatter < nscat && random_select > cumulative_prob[m_scatter])
                         m_scatter++;
-                    }
                 }
                 int actual_partner_idx = i + m_scatter;
-                if (actual_partner_idx >= npts) continue; // Should be rare with nscat logic
+                if (actual_partner_idx >= npts)
+                    continue; // Should be rare with nscat logic
 
                 double Vmperp_scatter = particles[2][actual_partner_idx] / particles[0][actual_partner_idx];
                 threevector Vm_scatter = make_threevector(Vmperp_scatter, 0.0, particles[1][actual_partner_idx]);
                 threevector Vrel_scatter_vec = make_threevector(Vi.x - Vm_scatter.x, Vi.y - Vm_scatter.y, Vi.z - Vm_scatter.z);
                 double vrel_scatter_val = sqrt(dotproduct(Vrel_scatter_vec, Vrel_scatter_vec));
-                if (vrel_scatter_val < 1e-15) continue;
+                if (vrel_scatter_val < 1e-15)
+                    continue;
 
                 double costheta = 2.0 * gsl_rng_uniform(local_rng) - 1.0;
                 double sintheta = sqrt(fmax(0.0, 1.0 - costheta*costheta));
@@ -561,46 +549,54 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
                 double cf = cos(phif_scatter); double sf = sin(phif_scatter);
                 threevector nhat0, nhat1, nhat2, nhatref; // Orthonormal basis construction (as in serial)
                 nhat0 = make_threevector(Vrel_scatter_vec.x/vrel_scatter_val, Vrel_scatter_vec.y/vrel_scatter_val, Vrel_scatter_vec.z/vrel_scatter_val);
-                if (fabs(nhat0.z) < 0.999) nhatref = make_threevector(0.0,0.0,1.0); else nhatref = make_threevector(1.0,0.0,0.0);
-                nhat1 = crossproduct(nhat0,nhatref); double normnhat1 = sqrt(dotproduct(nhat1,nhat1));
-                if (normnhat1 < 1e-15) { if (fabs(nhat0.x) < 0.999) nhatref = make_threevector(1.0,0.0,0.0); else nhatref = make_threevector(0.0,1.0,0.0);
-                    nhat1 = crossproduct(nhat0,nhatref); normnhat1 = sqrt(dotproduct(nhat1,nhat1)); if (normnhat1 < 1e-15) continue; }
+                nhatref = (fabs(nhat0.z) < 0.999) ? make_threevector(0.0,0.0,1.0) : make_threevector(1.0,0.0,0.0);
+                nhat1 = crossproduct(nhat0,nhatref);
+                double normnhat1 = sqrt(dotproduct(nhat1,nhat1));
+                if (normnhat1 < 1e-15) {
+                    nhatref = (fabs(nhat0.x) < 0.999) ? make_threevector(1.0,0.0,0.0) : make_threevector(0.0,1.0,0.0);
+                    nhat1 = crossproduct(nhat0,nhatref);
+                    normnhat1 = sqrt(dotproduct(nhat1,nhat1));
+                    if (normnhat1 < 1e-15)
+                        continue;
+                }
                 nhat1 = make_threevector(nhat1.x/normnhat1, nhat1.y/normnhat1, nhat1.z/normnhat1);
                 nhat2 = crossproduct(nhat0,nhat1);
 
                 threevector nhat_perp_rotated = make_threevector(nhat1.x*cf+nhat2.x*sf, nhat1.y*cf+nhat2.y*sf, nhat1.z*cf+nhat2.z*sf);
-                threevector V_rel_final_half = make_threevector( (vrel_scatter_val/2.0)*(costheta*nhat0.x+sintheta*nhat_perp_rotated.x), (vrel_scatter_val/2.0)*(costheta*nhat0.y+sintheta*nhat_perp_rotated.y), (vrel_scatter_val/2.0)*(costheta*nhat0.z+sintheta*nhat_perp_rotated.z) );
-                threevector V_cm = make_threevector( (Vi.x+Vm_scatter.x)/2.0, (Vi.y+Vm_scatter.y)/2.0, (Vi.z+Vm_scatter.z)/2.0 );
+                threevector V_rel_final_half = make_threevector((vrel_scatter_val/2.0)*(costheta*nhat0.x+sintheta*nhat_perp_rotated.x),
+                                                                (vrel_scatter_val/2.0)*(costheta*nhat0.y+sintheta*nhat_perp_rotated.y),
+                                                                (vrel_scatter_val/2.0)*(costheta*nhat0.z+sintheta*nhat_perp_rotated.z));
+                threevector V_cm = make_threevector((Vi.x+Vm_scatter.x)/2.0, (Vi.y+Vm_scatter.y)/2.0, (Vi.z+Vm_scatter.z)/2.0);
 
                 ScatterEvent current_event;
                 current_event.i = i;
                 current_event.m_offset = m_scatter; // Store offset, not absolute index
-                current_event.Vifinal = make_threevector( V_cm.x+V_rel_final_half.x, V_cm.y+V_rel_final_half.y, V_cm.z+V_rel_final_half.z );
-                current_event.Vmfinal = make_threevector( V_cm.x-V_rel_final_half.x, V_cm.y-V_rel_final_half.y, V_cm.z-V_rel_final_half.z );
+                current_event.Vifinal = make_threevector(V_cm.x+V_rel_final_half.x, V_cm.y+V_rel_final_half.y, V_cm.z+V_rel_final_half.z);
+                current_event.Vmfinal = make_threevector(V_cm.x-V_rel_final_half.x, V_cm.y-V_rel_final_half.y, V_cm.z-V_rel_final_half.z);
 
                 #pragma omp critical (add_scatter_result_sidm)
                 {
                     if (global_results_count >= global_results_capacity) {
                         size_t new_capacity = (global_results_capacity == 0) ? initial_capacity : global_results_capacity * 2;
                          // Cap growth to avoid excessive memory if many scatters happen (unlikely but safe)
-                        if (new_capacity > (size_t)npts && global_results_capacity < (size_t)npts) new_capacity = (size_t)npts;
+                        if (new_capacity > (size_t)npts && global_results_capacity < (size_t)npts)
+                            new_capacity = (size_t)npts;
 
                         ScatterEvent *new_results_buffer = (ScatterEvent *)realloc(global_scatter_results, new_capacity * sizeof(ScatterEvent));
-                        if (!new_results_buffer) {
+                        if (!new_results_buffer)
                             // This is a critical error if realloc fails.
                             // For now, we'll just stop adding results, but ideally, log and potentially terminate.
                              fprintf(stderr, "CRITICAL ERROR: Failed to reallocate global_scatter_results buffer in thread %d.\n", thread_id_for_rng);
                             // To prevent further issues, we could try to signal other threads or exit.
                             // This error means we are likely out of memory.
-                        } else {
+                        else {
                             global_scatter_results = new_results_buffer;
                             global_results_capacity = new_capacity;
                         }
                     }
                     // Only add if capacity is sufficient (realloc might have failed)
-                    if (global_results_count < global_results_capacity) {
+                    if (global_results_count < global_results_capacity)
                          global_scatter_results[global_results_count++] = current_event;
-                    }
                 } // end critical section
             } // end if scatter occurs
         } // end omp for loop over particles i
@@ -608,9 +604,8 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
 
     // Phase 2: Serial Update - Apply buffered scatter results
     // Sort the collected scatter events to ensure deterministic application order
-    if (global_results_count > 1) {
+    if (global_results_count > 1)
         qsort(global_scatter_results, global_results_count, sizeof(ScatterEvent), compare_scatter_events);
-    }
 
     // This part is done by a single thread after the parallel computation.
     for (size_t k = 0; k < global_results_count; k++) {
@@ -619,10 +614,9 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
         int p_partner_idx = p_i + p_m_offset;
 
         // Redundant check, but good for safety, especially if realloc failed silently for some threads
-        if (p_i < 0 || p_i >= npts || p_partner_idx < 0 || p_partner_idx >= npts || p_m_offset <= 0) {
+        if (p_i < 0 || p_i >= npts || p_partner_idx < 0 || p_partner_idx >= npts || p_m_offset <= 0)
             // log_message("WARNING", "Skipping invalid scatter event from buffer: i=%d, partner_idx=%d, m_offset=%d", p_i, p_partner_idx, p_m_offset);
             continue;
-        }
 
         threevector Vifinal_upd = global_scatter_results[k].Vifinal;
         threevector Vmfinal_upd = global_scatter_results[k].Vmfinal;
@@ -639,14 +633,13 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
         // Mark both scattered particles in case it is needed elsewhere
         int orig_id1 = (int)particles[3][p_i];
         int orig_id2 = (int)particles[3][p_partner_idx];
-        if (orig_id1 >= 0 && orig_id1 < npts) g_particle_scatter_state[orig_id1] = 1;
-        if (orig_id2 >= 0 && orig_id2 < npts) g_particle_scatter_state[orig_id2] = 1;
+        if (orig_id1 >= 0 && orig_id1 < npts)
+            g_particle_scatter_state[orig_id1] = 1;
+        if (orig_id2 >= 0 && orig_id2 < npts)
+            g_particle_scatter_state[orig_id2] = 1;
     }
 
-    if (global_scatter_results != NULL) {
-        free(global_scatter_results);
-    }
-
+    free(global_scatter_results);
     *Nscatter_total_step = Nscatters_this_call_atomic;
 }
 
@@ -670,10 +663,14 @@ int compare_scatter_events(const void *a, const void *b) {
     const ScatterEvent *event_a = (const ScatterEvent *)a;
     const ScatterEvent *event_b = (const ScatterEvent *)b;
 
-    if (event_a->i < event_b->i) return -1;
-    if (event_a->i > event_b->i) return 1;
+    if (event_a->i < event_b->i)
+        return -1;
+    if (event_a->i > event_b->i)
+        return 1;
     // If i is the same, sort by m_offset
-    if (event_a->m_offset < event_b->m_offset) return -1;
-    if (event_a->m_offset > event_b->m_offset) return 1;
+    if (event_a->m_offset < event_b->m_offset)
+        return -1;
+    if (event_a->m_offset > event_b->m_offset)
+        return 1;
     return 0;
 }

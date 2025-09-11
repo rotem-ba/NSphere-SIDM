@@ -22,8 +22,7 @@
  * @details Frees L_block, Rank_block, R_block, Vrad_block, and chosen.
  *          Does NOT free lowestL_* arrays as they are handled elsewhere.
  */
-void cleanup_all_particle_data(void)
-{
+void cleanup_all_particle_data(void){
     free(L_block);
     free(Rank_block);
     free(R_block);
@@ -39,8 +38,7 @@ void cleanup_all_particle_data(void)
  * @brief Frees local arrays used for snapshot processing.
  * @details Frees Rank_partdata_snap, R_partdata_snap, Vrad_partdata_snap, L_partdata_snap.
  */
-void free_local_snap_arrays(void)
-{
+void free_local_snap_arrays(void) {
     free(Rank_partdata_snap);
     free(R_partdata_snap);
     free(Vrad_partdata_snap);

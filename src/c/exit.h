@@ -14,20 +14,10 @@
  * limitations under the License.
  */
 
- #ifndef EXIT_H
- #define EXIT_H
+#ifndef EXIT_H
+#define EXIT_H
 
-/**
- * @brief Frees all global arrays used for particle data processing.
- * @details Frees L_block, Rank_block, R_block, Vrad_block, and chosen.
- *          Does NOT free lowestL_* arrays as they are handled elsewhere.
- */
 void cleanup_all_particle_data(void);
-
-/**
- * @brief Frees local arrays used for snapshot processing.
- * @details Frees Rank_partdata_snap, R_partdata_snap, Vrad_partdata_snap, L_partdata_snap.
- */
 void free_local_snap_arrays(void);
 
 /**

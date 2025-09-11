@@ -213,21 +213,6 @@ printf("  \n");
     gsl_interp *g_main_fofEinterp = NULL;  ///< Main f(E) interpolator
     gsl_interp_accel *g_main_fofEacc = NULL; ///< Accelerator for f(E)
 
-    // Common data arrays
-    double *radius = NULL;              ///< Radial grid points
-    double *mass = NULL;                ///< Mass values at radial points
-    double *Psivalues = NULL;           ///< Potential values at radial points
-    double *nPsivalues = NULL;          ///< Negative potential values (for r(Psi) spline)
-    double *Evalues = NULL;             ///< Energy grid points
-    double *innerintegrandvalues = NULL; ///< f(E) integrand values
-    double *radius_monotonic_grid_nfw = NULL; ///< Monotonic radial grid for NFW calculations
-
-    // Key scalar values
-    double Psimin = 0.0;                ///< Minimum potential (at rmax)
-    double Psimax = 0.0;                ///< Maximum potential (at r=0)
-    double rmax = 0.0;                  ///< Maximum radius for profile calculations
-    int num_points = 0;                 ///< Number of points for spline interpolation
-
     // File handling
     char fname[256];                    ///< Buffer for file names
     FILE *fp;                           ///< File pointer for data output
@@ -794,18 +779,7 @@ cleanup_diag_iteration:
             radius_monotonic_grid_nfw[i_nfw] = r_current; // This 'radius_monotonic_grid_nfw' stays sorted by r
         }
 
-        if (g_doDebug) {
-            log_message("DEBUG", "M(r) spline data summary (num_points=%d):", num_points);
-            log_message("DEBUG", "  Target M_total for sampling = %.3e Msun", current_profile_halo_mass);
-            log_message("DEBUG", "  nt_nfw used for M(r) calcs = %.3e", nfw_params[2]);
-            log_message("DEBUG", "  rmax for M(r) array = %.3e kpc", rmax);
-            if (num_points > 0) {
-                log_message("DEBUG", "  Final Mass at rmax (radius[num_points-1]=%.3e kpc): %.3e Msun", radius[num_points-1], mass[num_points-1]);
-                if (fabs(mass[num_points-1] - current_profile_halo_mass) / current_profile_halo_mass > 0.1)
-                    log_message("WARNING", "Mass at rmax (%.3e) differs significantly from target halo mass (%.3e)!", mass[num_points-1], current_profile_halo_mass);
-            }
-            log_message("DEBUG", "End of M(r) data summary.");
-        }
+        debug_log_nfw_M(current_profile_halo_mass, nfw_params);
 
         // Create mass spline
         enclosedmass = gsl_interp_accel_alloc();
@@ -856,16 +830,7 @@ cleanup_diag_iteration:
             nPsivalues[i_nfw] = -Psivalues[i_nfw];
         }
 
-        if (g_doDebug) {
-            log_message("DEBUG", "Psi(r) and r(Psi) spline data summary (num_points=%d):", num_points);
-            if (num_points > 1) {
-                log_message("DEBUG", "  Psivalues[0] (Psimax candidate) = %.6e", Psivalues[0]);
-                log_message("DEBUG", "  Psivalues[num_points-1] (Psimin candidate) = %.6e", Psivalues[num_points-1]);
-                if (Psivalues[0] <= Psivalues[num_points-1])
-                    log_message("WARNING", "Psi(r) may not be monotonic decreasing (Psivalues[0]=%.3e <= Psivalues[end]=%.3e)!", Psivalues[0], Psivalues[num_points-1]);
-            }
-            log_message("DEBUG", "End of Psi(r) data summary.");
-        }
+        debug_log_Psivalues();
 
         // Create Psi splines
         Psiinterp = gsl_interp_accel_alloc();
@@ -4775,55 +4740,21 @@ cleanup_diag_iteration:
                 // Define the range and parameters for the uniform log-spaced grid
                 double min_r = R_decimated[0];
                 double max_r = R_decimated[decimated_size - 1] * 1.04; // Extend range slightly
-                double log_min_r = log10(min_r);
-                double log_max_r = log10(max_r);
 
                 // Define size for the uniform grid (used for convolution)
                 int grid_size = 131072; // Power of 2 often good for FFT, but direct used here
                 if (grid_size <= 1)
                     grid_size = 2; // Ensure at least 2 points
-                double dlog = (log_max_r - log_min_r) / (grid_size - 1);
 
                 // Allocate arrays for the uniform log-spaced grid
                 double *r_grid = malloc(grid_size * sizeof(double));
                 double *log_r_grid = malloc(grid_size * sizeof(double));
                 double *mass_grid = malloc(grid_size * sizeof(double));
                 double *density_grid = malloc(grid_size * sizeof(double));
-                if (!r_grid || !log_r_grid || !mass_grid || !density_grid) {
-                    log_message("ERROR", "Thread %d: Failed to allocate grid arrays for snapshot %d", omp_get_thread_num(), snap);
-                    // Free previously allocated resources
-                    free(R_decimated); free(Mass_decimated);
-                    if (r_violations > 0) {
-                        free(R_filtered);
-                        free(Mass_filtered);
-                    }
-                    free_if_exists(r_grid);
-                    free_if_exists(log_r_grid);
-                    free_if_exists(mass_grid);
-                    free_if_exists(density_grid);
-                    free(density_sorted);
-                    density_sorted = NULL;
+                if (validate_snapshot_memory_allocation(r_grid, log_r_grid, mass_grid, density_grid, density_sorted, R_decimated, Mass_decimated,
+                                                        R_filtered, Mass_filtered, r_violations, snap))
                     continue;
-                }
-
-                // Populate the log-spaced grid coordinates
-                for (int i = 0; i < grid_size; i++) {
-                    log_r_grid[i] = log_min_r + i * dlog;
-                    r_grid[i] = pow(10.0, log_r_grid[i]);
-                }
-
-                /** @brief Ensure r_grid is strictly monotonic for GSL spline init. */
-                int rgrid_corrections_made = 0;
-                for (int i = 1; i < grid_size; i++)
-                    if (r_grid[i] <= r_grid[i - 1]) {
-                        // Ensure strict monotonicity with small absolute increment
-                        r_grid[i] = r_grid[i - 1] + 1e-12;
-                        rgrid_corrections_made++;
-                    }
-                if (rgrid_corrections_made > 0)
-                     log_message("WARNING", "Thread %d made %d corrections to r_grid for monotonicity in snapshot %d", omp_get_thread_num(),
-                                 rgrid_corrections_made, snap);
-
+                fill_geomspace(r_grid, log_r_grid, grid_size, max_r, min_r, snap);
                 // Interpolate mass from decimated data onto the uniform log-spaced grid
                 gsl_interp_accel *acc = NULL;
                 gsl_spline *mass_spline = NULL;
@@ -4907,8 +4838,8 @@ cleanup_diag_iteration:
 
                 if (!density_smoothed_direct || !direct_grid_result) {
                     log_message("ERROR", "Thread %d: Failed to allocate memory for smoothing arrays for snapshot %d", omp_get_thread_num(), snap);
-                    free_if_exists(density_smoothed_direct);
-                    free_if_exists(direct_grid_result);
+                    free(density_smoothed_direct);
+                    free(direct_grid_result);
                     continue;
                 }
 
@@ -4919,9 +4850,9 @@ cleanup_diag_iteration:
                 // Perform Gaussian convolution on the uniform density grid
                 if (!density_grid || !log_r_grid || !direct_grid_result) {
                     log_message("ERROR", "Thread %d: NULL arrays detected before gaussian_convolution for snapshot %d", omp_get_thread_num(), snap);
-                    free_if_exists(density_grid);
-                    free_if_exists(log_r_grid);
-                    free_if_exists(direct_grid_result);
+                    free(density_grid);
+                    free(log_r_grid);
+                    free(direct_grid_result);
                     continue;
                 }
 
@@ -5448,7 +5379,7 @@ cleanup_diag_iteration:
     // Cleanup for the conditionally declared persistent sort buffer.
     if (g_sort_columns_buffer != NULL) {
         for (int i = 0; i < g_sort_columns_buffer_npts; i++)
-            free_if_exists(g_sort_columns_buffer[i]);
+            free(g_sort_columns_buffer[i]);
         free(g_sort_columns_buffer);
         g_sort_columns_buffer = NULL; // Mark as freed.
         g_sort_columns_buffer_npts = 0; // Reset size.

@@ -64,21 +64,14 @@ threevector crossproduct(threevector X, threevector Y);
 double sigmatotal(double vrel, int npts, double halo_mass_for_calc, double rc_for_calc);
 
 // SIDM scattering functions
-void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time,
-                             double active_profile_rc, int current_method_display_num,
-                             int bootstrap_phase_active);
+void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time, double active_profile_rc, int current_method_display_num,
+                      int bootstrap_phase_active);
 
-void perform_sidm_scattering_serial(double **particles, int npts, double dt,
-                                    double current_time, gsl_rng *rng,
-                                    long long *Nscatter_total_step,
+void perform_sidm_scattering_serial(double **particles, int npts, double dt, double current_time, gsl_rng *rng, long long *Nscatter_total_step,
                                     double halo_mass_for_sidm, double rc_for_sidm);
 
-void perform_sidm_scattering_parallel(double **particles, int npts, double dt,
-                                      double current_time __attribute__((unused)),
-                                      gsl_rng **rng_per_thread_list,
-                                      int num_threads_for_rng,
-                                      long long *Nscatter_total_step,
-                                      double halo_mass_for_sidm, double rc_for_sidm);
+void perform_sidm_scattering_parallel(double **particles, int npts, double dt, double current_time __attribute__((unused)), gsl_rng **rng_per_thread_list,
+                                      int num_threads_for_rng, long long *Nscatter_total_step, double halo_mass_for_sidm, double rc_for_sidm);
 
 int compare_scatter_events(const void *a, const void *b);
 

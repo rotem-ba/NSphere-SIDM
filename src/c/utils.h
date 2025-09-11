@@ -26,17 +26,16 @@
 #define cube(x) ((x) * (x) * (x))
 /** @def in_range(x) Checks if the value x is in the range [gte,lte]. */
 #define in_range(x,gte,lte) (x >= gte && x <= lte)
-/** @def if x<low set x=low, if x>high, set x=high */
-inline double clip(double x, double low, double high) {
-    if (x < low)
-        return low;
-    else if (x > high)
-        return high;
-    return x;
-}
+/** @def if x<low return low */
+#define at_least(x,low) ((x < low) ? low : x)
+/** @def if x>high return high */
+#define at_most(x,high) ((x > high) ? high : x)
+/** @def if x<low return low, if x>high, return high, else return x */
+#define clip(x, low, high) (at_most(at_least(x,low),high))
 
 int isInteger(const char *str);
 int isFloat(const char *str);
 double evaluatespline(gsl_spline *spline, gsl_interp_accel *acc, double value);
+void fill_geomspace(double *r_grid, double *log_r_grid, int grid_size, double max_r, double min_r, int snap);
 
 #endif // UTILS_H

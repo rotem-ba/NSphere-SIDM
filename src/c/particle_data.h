@@ -52,8 +52,7 @@ extern double **particles;           ///< Main particle data array
  * @details Used in sorting and selection of particles by angular momentum,
  *          especially when finding particles closest to a reference L.
  */
-struct LAndIndex
-{
+struct LAndIndex {
     double L; ///< Angular momentum value (or squared difference from Lcompare).
     int idx;  ///< Original particle index (before sorting by L).
     int sign; ///< Direction indicator (+1 or -1) or sign of (L - Lcompare).
@@ -72,8 +71,7 @@ typedef struct LAndIndex LAndIndex;
  * @note The `rank` field is assigned during radial sorting, while `original_index`
  *       preserves the initial array position for tracking particles across snapshots.
  */
-struct PartData
-{
+struct PartData {
    int rank;           // Particle rank (sorted position)
    float rad;          // Radial position
    float vrad;         // Radial velocity
@@ -82,8 +80,7 @@ struct PartData
 };
 typedef struct PartData PartData;
 
-struct RrPsiPair
-{
+struct RrPsiPair {
    double rr;  ///< Radius value or x-axis value for sorting
    double psi; ///< Corresponding potential value or y-axis value
 };

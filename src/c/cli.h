@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
- #ifndef CLI_H
- #define CLI_H
+#ifndef CLI_H
+#define CLI_H
 
 void printUsage(const char *prog);
 static int validate_int_input(int *i, int argc, char **argv, const char *param_name);

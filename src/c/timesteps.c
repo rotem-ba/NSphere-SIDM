@@ -14,63 +14,62 @@
  * limitations under the License.
  */
 
- #include <math.h>
- #include "globals.h"
- #include "io.h"
+#include <math.h>
+#include "globals.h"
 
- /**
-  * @brief Adjusts the total number of timesteps to align with desired output snapshot intervals.
-  * @details This function calculates an adjusted number of total simulation timesteps, \f$N'_{times}\f$,
-  *          such that it is greater than or equal to the initially requested `Ntimes_initial` (\f$N\f$)
-  *          and satisfies the constraint: \f$(N'_{times} - 1)\f$ must be an integer multiple of
-  *          \f$(M - 1) \times p\f$. Here, \f$M\f$ is `nout` (number of desired output snapshot points,
-  *          which means \f$M-1\f$ intervals) and \f$p\f$ is `dtwrite` (the low-level write interval
-  *          in terms of simulation timesteps).
-  *          This alignment ensures that exactly `nout` snapshots can be produced at intervals
-  *          that are multiples of `dtwrite` and that also evenly span the total adjusted simulation duration.
-  *
-  * @param Ntimes_initial [in] Initially requested total number of simulation timesteps (\f$N\f$).
-  * @param nout           [in] Number of desired output snapshot points (\f$M\f$). Must be >= 2 for adjustment to apply.
-  * @param dtwrite        [in] The interval (in timesteps) at which low-level data is potentially written (\f$p\f$). Must be >= 1.
-  * @return int The adjusted total number of timesteps (\f$N'_{times}\f$). Returns `Ntimes_initial`
-  *             if `nout < 2` or `dtwrite < 1` or other edge cases where the constraint cannot be met.
-  */
+/**
+ * @brief Adjusts the total number of timesteps to align with desired output snapshot intervals.
+ * @details This function calculates an adjusted number of total simulation timesteps, \f$N'_{times}\f$,
+ *          such that it is greater than or equal to the initially requested `Ntimes_initial` (\f$N\f$)
+ *          and satisfies the constraint: \f$(N'_{times} - 1)\f$ must be an integer multiple of
+ *          \f$(M - 1) \times p\f$. Here, \f$M\f$ is `nout` (number of desired output snapshot points,
+ *          which means \f$M-1\f$ intervals) and \f$p\f$ is `dtwrite` (the low-level write interval
+ *          in terms of simulation timesteps).
+ *          This alignment ensures that exactly `nout` snapshots can be produced at intervals
+ *          that are multiples of `dtwrite` and that also evenly span the total adjusted simulation duration.
+ *
+ * @param Ntimes_initial [in] Initially requested total number of simulation timesteps (\f$N\f$).
+ * @param nout           [in] Number of desired output snapshot points (\f$M\f$). Must be >= 2 for adjustment to apply.
+ * @param dtwrite        [in] The interval (in timesteps) at which low-level data is potentially written (\f$p\f$). Must be >= 1.
+ * @return int The adjusted total number of timesteps (\f$N'_{times}\f$). Returns `Ntimes_initial`
+ *             if `nout < 2` or `dtwrite < 1` or other edge cases where the constraint cannot be met.
+ */
 int adjust_ntimesteps(int Ntimes_initial, int nout, int dtwrite) {
-     // Find the smallest N' >= N such that (Ntimes_initial' - 1) is a multiple of (nout - 1) * dtwrite.
+    // Find the smallest N' >= N such that (Ntimes_initial' - 1) is a multiple of (nout - 1) * dtwrite.
 
-     // Edge cases:
-     if (nout < 2) // If only 0 or 1 snapshot requested, no interval constraint applies.
-         return Ntimes_initial;
-     if (dtwrite < 1) // Invalid write interval.
-         return Ntimes_initial;
+    // Edge cases:
+    if (nout < 2) // If only 0 or 1 snapshot requested, no interval constraint applies.
+        return Ntimes_initial;
+    if (dtwrite < 1) // Invalid write interval.
+        return Ntimes_initial;
 
-     // The total number of intervals between nout snapshots is (nout - 1).
-     // The total number of steps spanning these intervals must be a multiple of dtwrite.
-     // Therefore, the total number of steps (Ntimes_initial' - 1) must be a multiple of (nout - 1) * dtwrite.
-     // Find the smallest integer k >= 1 such that (nout - 1) * k * dtwrite >= (Ntimes_initial - 1).
-     double required_steps = (double)(Ntimes_initial - 1);
-     double steps_per_output_cycle = (nout - 1) * (double)dtwrite;
+    // The total number of intervals between nout snapshots is (nout - 1).
+    // The total number of steps spanning these intervals must be a multiple of dtwrite.
+    // Therefore, the total number of steps (Ntimes_initial' - 1) must be a multiple of (nout - 1) * dtwrite.
+    // Find the smallest integer k >= 1 such that (nout - 1) * k * dtwrite >= (Ntimes_initial - 1).
+    double required_steps = (double)(Ntimes_initial - 1);
+    double steps_per_output_cycle = (nout - 1) * (double)dtwrite;
 
-     // Handle case where denominator is zero (e.g., nout=1 or dtwrite=0, caught above but added safety)
-     if (steps_per_output_cycle <= 0)
-         return Ntimes_initial; // Cannot satisfy constraint
+    // Handle case where denominator is zero (e.g., nout=1 or dtwrite=0, caught above but added safety)
+    if (steps_per_output_cycle <= 0)
+        return Ntimes_initial; // Cannot satisfy constraint
 
-     double ratio = required_steps / steps_per_output_cycle;
-     int k = (int)ceil(ratio);
-     if (k < 1)
-         k = 1; // Ensure at least one full output cycle.
+    double ratio = required_steps / steps_per_output_cycle;
+    int k = (int)ceil(ratio);
+    if (k < 1)
+        k = 1; // Ensure at least one full output cycle.
 
-     int Nprime_minus_1 = (nout - 1) * k * dtwrite;
-     int Nprime = Nprime_minus_1 + 1;
+    int Nprime_minus_1 = (nout - 1) * k * dtwrite;
+    int Nprime = Nprime_minus_1 + 1;
 
-     return Nprime;
- }
+    return Nprime;
+}
 
- /**
-  * @brief Adjust Ntimes using adjust_ntimesteps to align with output schedule.
-  * @details Ensures (Ntimes - 1) is a multiple of (noutsnaps - 1) * dtwrite.
-  * @see adjust_ntimesteps
-  */
+/**
+ * @brief Adjust Ntimes using adjust_ntimesteps to align with output schedule.
+ * @details Ensures (Ntimes - 1) is a multiple of (noutsnaps - 1) * dtwrite.
+ * @see adjust_ntimesteps
+ */
 void adjust_Ntimes() {
     int oldN = Ntimes;
     Ntimes = adjust_ntimesteps(Ntimes, nout + 1, dtwrite); // Use noutsnaps here

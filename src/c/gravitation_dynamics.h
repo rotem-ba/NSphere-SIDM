@@ -18,6 +18,7 @@
 #define DYNAMICS_H
 
 #include "globals.h"
+#include "utils.h"
 
 /**
  * @brief Calculates gravitational acceleration at a given radius.
@@ -43,19 +44,11 @@
  * @note Returns 0.0 if `use_identity_gravity` is set to 1.
  * @note M(r) is approximated as `(current_rank / npts) * halo_mass_value`.
  */
-inline double gravitational_force(double r, int current_rank, int npts, double G_value, double halo_mass_value)
-{
-    if (use_identity_gravity)
-    {
-        // Testing mode: no gravitational force
+inline double gravitational_force(double r, int current_rank, int npts, double G_value, double halo_mass_value) {
+    if (use_identity_gravity) // Testing mode: no gravitational force
         return 0.0;
-    }
-    else
-    {
-        // Calculate gravitational force: F = -G * M(r) / r²
-        // where M(r) is proportional to particle rank
-        return -(VEL_CONV_SQ * G_value) * ((double)current_rank / (double)npts) * halo_mass_value / (r * r);
-    }
+    else // Calculate gravitational force: F = -G * M(r) / r², where M(r) is proportional to particle rank
+        return -(VEL_CONV_SQ * G_value) * ((double)current_rank / (double)npts) * halo_mass_value / sqr(r);
 }
 
 /**
@@ -73,9 +66,8 @@ inline double gravitational_force(double r, int current_rank, int npts, double G
  * double
  *     Centrifugal acceleration: L²/r³ (kpc/Myr^2).
  */
-inline double effective_angular_force(double r, double ell)
-{
-    return (ell * ell) / (r * r * r);
+inline double effective_angular_force(double r, double ell) {
+    return sqr(ell) / cube(r);
 }
 
 /**
@@ -106,16 +98,10 @@ inline double effective_angular_force(double r, double ell)
  */
 inline double gravitational_force_rho_v(double rho, int current_rank, int npts, double G_value, double halo_mass_value)
 {
-    if (use_identity_gravity)
-    {
-        // Testing mode: no gravitational force
+    if (use_identity_gravity) // Testing mode: no gravitational force
         return 0.0;
-    }
-    else
-    {
-        // Gravitational force in transformed coordinates
-        return -(VEL_CONV_SQ * G_value) * ((double)current_rank / (double)npts) * halo_mass_value / (rho * rho);
-    }
+    else // Gravitational force in transformed coordinates
+        return -(VEL_CONV_SQ * G_value) * ((double)current_rank / (double)npts) * halo_mass_value / sqr(rho);
 }
 
 /**
@@ -137,9 +123,8 @@ inline double gravitational_force_rho_v(double rho, int current_rank, int npts, 
  * @see effective_angular_force
  * @see doLeviCivitaLeapfrog
  */
-inline double effective_angular_force_rho_v(double rho, double ell)
-{
-    return (ell * ell) / (rho * rho * rho * rho);
+inline double effective_angular_force_rho_v(double rho, double ell) {
+    return sqr(ell) / (rho * rho * rho * rho);
 }
 
 /**
@@ -153,8 +138,7 @@ inline double effective_angular_force_rho_v(double rho, double ell)
  * @param vVal   [in] The current radial velocity \f$v_{rad}\f$ (kpc/Myr).
  * @return double The value of \f$d\rho/d\tau\f$.
  */
-inline double dRhoDtaufun(double rhoVal, double vVal)
-{
+inline double dRhoDtaufun(double rhoVal, double vVal) {
     // dρ/dτ = 0.5 * ρ * v
     return 0.5 * rhoVal * vVal;
 }
@@ -175,39 +159,20 @@ inline double dRhoDtaufun(double rhoVal, double vVal)
  * @param rhoVal     [in] Current value of the regularized radial coordinate \f$\rho = \sqrt{r}\f$.
  * @return double    The total transformed force per unit mass \f$F_{\rho}/m\f$.
  */
-inline double forceLCfun(int i, int npts, double totalmass, double grav, double ell, double rhoVal)
-{
+inline double forceLCfun(int i, int npts, double totalmass, double grav, double ell, double rhoVal) {
     double gravPart = gravitational_force_rho_v(rhoVal, i, npts, grav, totalmass);
     double angPart = effective_angular_force_rho_v(rhoVal, ell);
     return gravPart + angPart;
 }
 
-
 void doMicroLeapfrog(int i, int npts,double r_in, double v_in, double ell, double h, int N, int subSteps, double grav, double *r_out, double *v_out);
-void doAdaptiveFullLeap(
-    int i,               // Particle index for force computation
-    int npts,            // Total number of particles in simulation
-    double r_in,         // Initial radius at start of step
-    double v_in,         // Initial velocity at start of step
-    double ell,          // Angular momentum (conserved during integration)
-    double h,            // Full physical timestep size ΔT
-    double radius_tol,   // Convergence tolerance for radius
-    double velocity_tol, // Convergence tolerance for velocity
-    int max_subdiv,      // Maximum subdivision factor allowed
-    double grav,         // Gravitational constant (renamed from G to avoid macro collision)
-    int out_type,        // Result selection: 0=coarse, 1=fine, 2=Richardson extrapolation
-    double *r_out,       // Output parameter for final radius
-    double *v_out        // Output parameter for final velocity
-);
+void doAdaptiveFullLeap(int i, int npts, double r_in, double v_in, double ell, double h, double radius_tol, double velocity_tol, int max_subdiv,
+                        double grav, int out_type, double *r_out, double *v_out);
 void doLeviCivitaLeapfrog(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double grav, double *r_out, double *v_out);
 void doMicroLeviCivita(int i, int npts, double rho_in, double v_in, double t_in, int subSteps, double h_tau, double grav, double ell, double *rho_out,
                        double *v_out, double *t_out);
 void doSingleTauStepAdaptiveLeviCivita(int i, int npts, double rho_in, double v_in, double t_in, double h_guess, double radius_tol, double velocity_tol,
                                        int max_subdiv, double grav, double ell, int out_type, double *rho_out, double *v_out, double *t_out);
-void doAdaptiveFullLeviCivita(
-    int i, int npts, double r_in, double v_in, double ell,
-    double dt, // big step in physical time
-    int N_taumin, double radius_tol, double velocity_tol, int max_subdiv, double grav,
-    int out_type, // 0=coarse,1=fine,2=Richardson
-    double *r_out, double *v_out);
+void doAdaptiveFullLeviCivita(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double radius_tol, double velocity_tol,
+                              int max_subdiv, double grav, int out_type, double *r_out, double *v_out);
 #endif // DYNAMICS_H

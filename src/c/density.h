@@ -21,6 +21,31 @@
  #include <gsl/gsl_interp.h>
 
  // =========================================================================
+ //  Shared data variables
+ // =========================================================================
+ /**
+  * @brief Common IC generation variables shared between profile pathways.
+  * @details These variables are declared before the profile selection block
+  *          and will be populated by whichever profile pathway is chosen.
+  */
+
+ // Common data arrays
+ extern double *radius;                     ///< Radial grid points
+ extern double *mass;                       ///< Mass values at radial points
+ extern double *Psivalues;                  ///< Potential values at radial points
+ extern double *nPsivalues;                 ///< Negative potential values (for r(Psi) spline)
+ extern double *Evalues;                    ///< Energy grid points
+ extern double *innerintegrandvalues;       ///< f(E) integrand values
+ extern double *radius_monotonic_grid_nfw;  ///< Monotonic radial grid for NFW calculations
+
+ // Key scalar values
+ extern double Psimin;                      ///< Minimum potential (at rmax)
+ extern double Psimax;                      ///< Maximum potential (at r=0)
+ extern double rmax;                        ///< Maximum radius for profile calculations
+ extern int num_points;                     ///< Number of points for spline interpolation
+
+
+ // =========================================================================
  // ENERGY CALCULATION AND INTEGRATION STRUCTURES
  // =========================================================================
 
