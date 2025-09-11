@@ -89,10 +89,12 @@ inline threevector crossproduct(threevector X, threevector Y) {
     return Z;
 }
 
-
 int isInteger(const char *str);
 int isFloat(const char *str);
 double evaluatespline(gsl_spline *spline, gsl_interp_accel *acc, double value);
 void fill_geomspace(double *r_grid, double *log_r_grid, int grid_size, double max_r, double min_r, int snap);
+
+/** @def calculate total velocity norm from L, r, and vrad */
+#define to_velocity(vrad,L,r) (sqrt(sqr(vrad) + sqr(L) / sqr(r)))
 
 #endif // UTILS_H
