@@ -672,10 +672,8 @@ void read_initial_conditions(double **particles, int npts, const char *filename)
 void append_all_particle_data_chunk_to_file(const char *filename, int npts, int block_size, float *L_block, int *Rank_block, float *R_block,
                                             float *Vrad_block) {
     FILE *f = fopen(filename, "ab");
-    if (!f) {
-        printf("Error: cannot open %s for appending all_particle_data\n", filename);
-        CLEAN_EXIT(1);
-    }
+    if (!f)
+        raise_error("Error: cannot open %s for appending all_particle_data\n", filename);
 
     // Write particle data in step-major order
     for (int step = 0; step < block_size; step++)
@@ -724,21 +722,16 @@ void retrieve_all_particle_snapshot(const char *filename, int snap, int npts, in
     float *tmpR = (float *)malloc(npts * sizeof(float));
     float *tmpV = (float *)malloc(npts * sizeof(float));
 
-    if (!tmpL || !tmpRank || !tmpR || !tmpV) {
-        fprintf(stderr, "Error: out of memory in retrieve_all_particle_snapshot!\n");
-        CLEAN_EXIT(1);
-    }
-
+    if (!tmpL || !tmpRank || !tmpR || !tmpV)
+        raise_error("Error: out of memory in retrieve_all_particle_snapshot!\n");
     // Status messages are handled in the ordered section of the parallel loop.
 
-// Read from file in a critical section
-#pragma omp critical(file_access)
+    // Read from file in a critical section
+    #pragma omp critical(file_access)
     {
         FILE *f = fopen(filename, "rb");
-        if (!f) {
-            fprintf(stderr, "Error: cannot open %s for reading\n", filename);
-            CLEAN_EXIT(1);
-        }
+        if (!f)
+            raise_error("Error: cannot open %s for reading\n", filename);
 
         // Compute offset in file.
         int block_number = snap / block_size;
@@ -749,8 +742,8 @@ void retrieve_all_particle_snapshot(const char *filename, int snap, int npts, in
         long long offset = block_data_size * block_number + step_data_size * index_in_block;
 
         if (fseek(f, offset, SEEK_SET) != 0) {
-            fprintf(stderr, "Error: fseek failed for snap=%d\n", snap);
             fclose(f);
+            raise_error("Error: fseek failed for snap=%d\n", snap);
             CLEAN_EXIT(1);
         }
 
@@ -760,9 +753,8 @@ void retrieve_all_particle_snapshot(const char *filename, int snap, int npts, in
             float rval, vval, lval;
 
             if (fread(&rankval, sizeof(int), 1, f) != 1 || fread(&rval, sizeof(float), 1, f) != 1 || fread(&vval, sizeof(float), 1, f) != 1 || fread(&lval, sizeof(float), 1, f) != 1) {
-                fprintf(stderr, "Error: unexpected EOF while reading snap=%d (particle %d)\n", snap, i);
                 fclose(f);
-                CLEAN_EXIT(1);
+                raise_error("Error: unexpected EOF while reading snap=%d (particle %d)\n", snap, i);
             }
             tmpRank[i] = rankval;
             tmpR[i] = rval;
@@ -851,64 +843,64 @@ void write_to_lastparams() {
     char linkname[512] = "data/lastparams.dat"; // Standard name
 
     /* Platform detection using standard predefined macros */
-#if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
-    /** @note Windows: Copy file content as symlinks can be unreliable or require special privileges. */
-    // Windows or Windows-like environment: create a direct file copy.
-        // Ensure compatibility with various Windows environments.
+    #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
+        /** @note Windows: Copy file content as symlinks can be unreliable or require special privileges. */
+        // Windows or Windows-like environment: create a direct file copy.
+            // Ensure compatibility with various Windows environments.
 
-    // Use lower-level file operations instead of system commands for better compatibility.
-    FILE *source, *dest;
-    source = fopen(filename, "rb");
-    if (!source)
-        printf("Warning: Failed to open source file %s for copying\n", filename);
-    else {
-        dest = fopen(linkname, "wb");
-        if (!dest) {
-            printf("Warning: Failed to create destination file %s\n", linkname);
-            fclose(source);
-        } else {
-            // Copy file content.
-            char buffer[4096];
-            size_t bytes_read;
+        // Use lower-level file operations instead of system commands for better compatibility.
+        FILE *source, *dest;
+        source = fopen(filename, "rb");
+        if (!source)
+            printf("Warning: Failed to open source file %s for copying\n", filename);
+        else {
+            dest = fopen(linkname, "wb");
+            if (!dest) {
+                printf("Warning: Failed to create destination file %s\n", linkname);
+                fclose(source);
+            } else {
+                // Copy file content.
+                char buffer[4096];
+                size_t bytes_read;
 
-            while ((bytes_read = fread(buffer, 1, sizeof(buffer), source)) > 0)
-                fwrite(buffer, 1, bytes_read, dest);
+                while ((bytes_read = fread(buffer, 1, sizeof(buffer), source)) > 0)
+                    fwrite(buffer, 1, bytes_read, dest);
 
-            fclose(dest);
-            fclose(source);
+                fclose(dest);
+                fclose(source);
 
-            // Extract the basename for display purposes
-            const char *basename = strrchr(filename, '/');
-            basename = basename ? basename + 1 : filename; // Skip the '/' or use full name if no '/'
+                // Extract the basename for display purposes
+                const char *basename = strrchr(filename, '/');
+                basename = basename ? basename + 1 : filename; // Skip the '/' or use full name if no '/'
 
-            printf("Created link: %s -> %s\n\n", basename, linkname);
+                printf("Created link: %s -> %s\n\n", basename, linkname);
+            }
         }
-    }
-#else
-    /** @note Unix: Create symbolic link from basename(filename) to 'linkname', fallback to copy. */
-    // Unix-like systems (Linux, macOS, etc.) and fallback for other platforms: use symbolic links.
-    char command[1024];
+    #else
+        /** @note Unix: Create symbolic link from basename(filename) to 'linkname', fallback to copy. */
+        // Unix-like systems (Linux, macOS, etc.) and fallback for other platforms: use symbolic links.
+        char command[1024];
 
-    // First, remove any existing link or file.
-    snprintf(command, sizeof(command), "rm -f \"%s\" 2>/dev/null", linkname);
-    system(command);
+        // First, remove any existing link or file.
+        snprintf(command, sizeof(command), "rm -f \"%s\" 2>/dev/null", linkname);
+        system(command);
 
-    // Then create the symbolic link - use the basename of the file, not the full path
-    // Extract the basename from filename
-    const char *basename = strrchr(filename, '/');
-    basename = basename ? basename + 1 : filename; // Skip the '/' or use full name if no '/'
+        // Then create the symbolic link - use the basename of the file, not the full path
+        // Extract the basename from filename
+        const char *basename = strrchr(filename, '/');
+        basename = basename ? basename + 1 : filename; // Skip the '/' or use full name if no '/'
 
-    snprintf(command, sizeof(command), "ln -s \"%s\" \"%s\"", basename, linkname);
-    if (system(command) != 0) {
-        // If symbolic link fails, fall back to copying the file.
-        snprintf(command, sizeof(command), "cp \"%s\" \"%s\"", filename, linkname);
-        if (system(command) != 0)
-            printf("Warning: Failed to create link or copy %s to %s\n", filename, linkname);
-        else
+        snprintf(command, sizeof(command), "ln -s \"%s\" \"%s\"", basename, linkname);
+        if (system(command) != 0) {
+            // If symbolic link fails, fall back to copying the file.
+            snprintf(command, sizeof(command), "cp \"%s\" \"%s\"", filename, linkname);
+            if (system(command) != 0)
+                printf("Warning: Failed to create link or copy %s to %s\n", filename, linkname);
+            else
+                printf("Created link: %s -> %s\n\n", filename, linkname);
+        } else
             printf("Created link: %s -> %s\n\n", filename, linkname);
-    } else
-        printf("Created link: %s -> %s\n\n", filename, linkname);
-#endif
+    #endif
 }
 
 /**
@@ -926,10 +918,8 @@ void write_low_l_particles(double dt, int nlowest, double **lowestL_r, double **
     char full_filename[256];
     get_full_filename("data/lowest_l_trajectories.dat", 1, full_filename, sizeof(full_filename));
     FILE *fp_lowest = fopen(full_filename, "wb"); // Binary mode for fprintf_bin
-    if (!fp_lowest) {
-        fprintf(stderr, "Error: cannot open data/lowest_l_trajectories.dat\n");
-        CLEAN_EXIT(1);
-    }
+    if (!fp_lowest)
+        raise_error("Error: cannot open data/lowest_l_trajectories.dat\n");
 
     // Write data for Ntimes steps:
     for (int step = 0; step < Ntimes; step++) {
@@ -1034,7 +1024,8 @@ void fill_suffix_tags() {
 }
 
 int validate_snapshot_memory_allocation(double *r_grid, double *log_r_grid, double *mass_grid, double *density_grid, double *density_sorted,
-                                        double *R_decimated, double *Mass_decimated, double *R_filtered, double *Mass_filtered, int r_violations, int snap) {
+                                        double *R_decimated, double *Mass_decimated, double *R_filtered, double *Mass_filtered, int r_violations,
+                                        int snap) {
     if (!r_grid || !log_r_grid || !mass_grid || !density_grid || !density_sorted) {
         log_message("ERROR", "Thread %d: Failed to allocate grid arrays for snapshot %d", omp_get_thread_num(), snap);
         // Free previously allocated resources
