@@ -1031,9 +1031,7 @@ void bootstrap_ab3_method() {
     // sub_step = 2: calc f2 (from y2), store f_ab3_x[2]. NO Euler update. state is y2.
     #pragma omp single
     for (int sub_step = 0; sub_step <= 2; sub_step++) {
-        #pragma omp single
         sort_particles(particles, npts);
-        #pragma omp barrier
 
         // Compute derivatives => store in f_ab3_r[sub_step], f_ab3_v[sub_step].
         #pragma omp parallel for default(shared) schedule(static)
