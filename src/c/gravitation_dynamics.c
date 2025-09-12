@@ -815,9 +815,8 @@ void forest_ruth_yoshida_integration() {
      * @details Position update using the intermediate velocity v^*.
      */
     #pragma omp parallel for default(shared) schedule(static)
-    for (int i = 0; i < npts; i++) {
+    for (int i = 0; i < npts; i++)
         particles[0][i] += particles[1][i] * c1 * dt;
-    }
 
     #pragma omp single
     sort_particles(particles, npts);
@@ -844,9 +843,8 @@ void forest_ruth_yoshida_integration() {
      * @details Position update using the intermediate velocity.
      */
     #pragma omp parallel for default(shared) schedule(static)
-    for (int i = 0; i < npts; i++) {
+    for (int i = 0; i < npts; i++)
         particles[0][i] += particles[1][i] * c2 * dt;
-    }
 
     /**
      * @brief STEP 5: Kick by ((c2 + c3) * dt/2).

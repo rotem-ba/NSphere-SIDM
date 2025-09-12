@@ -596,22 +596,14 @@ printf("  \n");
                     // --- Cleanup for NFW Diagnostic Iteration ---
 cleanup_diag_iteration:
                     gsl_integration_workspace_free(w_diag);
-                    if(splinemass_diag)
-                        gsl_spline_free(splinemass_diag);
-                    if(enclosedmass_diag)
-                        gsl_interp_accel_free(enclosedmass_diag);
-                    if(splinePsi_diag)
-                        gsl_spline_free(splinePsi_diag);
-                    if(Psiinterp_diag)
-                        gsl_interp_accel_free(Psiinterp_diag);
-                    if(splinerofPsi_diag)
-                        gsl_spline_free(splinerofPsi_diag);
-                    if(rofPsiinterp_diag)
-                        gsl_interp_accel_free(rofPsiinterp_diag);
-                    if(fofEinterp_diag)
-                        gsl_interp_free(fofEinterp_diag);
-                    if(fofEacc_diag)
-                        gsl_interp_accel_free(fofEacc_diag);
+                    gsl_spline_free(splinemass_diag);
+                    gsl_interp_accel_free(enclosedmass_diag);
+                    gsl_spline_free(splinePsi_diag);
+                    gsl_interp_accel_free(Psiinterp_diag);
+                    gsl_spline_free(splinerofPsi_diag);
+                    gsl_interp_accel_free(rofPsiinterp_diag);
+                    gsl_interp_free(fofEinterp_diag);
+                    gsl_interp_accel_free(fofEacc_diag);
                     free(mass_diag_arr);
                     free(radius_diag_arr);
                     free(radius_for_rofPsi_diag_arr);
@@ -967,27 +959,23 @@ cleanup_diag_iteration:
                 t_integration_lower_bound = 0.0;
             }
 
-            if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) ) {
+            if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) )
                 log_message("DEBUG", "I(E) integral setup: E_shell=%.3e, Psimin=%.3e, integrating fEintegrand_nfw(t) from t_low=%.3e to t_high=%.3e",
                        E_current_shell, Psimin, t_integration_lower_bound, t_integration_upper_bound);
-            }
 
             if (t_integration_upper_bound <= t_integration_lower_bound + 1e-10) { // If range is zero or too small
                 nfw_result = 0.0;
                 status_fE_nfw_local = GSL_SUCCESS;
-                 if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) ) {
+                 if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) )
                     log_message("DEBUG", "NFEFE_INTEGRAL_SETUP: Skipping t-integration, range invalid/tiny (t_high=%.3e, t_low=%.3e)", t_integration_upper_bound, t_integration_lower_bound);
-                 }
             } else {
                 status_fE_nfw_local = gsl_integration_qag(&F_nfw_calc, t_integration_lower_bound, t_integration_upper_bound,
                                     1e-8, 1e-8, 1000, GSL_INTEG_GAUSS61, // Using conservative GSL tolerances
                                     w, &nfw_result, &nfw_error);
 
-                if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) ) {
-                    log_message("DEBUG", "NFEFE_INTEGRAL_RESULT: I(E=%.3e) = %.6e, error=%.3e, status=%s",
-                           E_current_shell, nfw_result, nfw_error,
+                if (g_doDebug && (i_nfw <= 5 || i_nfw > num_points - 5 || i_nfw % (num_points/10 < 1 ? 1 : num_points/10) == 0) )
+                    log_message("DEBUG", "NFEFE_INTEGRAL_RESULT: I(E=%.3e) = %.6e, error=%.3e, status=%s", E_current_shell, nfw_result, nfw_error,
                            (status_fE_nfw_local == GSL_SUCCESS) ? "SUCCESS" : "ERROR");
-                }
             }
             innerintegrandvalues[i_nfw] = nfw_result;
             Evalues[i_nfw] = nfw_calE;
@@ -1077,7 +1065,7 @@ cleanup_diag_iteration:
                     if (!(mass[chk_m+1] > mass[chk_m])) {
                         if (monotonicity_violations_mass_spline < 20)
                             fprintf(stderr, "  Mass array monotonicity violation: mass[%d]=%.17e >= mass[%d]=%.17e (Diff: %.3e)\n",
-                                   chk_m, mass[chk_m], chk_m+1, mass[chk_m+1], mass[chk_m+1] - mass[chk_m]);
+                                    chk_m, mass[chk_m], chk_m+1, mass[chk_m+1], mass[chk_m+1] - mass[chk_m]);
                         monotonicity_violations_mass_spline++;
                     }
             if (monotonicity_violations_mass_spline > 0) {
@@ -3662,17 +3650,16 @@ cleanup_diag_iteration:
     free_local_snap_arrays();
     cleanup_all_particle_data();
 
-#ifdef _OPENMP
-    // Clean up FFTW threads only if they were initialized.
-    fftw_cleanup_threads();
-    log_scattering();
-#endif
+    #ifdef _OPENMP
+        // Clean up FFTW threads only if they were initialized.
+        fftw_cleanup_threads();
+        log_scattering();
+    #endif
 
     // Free per-thread GSL RNG resources
     if (g_rng_per_thread != NULL) {
         for (int i_rng = 0; i_rng < g_max_omp_threads_for_rng; ++i_rng)
-            if (g_rng_per_thread[i_rng] != NULL)
-                gsl_rng_free(g_rng_per_thread[i_rng]);
+            gsl_rng_free(g_rng_per_thread[i_rng]);
         free(g_rng_per_thread);
         g_rng_per_thread = NULL;
         log_message("INFO", "Freed per-thread GSL RNGs.");
@@ -3686,16 +3673,10 @@ cleanup_diag_iteration:
     }
 
     // Free global NFW spline resources if they were allocated for NFW profile
-    if (g_nfw_splinemass_for_force) {
-        gsl_spline_free(g_nfw_splinemass_for_force);
-        g_nfw_splinemass_for_force = NULL;
-        log_message("INFO", "Freed global NFW mass spline for force calculation.");
-    }
-    if (g_nfw_enclosedmass_accel_for_force) {
-        gsl_interp_accel_free(g_nfw_enclosedmass_accel_for_force);
-        g_nfw_enclosedmass_accel_for_force = NULL;
-        log_message("INFO", "Freed global NFW mass spline accelerator.");
-    }
+    gsl_spline_free(g_nfw_splinemass_for_force);
+    g_nfw_splinemass_for_force = NULL;
+    gsl_interp_accel_free(g_nfw_enclosedmass_accel_for_force);
+    g_nfw_enclosedmass_accel_for_force = NULL;
 
     // Free particle scatter state array
     free(g_particle_scatter_state);
