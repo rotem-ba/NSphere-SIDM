@@ -179,18 +179,18 @@ void doAdaptiveFullLeviCivita(int i, int npts, double r_in, double v_in, double 
 void update_trajectory_tacking(int current_step, int *inverse_map, int upper_npts_num_traj, double **trajectories, double **energies,
                                double **mu_arr, double **L_arr, double **E_arr, double **velocities_arr);
 void update_inverse_map(int *inverse_map);
-void euler_step();
-void leapfrog_method_position_half_step();
-void leapfrog_method_velocity_half_step();
-void leapfrog_method_full_step_adaptive();
-void hybrid_adaptive_method();
-void adaptive_leapfrog_adaptive_levi_civita();
-void forest_ruth_yoshida_integration();
-void rk4_method();
-void bootstrap_ab3_method();
-void ab3_method();
-void ab3_method_post_step();
-void make_dynamic_step();
-void make_dynamic_post_step();
-void make_dynamic_bootstrap_phase();
+void euler_step(double **particles, int npts);
+void leapfrog_method_position_half_step(double **particles, int npts);
+void leapfrog_method_velocity_half_step(double **particles, int npts);
+void leapfrog_method_full_step_adaptive(double **particles, int npts);
+void hybrid_adaptive_method(double **particles, int npts);
+void adaptive_leapfrog_adaptive_levi_civita(double **particles, int npts);
+void forest_ruth_yoshida_integration(double **particles, int npts);
+void rk4_method(double **particles, int npts);
+void bootstrap_ab3_method(double **particles, int npts);
+void ab3_method(double **particles, int npts);
+void ab3_method_post_step(double **particles, int npts);
+void make_dynamic_step(double **particles, int npts);
+void make_dynamic_post_step(double **particles, int npts);
+void make_dynamic_bootstrap_phase(double **particles, int npts);
 #endif // DYNAMICS_H

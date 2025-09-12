@@ -46,6 +46,7 @@ extern double **lowestL_L;    ///< Angular momenta of tracked low-L particles ov
  *          and will be populated by whichever profile pathway is chosen.
  */
 extern double **particles;           ///< Main particle data array
+extern double **baryons;             ///< Main baryon data array
 
 /**
  * @brief Structure to track angular momentum with particle index and direction.
@@ -86,9 +87,11 @@ struct RrPsiPair {
 };
 typedef struct RrPsiPair RrPsiPair;
 
-void allocate_particles_memory(int npts_initial);
-void trim_particles(int npts);
+void allocate_particles_memory(double **particles, int npts_initial);
+void allocate_all_particles_memory(int npts_dark_matter, int npts_baryons);
+void trim_particles(double **particles, int npts);
 
-void free_particles_memory();
+void free_particles_memory(double **particles);
+void free_all_particles_memory();
 
 #endif // PARTICLE_DATA_H

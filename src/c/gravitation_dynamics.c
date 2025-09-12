@@ -584,7 +584,7 @@ void update_inverse_map(int *inverse_map){
 /**
  * @brief Performs euler_step method.
  */
-void euler_step() {
+void euler_step(double **particles, int npts) {
     #pragma omp single
     sort_particles(particles, npts);
     #pragma omp barrier
@@ -607,7 +607,7 @@ void euler_step() {
 /**
  * @brief Performs leapfrog method (position half step).
  */
-void leapfrog_method_position_half_step() {
+void leapfrog_method_position_half_step(double **particles, int npts) {
     #pragma omp parallel for default(shared) schedule(static)
     for (int i = 0; i < npts; i++)
         particles[0][i] += particles[1][i] * (dt / 2.0);
@@ -631,7 +631,7 @@ void leapfrog_method_position_half_step() {
 /**
  * @brief Performs leapfrog method (velocity half step).
  */
-void leapfrog_method_velocity_half_step() {
+void leapfrog_method_velocity_half_step(double **particles, int npts) {
     #pragma omp parallel for default(shared) schedule(static)
     for (int i = 0; i < npts; i++) {
         double r = particles[0][i];
@@ -670,7 +670,7 @@ void leapfrog_method_velocity_half_step() {
  * @details Performs single step integration from (r_n, v_n) to (r_{n+1}, v_{n+1})
  *          using adaptive timestep control and the doAdaptiveFullLeap function.
  */
-void leapfrog_method_full_step_adaptive() {
+void leapfrog_method_full_step_adaptive(double **particles, int npts) {
     double velocity_tol = 1.0e-5;
     double radius_tol = 1.0e-5;
     int max_subdiv = 1;
@@ -700,7 +700,7 @@ void leapfrog_method_full_step_adaptive() {
  *          and standard leapfrog otherwise. Radius threshold r_crit is
  *          dynamically calculated for each particle.
  */
-void hybrid_adaptive_method(){
+void hybrid_adaptive_method(double **particles, int npts){
     double velocity_tol = 1.0e-8;
     double radius_tol = 1.0e-8;
     int max_subdiv = 4096 * 4096;
@@ -745,7 +745,7 @@ void hybrid_adaptive_method(){
 /**
  * @brief Performs adaptive leapfrog with adaptive Levi-Civita.
  */
-void adaptive_leapfrog_adaptive_levi_civita() {
+void adaptive_leapfrog_adaptive_levi_civita(double **particles, int npts) {
     double velocity_tol = 1.0e-7;
     double radius_tol = 1.0e-7;
     int max_subdiv = 4096 * 4096 * 16;
@@ -772,7 +772,7 @@ void adaptive_leapfrog_adaptive_levi_civita() {
             else
                 M_enc = ((double)i / (double)npts) * g_active_halo_mass;
             double gravPart = (VEL_CONV_SQ * G_CONST) * M_enc;
-            r_crit = (ell * ell) * alpha_param / gravPart;
+            r_crit = sqr(ell) * alpha_param / gravPart;
         }
 
         double r_new, v_new;
@@ -788,7 +788,7 @@ void adaptive_leapfrog_adaptive_levi_civita() {
 /**
  * @brief Performs 4th-order Forest-Ruth-Yoshida integrator.
  */
-void forest_ruth_yoshida_integration() {
+void forest_ruth_yoshida_integration(double **particles, int npts) {
     // Coefficients for 4th-order Forest-Ruth-Yoshida integrator (c1=c3).
     // Derived from: c1 = 1 / (2 - 2^(1/3)), c2 = 1 - 2*c1
     double c1 = 0.6756035959798289;
@@ -892,7 +892,7 @@ void forest_ruth_yoshida_integration() {
 /**
  * @brief Performs classic RK4 method.
  */
-void rk4_method() {
+void rk4_method(double **particles, int npts) {
     double *r_orig_by_id = (double *)malloc(npts * sizeof(double));
     double *v_orig_by_id = (double *)malloc(npts * sizeof(double));
     double *k1r_by_id = (double *)malloc(npts * sizeof(double));
@@ -1011,7 +1011,7 @@ void rk4_method() {
 /**
  * @brief Performs bootstrap Adams-Bashforth 3rd Order (AB3) method.
  */
-void bootstrap_ab3_method() {
+void bootstrap_ab3_method(double **particles, int npts) {
     // Allocate AB3 history arrays once.
     if (f_ab3_r == NULL) {
         f_ab3_r = (double **)malloc(3 * sizeof(double *));
@@ -1082,7 +1082,7 @@ void bootstrap_ab3_method() {
 /**
  * @brief Performs Adams-Bashforth 3rd Order (AB3) method (post bootstrap).
  */
-void ab3_method() {
+void ab3_method(double **particles, int npts) {
     // Adams-Bashforth coefficients for different orders
     static int ab3_num[3] = {23, -16, 5};        ///< Numerator coefficients for the AB3 formula: \f$y_{n+1} = y_n + (h/12) \sum (\text{ab3_num}_i \cdot f_{n-i})\f$.
     static int ab2_num[2] = {18, -6};            ///< Numerator coefficients for the AB2 formula (for comparison or fallback).
@@ -1134,7 +1134,7 @@ void ab3_method() {
 /**
  * @brief Performs Adams-Bashforth 3rd Order (AB3) method post-step phase.
  */
-void ab3_method_post_step() {
+void ab3_method_post_step(double **particles, int npts) {
     // We re-sort & compute new derivatives to shift the AB3 history.
     #pragma omp single
     sort_particles(particles, npts);
@@ -1199,43 +1199,43 @@ void ab3_method_post_step() {
 /**
  * @brief Make a dynamic step using the selected method.
  */
-void make_dynamic_step() {
+void make_dynamic_step(double **particles, int npts) {
     if (method_select == 1)
-        adaptive_leapfrog_adaptive_levi_civita();
+        adaptive_leapfrog_adaptive_levi_civita(particles, npts);
     else if (method_select == 2)
-        hybrid_adaptive_method();
+        hybrid_adaptive_method(particles, npts);
     else if (method_select == 3)
-        leapfrog_method_full_step_adaptive();
+        leapfrog_method_full_step_adaptive(particles, npts);
     else if (method_select == 4)
-        forest_ruth_yoshida_integration();
+        forest_ruth_yoshida_integration(particles, npts);
     else if (method_select == 5)
-        ab3_method();
+        ab3_method(particles, npts);
     else if (method_select == 6)
-        leapfrog_method_velocity_half_step();
+        leapfrog_method_velocity_half_step(particles, npts);
     else if (method_select == 7)
-        leapfrog_method_position_half_step();
+        leapfrog_method_position_half_step(particles, npts);
     else if (method_select == 8)
-        rk4_method();
+        rk4_method(particles, npts);
     else if (method_select == 9)
-        euler_step();
+        euler_step(particles, npts);
 }
 
 /**
  * @brief Make the post step phase using the selected method.
  */
-void make_dynamic_post_step() {
+void make_dynamic_post_step(double **particles, int npts) {
     if (method_select == 5)
-        ab3_method_post_step();
+        ab3_method_post_step(particles, npts);
 }
 
 /**
  * @brief Make the bootstrap phase using the selected method.
  */
-void make_dynamic_bootstrap_phase() {
+void make_dynamic_bootstrap_phase(double **particles, int npts) {
     if (bootstrap_phase_done == 1)
         return;
     if (method_select == 5)
-        bootstrap_ab3_method();
+        bootstrap_ab3_method(particles, npts);
     #pragma omp single
     bootstrap_phase_done = 1; // Mark bootstrap done.
 }

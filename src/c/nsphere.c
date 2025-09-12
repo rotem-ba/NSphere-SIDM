@@ -212,7 +212,7 @@ printf("  \n");
      * @brief Allocate main particle data array before profile selection.
      * @details This ensures both NFW and Cored pathways use the same particles array.
      */
-    allocate_particles_memory(npts_initial);
+    allocate_all_particles_memory(npts_initial, 0);
 
     init_rng();
     init_rng_per_thread();
@@ -1038,7 +1038,7 @@ cleanup_diag_iteration:
             /**
              * @brief Allocate memory for the particle data array.
              */
-            allocate_particles_memory(npts_initial);
+            allocate_all_particles_memory(npts_initial, 0);
 
             /**
              * @brief Calculate maximum velocity squared at each radius for rejection sampling.
@@ -2345,12 +2345,12 @@ cleanup_diag_iteration:
             #pragma omp single
             current_time += dt;
 
-            make_dynamic_bootstrap_phase();
-            make_dynamic_step();
+            make_dynamic_bootstrap_phase(particles, npts);
+            make_dynamic_step(particles, npts);
             update_inverse_map(inverse_map);
             handle_sidm_step(); // SIDM scattering: profile-aware scale radius selection and execution mode handling
             update_trajectory_tacking(current_step, inverse_map, upper_npts_num_traj, trajectories, energies, mu_arr, L_arr, E_arr, velocities_arr);
-            make_dynamic_post_step();
+            make_dynamic_post_step(particles, npts);
 
             // Record trajectory data for selected low-L particles
             int max_threads = omp_get_max_threads();
@@ -3641,7 +3641,7 @@ cleanup_diag_iteration:
     // End method_select == 3 block.
 
     // Move the freeing of particles *outside* the if-block.
-    free_particles_memory();
+    free_all_particles_memory();
 
     if (g_doDebug)
         finalize_debug_energy_output(); // Ensures all data is collected first

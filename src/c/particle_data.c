@@ -43,11 +43,12 @@ double **lowestL_E = NULL;
 double **lowestL_L = NULL;
 
 double **particles = NULL;           ///< Main particle data array
+double **baryons = NULL;             ///< Main baryons data array
 
 /**
  * @brief Allocate main particle data array.
  */
-void allocate_particles_memory(int npts_initial) {
+void allocate_particles_memory(double **particles, int npts_initial) {
     particles = (double **)malloc(5 * sizeof(double *));
     if (particles == NULL)
         raise_error("ERROR: Memory allocation failed for particle array pointer\n");
@@ -58,10 +59,19 @@ void allocate_particles_memory(int npts_initial) {
     }
 }
 
+
+/**
+ * @brief Allocate dark matter and baryon particle data array.
+ */
+void allocate_all_particles_memory(int npts_dark_matter, int npts_baryons) {
+    allocate_particles_memory(particles, npts_dark_matter);
+    allocate_particles_memory(baryons, npts_baryons);
+}
+
 /**
  * @brief Allocate new smaller arrays (`final_particles`) for the `npts` particles to keep.
  */
-void trim_particles(int npts) {
+void trim_particles(double **particles, int npts) {
     double **final_particles = (double **)malloc(5 * sizeof(double *));
     if (final_particles == NULL)
         raise_error("Memory allocation failed for final_particles\n");
@@ -81,6 +91,11 @@ void trim_particles(int npts) {
     free(final_particles); // Free the temporary ** structure, not the data arrays
 }
 
-void free_particles_memory() {
+void free_particles_memory(double **particles) {
     free_double_array(particles, 5);
+}
+
+void free_all_particles_memory() {
+    free_particles_memory(particles);
+    free_particles_memory(baryons);
 }
