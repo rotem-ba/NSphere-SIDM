@@ -19,6 +19,7 @@
 #include "sidm.h"
 #include "logging.h"
 #include "utils.h"
+#include "density.h"
 #include <math.h>
 #include <gsl/gsl_rng.h>
 
@@ -34,7 +35,7 @@
  */
 double sigmatotal(double vrel __attribute__((unused)), int npts) {
     double kappa = g_sidm_kappa; // Self-interaction opacity parameter (cm²/g)
-    // double active_profile_rc = rc_for_sidm(); //Unused at the moment
+    // double active_profile_rc = density_rc(); //Unused at the moment
     // Ensure npts is positive to prevent division by zero or negative particle mass
     if (npts <= 0)
         return 0.0;

@@ -19,6 +19,7 @@
 
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_interp.h>
+#include "globals.h"
 
 // =========================================================================
 //  Shared data variables
@@ -53,6 +54,14 @@ extern gsl_spline *splinerofPsi;         ///< Spline for inverse potential r(Psi
 extern gsl_interp_accel *rofPsiinterp;   ///< Accelerator for r(Psi) spline
 extern gsl_interp *g_main_fofEinterp;    ///< Main f(E) interpolator
 extern gsl_interp_accel *g_main_fofEacc; ///< Accelerator for f(E)
+
+
+/** @def returns the current active profile's scale radius */
+inline double density_rc() {
+    if (g_use_nfw_profile)
+        return g_nfw_profile_rc;
+    return g_cored_profile_rc;
+}
 
 
 // =========================================================================
@@ -94,5 +103,7 @@ void set_global_density_params();
 
 void free_splines_accelerators();
 void free_density_data_arrays();
+
+double calculate_density_drhodPsi(int i);
 
 #endif // DENSITY_H

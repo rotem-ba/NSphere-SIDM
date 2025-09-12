@@ -108,9 +108,6 @@ extern double g_halo_mass_param;            ///< Generalized halo mass (Msun), d
 extern double g_cutoff_factor_param;        ///< Generalized rmax factor, defaults to Cored's default.
 extern char   g_profile_type_str[16];       ///< Profile type string ("nfw" or "cored"), default "nfw".
 
-/** @def returns the current active profile's scale radius */
-#define rc_for_sidm() (g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc);
-
 extern int g_scale_radius_param_provided;   ///< Flag: 1 if `--scale-radius` was given by the user.
 extern int g_halo_mass_param_provided;      ///< Flag: 1 if `--halo-mass` was given by the user.
 extern int g_cutoff_factor_param_provided;  ///< Flag: 1 if `--cutoff-factor` was given by the user.

@@ -67,4 +67,13 @@ void fill_suffix_tags();
 int validate_snapshot_memory_allocation(double *r_grid, double *log_r_grid, double *mass_grid, double *density_grid, double *density_sorted,
                                         double *R_decimated, double *Mass_decimated, double *R_filtered, double *Mass_filtered, int r_violations, int snap);
 
+void write_potential_profile(FILE *fp);
+void write_mass_profile(FILE *fp);
+void write_density_profile(FILE *fp);
+void write_dPsidr_profile(FILE *fp);
+void write_drhodPsi_profile(FILE *fp);
+void write_f_of_E_profile(FILE *fp);
+void write_distribution_after_simulation(FILE *fp);
+void write_full_density_output(FILE *fp);
+
 #endif // IO_H

@@ -1106,11 +1106,9 @@ cleanup_diag_iteration:
                     double E_test_nfw = nfw_Psir - 0.5 * nfw_vel * nfw_vel;
                     double currentvalue_nfw = 0.0;
 
-                    if (E_test_nfw >= Psimin && E_test_nfw <= Psimax) {
-                        currentvalue_nfw = nfw_vel * nfw_vel *
-                            fabs(gsl_interp_eval_deriv(g_main_fofEinterp, Evalues,
-                                                       innerintegrandvalues, E_test_nfw, g_main_fofEacc));
-                    }
+                    if (E_test_nfw >= Psimin && E_test_nfw <= Psimax)
+                        currentvalue_nfw = nfw_vel * nfw_vel * fabs(gsl_interp_eval_deriv(g_main_fofEinterp, Evalues, innerintegrandvalues, E_test_nfw,
+                                                                                          g_main_fofEacc));
                     if (isfinite(currentvalue_nfw) && currentvalue_nfw > nfw_maxvalue)
                         nfw_maxvalue = currentvalue_nfw;
                 }
@@ -1789,13 +1787,11 @@ cleanup_diag_iteration:
             // Extract basename for relative symlink within data directory
             const char *basename_ic = strrchr(seed_filepath, '/');
             basename_ic = basename_ic ? basename_ic + 1 : seed_filepath; // Skip the '/' or use full name if no '/'
-            if (symlink(basename_ic, linkname_ic) != 0) {
+            if (symlink(basename_ic, linkname_ic) != 0)
                 log_message("WARNING", "Failed to create symbolic link from %s to %s", basename_ic, linkname_ic);
-            }
         #endif
-    } else {
+    } else
         log_message("ERROR", "Failed to save IC seed to %s", seed_filepath);
-    }
 
     // Save SIDM Seed
     get_full_filename(g_sidm_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
@@ -2004,11 +2000,7 @@ cleanup_diag_iteration:
 
         /** @brief Write each particle's state (using fprintf_bin). */
         for (int i = 0; i < npts; i++) // i is current index (0..npts-1)
-            fprintf_bin(fpp, "%f %f %f %f\n", // Format string likely ignored by fprintf_bin beyond types
-                        particles[0][i], // Radius (kpc)
-                        particles[1][i], // Radial velocity (kpc/Myr)
-                        particles[2][i], // Angular momentum (kpc²/Myr)
-                        particles[3][i]);// Particle ID (final rank, written as float)
+            fprintf_bin(fpp, "%f %f %f %f\n", particles[0][i], particles[1][i], particles[2][i], particles[3][i]); // Radius (kpc), Radial velocity (kpc/Myr), Angular momentum (kpc²/Myr), Particle ID (final rank, written as float)
         fclose(fpp);
         printf("Wrote initial particle state to %s\n", filename);
     } // End skip_file_writes block for particles.dat
@@ -2401,61 +2393,58 @@ cleanup_diag_iteration:
             free_accelerators(thread_accel,max_threads); // Clean up thread-local accelerators.
 
             #pragma omp single
-            {
-                if ((current_step+1) % dtwrite == 0) {
-                    double elapsed = omp_get_wtime() - start_time;
-                    printf("Write data at timestep %d after %.2f s.\n", current_step+1, elapsed);
+            if ((current_step+1) % dtwrite == 0) {
+                double elapsed = omp_get_wtime() - start_time;
+                printf("Write data at timestep %d after %.2f s.\n", current_step+1, elapsed);
 
-                    // Calculate the write index (0-based) corresponding to this timestep
-                    int nwrite = (current_step+1) / dtwrite - 1;
-                    int block_index_apd = nwrite % block_size;
-                    if (g_doAllParticleData) // Calculate index within the current block (0 to block_size-1)
-                        for (int orig_id = 0; orig_id < npts; orig_id++) {
-                            int rank = inverse_map[orig_id];
-                            double par_r = particles[0][rank];
-                            double par_vrad = particles[1][rank];
-                            double par_ell = particles[2][rank];
+                // Calculate the write index (0-based) corresponding to this timestep
+                int nwrite = (current_step+1) / dtwrite - 1;
+                int block_index_apd = nwrite % block_size;
+                if (g_doAllParticleData) // Calculate index within the current block (0 to block_size-1)
+                    for (int orig_id = 0; orig_id < npts; orig_id++) {
+                        int rank = inverse_map[orig_id];
+                        double par_r = particles[0][rank];
+                        double par_vrad = particles[1][rank];
+                        double par_ell = particles[2][rank];
 
-                            Rank_block[block_index_apd * npts + orig_id] = rank;
-                            R_block[block_index_apd * npts + orig_id] = (float)par_r;
-                            Vrad_block[block_index_apd * npts + orig_id] = (float)par_vrad;
-                            L_block[block_index_apd * npts + orig_id] = (float)par_ell;
+                        Rank_block[block_index_apd * npts + orig_id] = rank;
+                        R_block[block_index_apd * npts + orig_id] = (float)par_r;
+                        Vrad_block[block_index_apd * npts + orig_id] = (float)par_vrad;
+                        L_block[block_index_apd * npts + orig_id] = (float)par_ell;
 
-                            int snapIndex = nwrite / stepBetweenSnaps;
-                            // Check if this write corresponds to a desired snapshot output time
-                            // Ensure snapIndex is valid
-                            if (g_doDebug && nwrite % stepBetweenSnaps == 0 && snapIndex < noutsnaps) {
-                                int debug_id = DEBUG_PARTICLE_ID;
+                        int snapIndex = nwrite / stepBetweenSnaps;
+                        // Check if this write corresponds to a desired snapshot output time
+                        // Ensure snapIndex is valid
+                        if (g_doDebug && nwrite % stepBetweenSnaps == 0 && snapIndex < noutsnaps) {
+                            int debug_id = DEBUG_PARTICLE_ID;
 
-                                // Retrieve current state for debug particle from block arrays
-                                float r_valF = R_block[block_index_apd * npts + debug_id];
-                                float v_valF = Vrad_block[block_index_apd * npts + debug_id];
-                                float l_valF = L_block[block_index_apd * npts + debug_id];
-                                double r_val = (double)r_valF;
-                                double v_val = (double)v_valF;
-                                double l_val = (double)l_valF;
+                            // Retrieve current state for debug particle from block arrays
+                            float r_valF = R_block[block_index_apd * npts + debug_id];
+                            float v_valF = Vrad_block[block_index_apd * npts + debug_id];
+                            float l_valF = L_block[block_index_apd * npts + debug_id];
+                            double r_val = (double)r_valF;
+                            double v_val = (double)v_valF;
+                            double l_val = (double)l_valF;
 
-                                // Evaluate theoretical potential using original spline
-                                double psi_val = 0.0;
-                                if (r_val >= 0.0 && r_val <= rmax)
-                                    psi_val = evaluatespline(splinePsi, Psiinterp, r_val) * VEL_CONV_SQ;
+                            // Evaluate theoretical potential using original spline
+                            double psi_val = 0.0;
+                            if (r_val >= 0.0 && r_val <= rmax)
+                                psi_val = evaluatespline(splinePsi, Psiinterp, r_val) * VEL_CONV_SQ;
 
-                                // Calculate approximate energy E = Psi - KE
-                                double E_approx = psi_val - 0.5 * sqr(to_velocity(v_val,l_val,r_val));
-                                double sim_time = current_time;
+                            // Calculate approximate energy E = Psi - KE
+                            double E_approx = psi_val - 0.5 * sqr(to_velocity(v_val,l_val,r_val));
+                            double sim_time = current_time;
 
-                                // Store the approximate energy for comparison
-                                store_debug_approxE(snapIndex, E_approx, sim_time);
-                            }
+                            // Store the approximate energy for comparison
+                            store_debug_approxE(snapIndex, E_approx, sim_time);
                         }
-                    if (g_doAllParticleData && ((nwrite + 1) % block_size) == 0 && nwrite > 0) {
-                        // Append block to file if block is full
-                            append_all_particle_data_chunk_to_file(apd_filename, npts, block_size, L_block, Rank_block, R_block, Vrad_block);
-                            printf("Appended block ending write index %d to %s\n", nwrite, apd_filename);
-                        }
-                    // Increment count of dtwrite-based writes
-                    nwrite_total++;
+                    }
+                if (g_doAllParticleData && ((nwrite + 1) % block_size) == 0 && nwrite > 0) {
+                    // Append block to file if block is full
+                    append_all_particle_data_chunk_to_file(apd_filename, npts, block_size, L_block, Rank_block, R_block, Vrad_block);
+                    printf("Appended block ending write index %d to %s\n", nwrite, apd_filename);
                 }
+                nwrite_total++; // Increment count of dtwrite-based writes
             }
             for (int k = 0; k <= 20; k++)
                 if ((current_step+1) == print_steps[k]) {
@@ -2485,314 +2474,7 @@ cleanup_diag_iteration:
         fclose(fp);
     }
 
-    // Write theoretical profiles (profile-specific formulas)
-    if (g_use_nfw_profile) {
-        /**
-         * @brief Write final theoretical NFW profile characteristics to .dat files.
-         * @details This block outputs several files (massprofile, Psiprofile, density_profile,
-         *          dpsi_dr, drho_dpsi, f_of_E, df_fixed_radius) using the splines
-         *          (e.g., splinemass, splinePsi, g_main_fofEinterp) and parameters
-         *          (e.g., num_points, radius, normalization, g_nfw_profile_rc, etc.)
-         *          that were established during the main NFW initial condition generation phase.
-         *          Analytical formulas for NFW density and its derivatives are used where appropriate.
-         */
-        log_message("INFO", "Writing NFW theoretical profiles to final .dat files...");
-
-        // Write NFW theoretical mass profile
-        get_full_filename("data/massprofile.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
-                if (r_plot >= radius[0])
-                    fprintf_bin(fp, "%f %f\n", r_plot, gsl_spline_eval(splinemass, r_plot, enclosedmass));
-            if (num_points > 0)
-                 fprintf_bin(fp, "%f %f\n", radius[num_points-1], gsl_spline_eval(splinemass, radius[num_points-1], enclosedmass));
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final NFW mass profile", full_filename);
-
-        // Write NFW theoretical potential profile
-        get_full_filename("data/Psiprofile.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
-                if (r_plot >= radius[0])
-                     fprintf_bin(fp, "%f %f\n", r_plot, evaluatespline(splinePsi, Psiinterp, r_plot));
-             if (num_points > 0)
-                 fprintf_bin(fp, "%f %f\n", radius[num_points-1], evaluatespline(splinePsi, Psiinterp, radius[num_points-1]));
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final NFW Psi profile", full_filename);
-
-        // Write NFW theoretical density profile
-        get_full_filename("data/density_profile.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * M_PI * normalization);
-            for (int i = 0; i < num_points; i++) {
-                double rr = radius[i];
-                double rs_k = rr / g_nfw_profile_rc;
-                double term_s_k = rs_k + 0.01;
-                if (term_s_k <= 1e-9) term_s_k = 1e-9;
-                double term_n_k = (1.0 + rs_k) * (1.0 + rs_k);
-                double term_c_base_k = rs_k / g_nfw_profile_falloff_factor;
-                double term_c_k = 1.0 + pow(term_c_base_k, 10.0);
-                double rho_shape_k = (term_s_k < 1e-9 || term_n_k < 1e-9 || term_c_k < 1e-9) ? 0.0 : (1.0 / (term_s_k * term_n_k * term_c_k));
-                if (rr < 1e-6 && term_s_k < 1e-3 && rho_shape_k == 0.0)
-                   rho_shape_k = 1.0 / (term_s_k * term_n_k * term_c_k);
-                double rho_r_k = nt_nfw_scaler_final * rho_shape_k;
-                fprintf_bin(fp, "%f %f\n", rr, rho_r_k);
-            }
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final NFW density profile", full_filename);
-
-        // Write NFW theoretical dPsi/dr profile
-        get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (int i = 0; i < num_points; i++) {
-                double rr = radius[i];
-                if (rr > 0.0) {
-                    double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
-                    double dpsidr = -(G_CONST * Menc) / (rr * rr);
-                    fprintf_bin(fp, "%f %f\n", rr, dpsidr);
-                }
-            }
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final NFW dpsi/dr profile", full_filename);
-
-        // Write NFW theoretical drho/dPsi profile
-        get_full_filename("data/drho_dpsi.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * M_PI * normalization);
-            for (int i = 1; i < num_points - 1; i++) {
-                double rr = radius[i];
-                if (rr <= 1e-9)
-                    continue;
-
-                // Use NFW derivative function
-                double drhodr_val_k = drhodr_profile_nfwcutoff(rr, g_nfw_profile_rc, nt_nfw_scaler_final, g_nfw_profile_falloff_factor);
-
-                double Menc_k = gsl_spline_eval(splinemass, rr, enclosedmass);
-                double dPsidr_mag_k = (G_CONST * Menc_k) / (rr * rr);
-
-                if (fabs(dPsidr_mag_k) > 1e-30) {
-                    double Psi_val_k = evaluatespline(splinePsi, Psiinterp, rr);
-                    double drho_dPsi_val_k = drhodr_val_k / dPsidr_mag_k;
-                    fprintf_bin(fp, "%f %f\n", Psi_val_k, drho_dPsi_val_k);
-                }
-            }
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final NFW drho/dpsi profile", full_filename);
-
-        // Write NFW theoretical f(E) profile
-        get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (int i = 0; i <= num_points; i++) {
-                double E = Evalues[i];
-                double deriv = 0.0;
-                if (i > 0 && i < num_points + 1) {
-                    if (i > 0 && i < num_points)
-                        deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i - 1]) / (Evalues[i + 1] - Evalues[i - 1]);
-                    else if (i == 0)
-                        deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i]) / (Evalues[i + 1] - Evalues[i]);
-                    else if (i == num_points)
-                        deriv = (innerintegrandvalues[i] - innerintegrandvalues[i - 1]) / (Evalues[i] - Evalues[i - 1]);
-                }
-                double fE = fabs(deriv) / (sqrt(8.0) * PI * PI);
-                if (E == 0.0 || !isfinite(fE))
-                    fE = 0.0;
-                fprintf_bin(fp, "%f %f\n", E, fE);
-            }
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final NFW f(E) profile", full_filename);
-
-        // Write NFW distribution function at a fixed radius if simulation was run
-        if (!skip_file_writes) {
-            get_full_filename("data/df_fixed_radius.dat", 1, full_filename, sizeof(full_filename));
-            fp = fopen(full_filename, "wb");
-            if (fp) {
-                double r_F = 2.0 * g_nfw_profile_rc;  // r_F = 2 × NFW scale radius
-                double Psi_rf = evaluatespline(splinePsi, Psiinterp, r_F);
-                Psi_rf *= VEL_CONV_SQ;
-                double Psimin_test = VEL_CONV_SQ * Psimin; // Convert to (km/s)² for velocity calculation
-
-                int vsteps = 10000;
-                int reduce_vsteps = 300;
-                for (int vv = 0; vv <= vsteps - reduce_vsteps; vv++) {
-                    double sqrt_arg_v = Psi_rf - Psimin_test;
-                    if (sqrt_arg_v < 0)
-                        sqrt_arg_v = 0;
-                    double vtest = (double)vv * (sqrt(2.0 * sqrt_arg_v) / (vsteps));
-                    double Etest = Psi_rf - 0.5 * vtest * vtest;
-                    Etest = Etest / VEL_CONV_SQ; // Convert back to code units for bounds check
-                    double fEval = 0.0;
-                    if (Etest >= Psimin && Etest <= Psimax) { // Bounds check in code units
-                        double derivative;
-                        int status = gsl_interp_eval_deriv_e(g_main_fofEinterp, Evalues, innerintegrandvalues, Etest, g_main_fofEacc, &derivative);
-                        if (status == GSL_SUCCESS)
-                            fEval = derivative / (sqrt(8.0) * PI * PI) * vtest * vtest * r_F * r_F;
-                    }
-                    if (!isfinite(fEval)) fEval = 0.0;
-                    fprintf_bin(fp, "%f %f\n", vtest, fEval);
-                }
-                fclose(fp);
-            } else
-                log_message("ERROR", "Failed to open %s for final NFW df_fixed_radius", full_filename);
-        }
-
-    } else {
-        /**
-         * @brief Write final theoretical Cored Plummer-like profile characteristics to .dat files.
-         * @details This block outputs several files (massprofile, Psiprofile, density_profile,
-         *          dpsi_dr, drho_dpsi, f_of_E, df_fixed_radius) using the splines
-         *          (e.g., splinemass, splinePsi, g_main_fofEinterp) and parameters
-         *          (e.g., num_points, radius, normalization, g_cored_profile_rc, etc.)
-         *          that were established during the main Cored Plummer initial condition generation phase.
-         *          Analytical formulas for the Cored density and its derivatives are used where appropriate.
-         */
-        log_message("INFO", "Writing Cored theoretical profiles to final .dat files...");
-
-        // Write Cored theoretical mass profile
-        get_full_filename("data/massprofile.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
-                if (r_plot >= radius[0])
-                    fprintf_bin(fp, "%f %f\n", r_plot, gsl_spline_eval(splinemass, r_plot, enclosedmass));
-            if (num_points > 0)
-                 fprintf_bin(fp, "%f %f\n", radius[num_points-1], gsl_spline_eval(splinemass, radius[num_points-1], enclosedmass));
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final cored mass profile", full_filename);
-
-        // Write Cored theoretical potential profile
-        get_full_filename("data/Psiprofile.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
-                if (r_plot >= radius[0])
-                     fprintf_bin(fp, "%f %f\n", r_plot, evaluatespline(splinePsi, Psiinterp, r_plot));
-             if (num_points > 0)
-                 fprintf_bin(fp, "%f %f\n", radius[num_points-1], evaluatespline(splinePsi, Psiinterp, radius[num_points-1]));
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final cored Psi profile", full_filename);
-
-        // Write Cored theoretical density profile
-        get_full_filename("data/density_profile.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (int i = 0; i < num_points; i++) {
-                double rr = radius[i];
-                double rho_r = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(rr / g_cored_profile_rc)));
-                fprintf_bin(fp, "%f %f\n", rr, rho_r);
-            }
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final cored density profile", full_filename);
-
-        // Write Cored theoretical dPsi/dr profile
-        get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (int i = 0; i < num_points; i++) {
-                double rr = radius[i];
-                if (rr > 0.0) {
-                    double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
-                    double dpsidr = -(G_CONST * Menc) / (rr * rr);
-                    fprintf_bin(fp, "%f %f\n", rr, dpsidr);
-                }
-            }
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final cored dpsi/dr profile", full_filename);
-
-        // Write Cored theoretical drho/dPsi profile
-        get_full_filename("data/drho_dpsi.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (int i = 1; i < num_points - 1; i++) {
-                double rr = radius[i];
-                double rho_left = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(radius[i - 1] / g_cored_profile_rc)));
-                double rho_right = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(radius[i + 1] / g_cored_profile_rc)));
-                double drho_dr_num = (rho_right - rho_left) / (radius[i + 1] - radius[i - 1]);
-                double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
-                double dPsidr = -(G_CONST * Menc) / (rr * rr);
-                if (dPsidr != 0.0) {
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    fprintf_bin(fp, "%f %f\n", Psi_val, drho_dr_num / dPsidr);
-                }
-            }
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final cored drho/dpsi profile", full_filename);
-
-        // Write theoretical f(E) profile
-        get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
-        fp = fopen(full_filename, "wb");
-        if (fp) {
-            for (int i = 0; i <= num_points; i++) {
-                double E = Evalues[i];
-                double deriv = 0.0;
-                if (i > 0 && i < num_points + 1) {
-                    if (i > 0 && i < num_points)
-                        deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i - 1]) / (Evalues[i + 1] - Evalues[i - 1]);
-                    else if (i == 0)
-                        deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i]) / (Evalues[i + 1] - Evalues[i]);
-                    else if (i == num_points)
-                        deriv = (innerintegrandvalues[i] - innerintegrandvalues[i - 1]) / (Evalues[i] - Evalues[i - 1]);
-                }
-                double fE = fabs(deriv) / (sqrt(8.0) * PI * PI);
-                if (E == 0.0 || !isfinite(fE))
-                    fE = 0.0;
-                fprintf_bin(fp, "%f %f\n", E, fE);
-            }
-            fclose(fp);
-        } else
-            log_message("ERROR", "Failed to open %s for final f(E) profile (%s)", full_filename, g_use_nfw_profile ? "NFW" : "Cored");
-
-        // Write distribution function at a fixed radius if simulation was run
-        if (!skip_file_writes) {
-            get_full_filename("data/df_fixed_radius.dat", 1, full_filename, sizeof(full_filename));
-            fp = fopen(full_filename, "wb");
-            if (fp) {
-                double r_F = 2.0 * g_cored_profile_rc;  // r_F = 2 × Cored scale radius
-                double Psi_rf = evaluatespline(splinePsi, Psiinterp, r_F);
-                Psi_rf *= VEL_CONV_SQ;
-                double Psimin_test = VEL_CONV_SQ * Psimin; // Convert to (km/s)² for velocity calculation
-
-                int vsteps = 10000;
-                int reduce_vsteps = 300;
-                for (int vv = 0; vv <= vsteps - reduce_vsteps; vv++) {
-                    double sqrt_arg_v = Psi_rf - Psimin_test;
-                    if (sqrt_arg_v < 0)
-                        sqrt_arg_v = 0;
-                    double vtest = (double)vv * (sqrt(2.0 * sqrt_arg_v) / (vsteps));
-                    double Etest = Psi_rf - 0.5 * vtest * vtest;
-                    Etest = Etest / VEL_CONV_SQ; // Convert back to code units for bounds check
-                    double fEval = 0.0;
-                    if (Etest >= Psimin && Etest <= Psimax) { // Bounds check in code units
-                        double derivative;
-                        int status = gsl_interp_eval_deriv_e(g_main_fofEinterp, Evalues, innerintegrandvalues, Etest, g_main_fofEacc, &derivative);
-                        if (status == GSL_SUCCESS)
-                            fEval = derivative / (sqrt(8.0) * PI * PI) * vtest * vtest * r_F * r_F;
-                    }
-                    if (!isfinite(fEval))
-                        fEval = 0.0;
-                    fprintf_bin(fp, "%f %f\n", vtest, fEval);
-                }
-                fclose(fp);
-            } else
-                log_message("ERROR", "Failed to open %s for final df_fixed_radius (%s)", full_filename, g_use_nfw_profile ? "NFW" : "Cored");
-        }
-    }
+    write_full_density_output(fp); // Write theoretical profiles (profile-specific formulas)
 
     char filename[256];
     get_full_filename("data/particles.dat", 1, filename, sizeof(filename));

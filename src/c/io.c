@@ -19,10 +19,13 @@
 #include "cli.h"
 #include "exit.h"
 #include "io.h"
+#include "density.h"
+#include "density_nfw.h"
 #include "utils.h"
 #include <string.h>
 #include <stdarg.h>
 #include <sys/stat.h>
+#include <math.h>
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -1049,4 +1052,198 @@ int validate_snapshot_memory_allocation(double *r_grid, double *log_r_grid, doub
         return 1;
     }
     return 0;
+}
+
+/**
+ * @def Write theoretical potential profile
+ */
+void write_potential_profile(FILE *fp) {
+    get_full_filename("data/Psiprofile.dat", 1, full_filename, sizeof(full_filename));
+    fp = fopen(full_filename, "wb");
+    if (fp) {
+        for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
+            if (r_plot >= radius[0])
+                 fprintf_bin(fp, "%f %f\n", r_plot, evaluatespline(splinePsi, Psiinterp, r_plot));
+         if (num_points > 0)
+             fprintf_bin(fp, "%f %f\n", radius[num_points-1], evaluatespline(splinePsi, Psiinterp, radius[num_points-1]));
+        fclose(fp);
+    } else
+        log_message("ERROR", "Failed to open %s for final Psi profile", full_filename);
+}
+
+/**
+ * @def Write theoretical mass profile
+ */
+void write_mass_profile(FILE *fp) {
+    get_full_filename("data/massprofile.dat", 1, full_filename, sizeof(full_filename));
+    fp = fopen(full_filename, "wb");
+    if (fp) {
+        for (double r_plot = 0.0; r_plot < radius[num_points - 1]; r_plot += (radius[num_points - 1] / 900.0))
+            if (r_plot >= radius[0])
+                fprintf_bin(fp, "%f %f\n", r_plot, gsl_spline_eval(splinemass, r_plot, enclosedmass));
+        if (num_points > 0)
+             fprintf_bin(fp, "%f %f\n", radius[num_points-1], gsl_spline_eval(splinemass, radius[num_points-1], enclosedmass));
+        fclose(fp);
+    } else
+        log_message("ERROR", "Failed to open %s for final mass profile", full_filename);
+}
+
+/**
+ * @def Write theoretical density profile
+ */
+void write_density_profile(FILE *fp) { //TODO - clean this up to make it generic and not nfw specific
+    get_full_filename("data/density_profile.dat", 1, full_filename, sizeof(full_filename));
+    fp = fopen(full_filename, "wb");
+    if (fp) {
+        if (g_use_nfw_profile) {
+            double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * PI * normalization);
+            for (int i = 0; i < num_points; i++) {
+                double rr = radius[i];
+                double rs_k = rr / g_nfw_profile_rc;
+                double term_s_k = rs_k + 0.01;
+                if (term_s_k <= 1e-9) term_s_k = 1e-9;
+                double term_n_k = (1.0 + rs_k) * (1.0 + rs_k);
+                double term_c_base_k = rs_k / g_nfw_profile_falloff_factor;
+                double term_c_k = 1.0 + pow(term_c_base_k, 10.0);
+                double rho_shape_k = (term_s_k < 1e-9 || term_n_k < 1e-9 || term_c_k < 1e-9) ? 0.0 : (1.0 / (term_s_k * term_n_k * term_c_k));
+                if (rr < 1e-6 && term_s_k < 1e-3 && rho_shape_k == 0.0)
+                   rho_shape_k = 1.0 / (term_s_k * term_n_k * term_c_k);
+                double rho_r_k = nt_nfw_scaler_final * rho_shape_k;
+                fprintf_bin(fp, "%f %f\n", rr, rho_r_k);
+            }
+        } else
+            for (int i = 0; i < num_points; i++) {
+                double rr = radius[i];
+                double rho_r = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(rr / g_cored_profile_rc)));
+                fprintf_bin(fp, "%f %f\n", rr, rho_r);
+        }
+        fclose(fp);
+    } else
+        log_message("ERROR", "Failed to open %s for final density profile", full_filename);
+}
+
+/**
+ * @def Write theoretical dPsi/dr profile
+ */
+void write_dPsidr_profile(FILE *fp) {
+    get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
+    fp = fopen(full_filename, "wb");
+    if (fp) {
+        for (int i = 0; i < num_points; i++) {
+            double rr = radius[i];
+            if (rr > 0.0) {
+                double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
+                double dpsidr = -(G_CONST * Menc) / sqr(rr);
+                fprintf_bin(fp, "%f %f\n", rr, dpsidr);
+            }
+        }
+        fclose(fp);
+    } else
+        log_message("ERROR", "Failed to open %s for final dpsi/dr profile", full_filename);
+}
+
+/**
+ * @def Write theoretical drho/dPsi profile
+ */
+void write_drhodPsi_profile(FILE *fp) {
+    get_full_filename("data/drho_dpsi.dat", 1, full_filename, sizeof(full_filename));
+    fp = fopen(full_filename, "wb");
+    if (fp) {
+        for (int i = 1; i < num_points - 1; i++) {
+            double Psi_val = evaluatespline(splinePsi, Psiinterp, radius[i]);
+            double drhodPsi = calculate_density_drhodPsi(i);
+            if (isnan(drhodPsi))
+                continue;
+            fprintf_bin(fp, "%f %f\n", Psi_val, drhodPsi);
+        }
+        fclose(fp);
+    } else
+        log_message("ERROR", "Failed to open %s for final drho/dpsi profile", full_filename);
+}
+
+/**
+ * @def Write theoretical f(E) profile
+ */
+void write_f_of_E_profile(FILE *fp) {
+    get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
+    fp = fopen(full_filename, "wb");
+    if (fp) {
+        for (int i = 0; i <= num_points; i++) {
+            double E = Evalues[i];
+            double deriv = 0.0;
+            if (i > 0 && i < num_points + 1) {
+                if (i > 0 && i < num_points)
+                    deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i - 1]) / (Evalues[i + 1] - Evalues[i - 1]);
+                else if (i == 0)
+                    deriv = (innerintegrandvalues[i + 1] - innerintegrandvalues[i]) / (Evalues[i + 1] - Evalues[i]);
+                else if (i == num_points)
+                    deriv = (innerintegrandvalues[i] - innerintegrandvalues[i - 1]) / (Evalues[i] - Evalues[i - 1]);
+            }
+            double fE = fabs(deriv) / (sqrt(8.0) * sqr(PI));
+            if (E == 0.0 || !isfinite(fE))
+                fE = 0.0;
+            fprintf_bin(fp, "%f %f\n", E, fE);
+        }
+        fclose(fp);
+    } else
+        log_message("ERROR", "Failed to open %s for final f(E) profile", full_filename);
+}
+
+/**
+ * @def Write distribution function at a fixed radius if simulation was run
+ */
+void write_distribution_after_simulation(FILE *fp) {
+    if (skip_file_writes)
+        return;
+    get_full_filename("data/df_fixed_radius.dat", 1, full_filename, sizeof(full_filename));
+    fp = fopen(full_filename, "wb");
+    if (fp) {
+        double r_F = 2.0 * density_rc();
+        double Psi_rf = evaluatespline(splinePsi, Psiinterp, r_F);
+        Psi_rf *= VEL_CONV_SQ;
+        double Psimin_test = VEL_CONV_SQ * Psimin; // Convert to (km/s)² for velocity calculation
+
+        int vsteps = 10000;
+        int reduce_vsteps = 300;
+        for (int vv = 0; vv <= vsteps - reduce_vsteps; vv++) {
+            double sqrt_arg_v = Psi_rf - Psimin_test;
+            if (sqrt_arg_v < 0)
+                sqrt_arg_v = 0;
+            double vtest = (double)vv * (sqrt(2.0 * sqrt_arg_v) / (vsteps));
+            double Etest = Psi_rf - 0.5 * vtest * vtest;
+            Etest = Etest / VEL_CONV_SQ; // Convert back to code units for bounds check
+            double fEval = 0.0;
+            if (Etest >= Psimin && Etest <= Psimax) { // Bounds check in code units
+                double derivative;
+                int status = gsl_interp_eval_deriv_e(g_main_fofEinterp, Evalues, innerintegrandvalues, Etest, g_main_fofEacc, &derivative);
+                if (status == GSL_SUCCESS)
+                    fEval = derivative / (sqrt(8.0) * sqr(PI)) * sqr(vtest) * sqr(r_F);
+            }
+            if (!isfinite(fEval))
+                fEval = 0.0;
+            fprintf_bin(fp, "%f %f\n", vtest, fEval);
+        }
+        fclose(fp);
+    } else
+        log_message("ERROR", "Failed to open %s for final df_fixed_radius", full_filename);
+}
+
+/**
+ * @brief Write final theoretical profile characteristics to .dat files.
+ * @details This block outputs several files (massprofile, Psiprofile, density_profile,
+ *          dpsi_dr, drho_dpsi, f_of_E, df_fixed_radius) using the splines
+ *          (e.g., splinemass, splinePsi, g_main_fofEinterp) and parameters
+ *          (e.g., num_points, radius, normalization, g_nfw_profile_rc, etc.)
+ *          that were established during the main density initial condition generation phase.
+ *          Analytical formulas for the density and its derivatives are used where appropriate.
+ */
+void write_full_density_output(FILE *fp) {
+    log_message("INFO", "Writing density theoretical profiles to final .dat files...");
+    write_mass_profile(fp);
+    write_potential_profile(fp);
+    write_density_profile(fp);
+    write_dPsidr_profile(fp);
+    write_drhodPsi_profile(fp);
+    write_f_of_E_profile(fp);
+    write_distribution_after_simulation(fp);
 }
