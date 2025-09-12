@@ -187,5 +187,10 @@ void hybrid_adaptive_method();
 void adaptive_leapfrog_adaptive_levi_civita();
 void forest_ruth_yoshida_integration();
 void rk4_method();
+void bootstrap_ab3_method();
+void ab3_method();
+void ab3_method_post_step();
 void make_dynamic_step();
+void make_dynamic_post_step();
+void make_dynamic_bootstrap_phase();
 #endif // DYNAMICS_H

@@ -161,6 +161,8 @@ extern int use_identity_gravity;
 extern int debug_direct_convolution;
 
 extern int bootstrap_phase_done; ///< Flag indicating if the bootstrap phase of the gravitation simulation has been completed (0=no, 1=yes).
+extern double **f_ab3_r;         ///< Used for Adams-Bashforth 3rd Order (AB3) method. History array for \f$dr/dt\f$ derivatives. Indexed by `[history_slot (0..2)][original_particle_id]`. Slot 2 is most recent (\f$f_n\f$).
+extern double **f_ab3_v;         ///< Used for Adams-Bashforth 3rd Order (AB3) method. History array for \f$dv_{rad}/dt\f$ derivatives. Indexed by `[history_slot (0..2)][original_particle_id]`. Slot 2 is most recent (\f$f_n\f$).
 
 extern double g_active_halo_mass; ///< Active halo mass for N-body force calculations.
 extern double normalization; ///< Mass normalization factor for energy calculations. Calculated based on the integral of the density profile.

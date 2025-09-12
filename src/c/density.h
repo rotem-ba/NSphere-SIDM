@@ -92,4 +92,7 @@ double massintegrand(double r, void *params __attribute__((unused)));
 
 void set_global_density_params();
 
+void free_splines_accelerators();
+void free_density_data_arrays();
+
 #endif // DENSITY_H

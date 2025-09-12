@@ -89,4 +89,6 @@ typedef struct RrPsiPair RrPsiPair;
 void allocate_particles_memory(int npts_initial);
 void trim_particles(int npts);
 
+void free_particles_memory();
+
 #endif // PARTICLE_DATA_H

@@ -47,6 +47,7 @@
 #include "timesteps.h"
 #include "rng.h"
 #include "tidal_stripping.h"
+#include "garbage_collection.h"
 #include <float.h> // For DBL_MAX
 #ifdef _WIN32
 #include <windows.h>
@@ -595,14 +596,22 @@ printf("  \n");
                     // --- Cleanup for NFW Diagnostic Iteration ---
 cleanup_diag_iteration:
                     gsl_integration_workspace_free(w_diag);
-                    if(splinemass_diag) gsl_spline_free(splinemass_diag);
-                    if(enclosedmass_diag) gsl_interp_accel_free(enclosedmass_diag);
-                    if(splinePsi_diag) gsl_spline_free(splinePsi_diag);
-                    if(Psiinterp_diag) gsl_interp_accel_free(Psiinterp_diag);
-                    if(splinerofPsi_diag) gsl_spline_free(splinerofPsi_diag);
-                    if(rofPsiinterp_diag) gsl_interp_accel_free(rofPsiinterp_diag);
-                    if(fofEinterp_diag) gsl_interp_free(fofEinterp_diag);
-                    if(fofEacc_diag) gsl_interp_accel_free(fofEacc_diag);
+                    if(splinemass_diag)
+                        gsl_spline_free(splinemass_diag);
+                    if(enclosedmass_diag)
+                        gsl_interp_accel_free(enclosedmass_diag);
+                    if(splinePsi_diag)
+                        gsl_spline_free(splinePsi_diag);
+                    if(Psiinterp_diag)
+                        gsl_interp_accel_free(Psiinterp_diag);
+                    if(splinerofPsi_diag)
+                        gsl_spline_free(splinerofPsi_diag);
+                    if(rofPsiinterp_diag)
+                        gsl_interp_accel_free(rofPsiinterp_diag);
+                    if(fofEinterp_diag)
+                        gsl_interp_free(fofEinterp_diag);
+                    if(fofEacc_diag)
+                        gsl_interp_accel_free(fofEacc_diag);
                     free(mass_diag_arr);
                     free(radius_diag_arr);
                     free(radius_for_rofPsi_diag_arr);
@@ -807,10 +816,8 @@ cleanup_diag_iteration:
         double *radius_values_for_rPsi_spline = (double *)malloc(num_points * sizeof(double));
 
         if (!nPsivalues_for_rPsi_spline || !radius_values_for_rPsi_spline) {
-            if (nPsivalues_for_rPsi_spline)
-                free(nPsivalues_for_rPsi_spline);
-            if (radius_values_for_rPsi_spline)
-                free(radius_values_for_rPsi_spline);
+            free(nPsivalues_for_rPsi_spline);
+            free(radius_values_for_rPsi_spline);
             raise_error("NFW_PATH: Failed to allocate temp arrays for r(Psi) spline data.\n");
         }
 
@@ -2217,9 +2224,15 @@ cleanup_diag_iteration:
     R_block = (float *)malloc((size_t)npts * block_size * sizeof(float));    // Radius
     Vrad_block = (float *)malloc((size_t)npts * block_size * sizeof(float)); // Radial velocity
     // Check allocation results
-    if (!L_block || !Rank_block || !R_block || !Vrad_block) {
-        free(L_block); free(Rank_block); free(R_block); free(Vrad_block); // Free any that were allocated
-        L_block = NULL; Rank_block = NULL; R_block = NULL; Vrad_block = NULL; // Prevent double free in cleanup
+    if (!L_block || !Rank_block || !R_block || !Vrad_block) { // Free any that were allocated + prevent double free in cleanup
+        free(L_block);
+        free(Rank_block);
+        free(R_block);
+        free(Vrad_block);
+        L_block = NULL;
+        Rank_block = NULL;
+        R_block = NULL;
+        Vrad_block = NULL;
         raise_error("Error: Failed to allocate block storage arrays.\n");
     }
 
@@ -2352,219 +2365,12 @@ cleanup_diag_iteration:
             #pragma omp single
             current_time += dt;
 
-            if (method_select != 5) {
-                make_dynamic_step();
-                update_inverse_map(inverse_map);
-                handle_sidm_step(); // SIDM scattering: profile-aware scale radius selection and execution mode handling
-                update_trajectory_tacking(current_step, inverse_map, upper_npts_num_traj, trajectories, energies, mu_arr, L_arr, E_arr, velocities_arr);
-            } else {
-                // Static variables for Adams-Bashforth 3rd Order (AB3) method
-                bootstrap_phase_done = 0;
-                static double **f_ab3_r = NULL;               ///< History array for \f$dr/dt\f$ derivatives. Indexed by `[history_slot (0..2)][original_particle_id]`. Slot 2 is most recent (\f$f_n\f$).
-                static double **f_ab3_v = NULL;               ///< History array for \f$dv_{rad}/dt\f$ derivatives. Indexed by `[history_slot (0..2)][original_particle_id]`. Slot 2 is most recent (\f$f_n\f$).
-                static double h_ab3_bootstrap_step;         ///< Timestep size (`dt`) used during the Euler steps of the bootstrap phase.
-
-                // Adams-Bashforth coefficients for different orders
-                static int ab3_num[3] = {23, -16, 5};        ///< Numerator coefficients for the AB3 formula: \f$y_{n+1} = y_n + (h/12) \sum (\text{ab3_num}_i \cdot f_{n-i})\f$.
-                static int ab2_num[2] = {18, -6};           ///< Numerator coefficients for the AB2 formula (for comparison or fallback).
-                static int ab3_den = 12;                     ///< Common denominator for the AB3 formula coefficients.
-
-                static int bootstrap_euler_steps_needed = 2; ///< Number of full Euler steps (each of size \f$h_{bootstrap}\f$) required to generate the initial 3 derivative history points (\f$f_0, f_1, f_2\f$).
-
-                // Allocate AB3 history arrays once.
-                if (f_ab3_r == NULL) {
-                    f_ab3_r = (double **)malloc(3 * sizeof(double *));
-                    f_ab3_v = (double **)malloc(3 * sizeof(double *));
-                    for (int hh = 0; hh < 3; hh++) {
-                        f_ab3_r[hh] = (double *)malloc(npts * sizeof(double));
-                        f_ab3_v[hh] = (double *)malloc(npts * sizeof(double));
-                    }
-                    h_ab3_bootstrap_step = dt; // Step size equals dt.
-                }
-
-                // If bootstrap not done yet, do it ONCE to fill the 3-step derivative history.
-                if (!bootstrap_phase_done) {
-                    // Bootstrap for AB3: Need to compute f0, f1, f2.
-                    // This requires 2 Euler steps to get states y1, y2.
-                    // sub_step = 0: calc f0 (from y0), store f_ab3_x[0]. Euler y0->y1. state is y1.
-                    // sub_step = 1: calc f1 (from y1), store f_ab3_x[1]. Euler y1->y2. state is y2.
-                    // sub_step = 2: calc f2 (from y2), store f_ab3_x[2]. NO Euler update. state is y2.
-                    #pragma omp single
-                    for (int sub_step = 0; sub_step <= bootstrap_euler_steps_needed; sub_step++) {
-                        sort_particles(particles, npts);
-                        #pragma omp parallel for default(shared) schedule(static)
-                        for (int idx = 0; idx < npts; idx++) {
-                            int orig_id = (int)particles[3][idx];
-                            inverse_map[orig_id] = idx;
-                        }
-                        // Compute derivatives => store in f_ab3_r[sub_step], f_ab3_v[sub_step].
-                        #pragma omp parallel for default(shared) schedule(static)
-                        for (int i_eval = 0; i_eval < npts; i_eval++) {
-                            int orig_id = (int)particles[3][i_eval];
-                            double rr = particles[0][i_eval];
-                            double vrad = particles[1][i_eval];
-                            double ell = particles[2][i_eval];
-
-                            double drdt = vrad;
-                            // Use the gravitational_force and effective_angular_force functions.
-                            double force = gravitational_force(rr, i_eval, npts, G_CONST, g_active_halo_mass);
-                            double dvdt = force + effective_angular_force(rr, ell);
-
-                            f_ab3_r[sub_step][orig_id] = drdt;
-                            f_ab3_v[sub_step][orig_id] = dvdt;
-                        }
-
-                        // If sub_step < bootstrap_euler_steps_needed (i.e., for sub_step 0 and 1),
-                        // perform mini-substeps to advance particles to the next state with higher accuracy.
-                        if (sub_step < bootstrap_euler_steps_needed) {
-                            double dt_mini = h_ab3_bootstrap_step / (double)NUM_MINI_SUBSTEPS_BOOTSTRAP;
-
-                            #pragma omp parallel for default(shared) schedule(static)
-                            for (int i_part = 0; i_part < npts; i_part++) {
-                                // Each particle is evolved independently over NUM_MINI_SUBSTEPS_BOOTSTRAP
-                                double current_r_mini = particles[0][i_part];
-                                double current_vrad_mini = particles[1][i_part];
-                                double current_ell_mini = particles[2][i_part]; // Angular momentum (constant)
-
-                                // Perform NUM_MINI_SUBSTEPS_BOOTSTRAP mini-steps
-                                for (int m = 0; m < NUM_MINI_SUBSTEPS_BOOTSTRAP; m++) {
-                                    // Calculate derivatives based on current mini-step state
-                                    double drdt_m = current_vrad_mini;
-                                    double force_m = gravitational_force(current_r_mini, i_part, npts, G_CONST, g_active_halo_mass);
-                                    double dvdt_m = force_m + effective_angular_force(current_r_mini, current_ell_mini);
-
-                                    // Euler update for this mini-step
-                                    current_r_mini += dt_mini * drdt_m;
-                                    current_vrad_mini += dt_mini * dvdt_m;
-                                }
-
-                                // After all mini-steps, update the main particles array
-                                particles[0][i_part] = current_r_mini;
-                                particles[1][i_part] = current_vrad_mini;
-                            }
-                        }
-                    }
-
-                    #pragma omp single
-                    bootstrap_phase_done = 1; // Mark bootstrap done.
-                } else {
-                    /**
-                     * Normal AB3 step each iteration
-                     */
-
-                    #pragma omp single
-                    sort_particles(particles, npts);
-                    #pragma omp barrier
-
-                    update_inverse_map(inverse_map);
-
-                    #pragma omp parallel for default(shared) schedule(static)
-                    for (int i = 0; i < npts; i++) {
-                        // Adams-Bashforth 8th order integration step.
-                        int orig_id = (int)particles[3][i];
-                        double rr = particles[0][i];
-                        double vrad = particles[1][i];
-
-                        double sum_r = 0.0;
-                        double sum_v = 0.0;
-                        int particle_state = g_particle_scatter_state[orig_id];
-
-                        // AB3 coefficients: b0=23/12, b1=-16/12, b2=5/12. Denom ab3_den=12.
-                        // History: f_ab3_[r/v][2] is f_n (latest), [1] is f_{n-1}, [0] is f_{n-2}
-
-                        if (particle_state == 1) { // Just scattered: Use AB1 (Euler-like)
-                            // sum = 12 * f_n
-                            sum_r = 12.0 * f_ab3_r[2][orig_id];
-                            sum_v = 12.0 * f_ab3_v[2][orig_id];
-                            if (g_doDebug && i < 5) // Extremely sparse debug
-                                 log_message("DEBUG", "AB3_RESET: Particle %d (orig_id) using AB1 step (state 1)", orig_id);
-                        } else if (particle_state == 2) { // One step after scatter: Use AB2
-                            // sum = ab2_num[0] * f_n + ab2_num[1] * f_{n-1}
-                            sum_r = ab2_num[0] * f_ab3_r[2][orig_id] + ab2_num[1] * f_ab3_r[1][orig_id];
-                            sum_v = ab2_num[0] * f_ab3_v[2][orig_id] + ab2_num[1] * f_ab3_v[1][orig_id];
-                            if (g_doDebug && i < 5)
-                                 log_message("DEBUG", "AB3_RESET: Particle %d (orig_id) using AB2 step (state 2)", orig_id);
-                        } else { // Normal AB3 step
-                            sum_r = ab3_num[0] * f_ab3_r[2][orig_id] + ab3_num[1] * f_ab3_r[1][orig_id] + ab3_num[2] * f_ab3_r[0][orig_id];
-                            sum_v = ab3_num[0] * f_ab3_v[2][orig_id] + ab3_num[1] * f_ab3_v[1][orig_id] + ab3_num[2] * f_ab3_v[0][orig_id];
-                        }
-
-                        double r_next = rr + (dt / (double)ab3_den) * sum_r;
-                        double v_next = vrad + (dt / (double)ab3_den) * sum_v;
-
-                        particles[0][i] = r_next;
-                        particles[1][i] = v_next;
-                    }
-
-                    // SIDM scattering after Adams-Bashforth update (skip during bootstrap)
-                    handle_sidm_step();
-
-                    // We re-sort & compute new derivatives to shift the AB3 history.
-                    #pragma omp single
-                    sort_particles(particles, npts);
-                    #pragma omp barrier
-
-                    update_inverse_map(inverse_map);
-
-                    // Recompute the derivatives for the new time => goes into f_ab3_r[2], f_ab3_v[2].
-                    double **f_new_r = (double **)malloc(sizeof(double *));
-                    double **f_new_v = (double **)malloc(sizeof(double *));
-                    f_new_r[0] = (double *)malloc(npts * sizeof(double));
-                    f_new_v[0] = (double *)malloc(npts * sizeof(double));
-
-                    #pragma omp parallel for default(shared) schedule(static)
-                    for (int i_dbg = 0; i_dbg < npts; i_dbg++) {
-                        int orig_id = (int)particles[3][i_dbg];
-                        double rr = particles[0][i_dbg];
-                        double vrad = particles[1][i_dbg];
-                        double ell = particles[2][i_dbg];
-
-                        double drdt = vrad;
-                        // Use the gravitational_force and effective_angular_force functions.
-                        double force = gravitational_force(rr, i_dbg, npts, G_CONST, g_active_halo_mass);
-                        double dvdt = force + effective_angular_force(rr, ell);
-
-                        f_new_r[0][orig_id] = drdt;
-                        f_new_v[0][orig_id] = dvdt;
-                    }
-
-                    #pragma omp single
-                    {
-                        // SHIFT AB3 HISTORY: f0 <- f1, f1 <- f2
-                        for (int i_s = 0; i_s < npts; i_s++) {
-                            f_ab3_r[0][i_s] = f_ab3_r[1][i_s]; // f_{n-2} becomes old f_{n-1}
-                            f_ab3_v[0][i_s] = f_ab3_v[1][i_s];
-
-                            f_ab3_r[1][i_s] = f_ab3_r[2][i_s]; // f_{n-1} becomes old f_n
-                            f_ab3_v[1][i_s] = f_ab3_v[2][i_s];
-                        }
-                        // Put the new derivative (f_n for the just-completed step) in slot #2
-                        for (int i_s = 0; i_s < npts; i_s++) {
-                            f_ab3_r[2][i_s] = f_new_r[0][i_s]; // f_n (latest)
-                            f_ab3_v[2][i_s] = f_new_v[0][i_s];
-                        }
-
-                        free(f_new_r[0]);
-                        free(f_new_v[0]);
-                        free(f_new_r);
-                        free(f_new_v);
-
-                        // Advance particle scatter states for next AB step
-                        if (bootstrap_phase_done) // Only advance state if AB is active and past bootstrap
-                            for (int k_pstate = 0; k_pstate < npts; k_pstate++) {
-                                // k_pstate here is the original_id since g_particle_scatter_state is indexed by orig_id
-                                if (g_particle_scatter_state[k_pstate] == 2)
-                                    g_particle_scatter_state[k_pstate] = 0; // Transition from AB2 to full AB3
-                                else if (g_particle_scatter_state[k_pstate] == 1)
-                                    g_particle_scatter_state[k_pstate] = 2; // Transition from AB1 to AB2
-                                // If state is 0, it remains 0 unless SIDM sets it to 1 in the next call to handle_sidm_step
-                            }
-                    }
-                } // End of the "else" block for normal AB3.
-            }
-            // Record trajectory data for selected low-ID particles
-            update_trajectory_tacking(current_step, inverse_map, upper_npts_num_traj, trajectories, energies, mu_arr, L_arr, E_arr,
-                                      velocities_arr);
+            make_dynamic_bootstrap_phase();
+            make_dynamic_step();
+            update_inverse_map(inverse_map);
+            handle_sidm_step(); // SIDM scattering: profile-aware scale radius selection and execution mode handling
+            update_trajectory_tacking(current_step, inverse_map, upper_npts_num_traj, trajectories, energies, mu_arr, L_arr, E_arr, velocities_arr);
+            make_dynamic_post_step();
 
             // Record trajectory data for selected low-L particles
             int max_threads = omp_get_max_threads();
@@ -2592,10 +2398,7 @@ cleanup_diag_iteration:
                 lowestL_L[p][current_step] = ell;   // Store L.
             }
 
-            // Clean up thread-local accelerators.
-            for (int i = 0; i < max_threads; i++)
-                gsl_interp_accel_free(thread_accel[i]);
-            free(thread_accel);
+            free_accelerators(thread_accel,max_threads); // Clean up thread-local accelerators.
 
             #pragma omp single
             {
@@ -3212,14 +3015,9 @@ cleanup_diag_iteration:
     write_low_l_particles(dt, nlowest, lowestL_r, lowestL_E, lowestL_L);
 
     // Free lowest-L tracking arrays
-    for (int p = 0; p < nlowest; p++) {
-        free(lowestL_r[p]);
-        free(lowestL_E[p]);
-        free(lowestL_L[p]);
-    }
-    free(lowestL_r);
-    free(lowestL_E);
-    free(lowestL_L);
+    free_double_array(lowestL_r, nlowest);
+    free_double_array(lowestL_E, nlowest);
+    free_double_array(lowestL_L, nlowest);
 
     int snapshot_steps[noutsnaps];
     // Determine the timesteps corresponding to the desired snapshot outputs
@@ -3322,19 +3120,13 @@ cleanup_diag_iteration:
             double *L_unsorted = (double *)malloc(npts * sizeof(double));
 
             if (!Rank_unsorted || !Mass_unsorted || !R_unsorted || !Vrad_unsorted || !L_unsorted) {
-                printf("[ERROR] Thread %d: Memory allocation failed for snapshot %d\n",
-                       omp_get_thread_num(), snap);
+                printf("[ERROR] Thread %d: Memory allocation failed for snapshot %d\n", omp_get_thread_num(), snap);
                 // Free any memory that was allocated.
-                if (Rank_unsorted)
-                    free(Rank_unsorted);
-                if (Mass_unsorted)
-                    free(Mass_unsorted);
-                if (R_unsorted)
-                    free(R_unsorted);
-                if (Vrad_unsorted)
-                    free(Vrad_unsorted);
-                if (L_unsorted)
-                    free(L_unsorted);
+                free(Rank_unsorted);
+                free(Mass_unsorted);
+                free(R_unsorted);
+                free(Vrad_unsorted);
+                free(L_unsorted);
                 continue; // Skip to next snapshot.
             }
 
@@ -3442,16 +3234,11 @@ cleanup_diag_iteration:
             if (!Rank_sorted || !Mass_sorted || !R_sorted || !Vrad_sorted || !L_sorted) {
                 log_message("ERROR", "Thread %d: Failed to allocate sorted arrays for snapshot %d", omp_get_thread_num(), snap);
                 // Free allocated memory.
-                if (Rank_sorted)
-                    free(Rank_sorted);
-                if (Mass_sorted)
-                    free(Mass_sorted);
-                if (R_sorted)
-                    free(R_sorted);
-                if (Vrad_sorted)
-                    free(Vrad_sorted);
-                if (L_sorted)
-                    free(L_sorted);
+                free(Rank_sorted);
+                free(Mass_sorted);
+                free(R_sorted);
+                free(Vrad_sorted);
+                free(L_sorted);
                 free(partarr);
                 free(Rank_unsorted);
                 free(Mass_unsorted);
@@ -3509,10 +3296,21 @@ cleanup_diag_iteration:
                 if (!density_sorted) {
                     fprintf(stderr, "Error: Failed to allocate memory for density_sorted\n");
                     // Cleanup memory allocated within this snapshot's loop iteration
-                    free(tmpL_partdata_snap); free(tmpRank_partdata_snap); free(tmpR_partdata_snap); free(tmpV_partdata_snap);
-                    free(Rank_unsorted); free(Mass_unsorted); free(R_unsorted); free(Vrad_unsorted); free(L_unsorted);
+                    free(tmpL_partdata_snap);
+                    free(tmpRank_partdata_snap);
+                    free(tmpR_partdata_snap);
+                    free(tmpV_partdata_snap);
+                    free(Rank_unsorted);
+                    free(Mass_unsorted);
+                    free(R_unsorted);
+                    free(Vrad_unsorted);
+                    free(L_unsorted);
                     free(partarr);
-                    free(Rank_sorted); free(Mass_sorted); free(R_sorted); free(Vrad_sorted); free(L_sorted);
+                    free(Rank_sorted);
+                    free(Mass_sorted);
+                    free(R_sorted);
+                    free(Vrad_sorted);
+                    free(L_sorted);
                     continue; // Proceed to the next snapshot
                 }
 
@@ -4143,20 +3941,12 @@ cleanup_diag_iteration:
 
     free(inverse_map);
 
-    for (int i = 0; i < num_traj_particles; i++) {
-        free(trajectories[i]);
-        free(energies[i]);
-        free(velocities_arr[i]);
-        free(mu_arr[i]);
-        free(E_arr[i]);
-        free(L_arr[i]);
-    }
-    free(trajectories);
-    free(energies);
-    free(velocities_arr);
-    free(mu_arr);
-    free(E_arr);
-    free(L_arr);
+    free_double_array(trajectories, num_traj_particles);
+    free_double_array(energies, num_traj_particles);
+    free_double_array(velocities_arr, num_traj_particles);
+    free_double_array(mu_arr, num_traj_particles);
+    free_double_array(E_arr, num_traj_particles);
+    free_double_array(L_arr, num_traj_particles);
 
     free(E_i_arr);
     free(L_i_arr);
@@ -4169,16 +3959,7 @@ cleanup_diag_iteration:
     free(v_final);
 
 
-    free(mass);
-    free(radius);
-    if (radius_monotonic_grid_nfw != NULL) {
-        free(radius_monotonic_grid_nfw);
-        radius_monotonic_grid_nfw = NULL;
-    }
-    free(Psivalues);
-    free(nPsivalues);
-    free(innerintegrandvalues);
-    free(Evalues);
+    free_density_data_arrays();
     if (w != NULL)
         gsl_integration_workspace_free(w);
     // Free GSL RNG resources
@@ -4190,22 +3971,12 @@ cleanup_diag_iteration:
     // End method_select == 3 block.
 
     // Move the freeing of particles *outside* the if-block.
-    for (int i = 0; i < 5; i++)
-        free(particles[i]);
-    free(particles);
+    free_particles_memory();
 
     if (g_doDebug)
         finalize_debug_energy_output(); // Ensures all data is collected first
 
-    gsl_spline_free(splinemass);
-    gsl_spline_free(splinePsi);
-    gsl_spline_free(splinerofPsi);
-    gsl_interp_accel_free(enclosedmass);
-    gsl_interp_accel_free(Psiinterp);
-    gsl_interp_accel_free(rofPsiinterp);
-    gsl_interp_free(g_main_fofEinterp);
-    gsl_interp_accel_free(g_main_fofEacc);
-
+    free_splines_accelerators();
     free_local_snap_arrays();
     cleanup_all_particle_data();
 
@@ -4227,9 +3998,7 @@ cleanup_diag_iteration:
 
     // Cleanup for the conditionally declared persistent sort buffer.
     if (g_sort_columns_buffer != NULL) {
-        for (int i = 0; i < g_sort_columns_buffer_npts; i++)
-            free(g_sort_columns_buffer[i]);
-        free(g_sort_columns_buffer);
+        free_double_array(g_sort_columns_buffer, g_sort_columns_buffer_npts);
         g_sort_columns_buffer = NULL; // Mark as freed.
         g_sort_columns_buffer_npts = 0; // Reset size.
     }

@@ -105,6 +105,8 @@ int use_identity_gravity = 0;
 int debug_direct_convolution = 0;
 
 int bootstrap_phase_done = 1;
+double **f_ab3_r = NULL;
+double **f_ab3_v = NULL;
 
 double g_active_halo_mass = HALO_MASS;
 double normalization; ///< Mass normalization factor for energy calculations. Calculated based on the integral of the density profile.

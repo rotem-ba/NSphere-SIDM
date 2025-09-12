@@ -199,3 +199,33 @@ void set_global_density_params(){
     g_active_halo_mass = g_halo_mass_param;
 
 }
+
+/**
+ * @def free spline and accelerator objects.
+ */
+void free_splines_accelerators() {
+    gsl_spline_free(splinemass);
+    gsl_spline_free(splinePsi);
+    gsl_spline_free(splinerofPsi);
+    gsl_interp_accel_free(enclosedmass);
+    gsl_interp_accel_free(Psiinterp);
+    gsl_interp_accel_free(rofPsiinterp);
+    gsl_interp_free(g_main_fofEinterp);
+    gsl_interp_accel_free(g_main_fofEacc);
+}
+
+/**
+ * @def free density data arrays.
+ */
+void free_density_data_arrays() {
+    free(mass);
+    free(radius);
+    if (radius_monotonic_grid_nfw != NULL) {
+        free(radius_monotonic_grid_nfw);
+        radius_monotonic_grid_nfw = NULL;
+    }
+    free(Psivalues);
+    free(nPsivalues);
+    free(innerintegrandvalues);
+    free(Evalues);
+}

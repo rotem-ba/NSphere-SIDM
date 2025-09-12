@@ -19,6 +19,7 @@
 #include "particle_array_ops.h"
 #include "density.h"
 #include "utils.h"
+#include "logging.h"
 #include <math.h>
 
 // =========================================================================
@@ -1010,6 +1011,196 @@ void rk4_method() {
 }
 
 /**
+ * @brief Performs bootstrap Adams-Bashforth 3rd Order (AB3) method.
+ */
+void bootstrap_ab3_method() {
+    // Allocate AB3 history arrays once.
+    if (f_ab3_r == NULL) {
+        f_ab3_r = (double **)malloc(3 * sizeof(double *));
+        f_ab3_v = (double **)malloc(3 * sizeof(double *));
+        for (int hh = 0; hh < 3; hh++) {
+            f_ab3_r[hh] = (double *)malloc(npts * sizeof(double));
+            f_ab3_v[hh] = (double *)malloc(npts * sizeof(double));
+        }
+    }
+
+    // Bootstrap for AB3: Need to compute f0, f1, f2.
+    // This requires 2 Euler steps to get states y1, y2.
+    // sub_step = 0: calc f0 (from y0), store f_ab3_x[0]. Euler y0->y1. state is y1.
+    // sub_step = 1: calc f1 (from y1), store f_ab3_x[1]. Euler y1->y2. state is y2.
+    // sub_step = 2: calc f2 (from y2), store f_ab3_x[2]. NO Euler update. state is y2.
+    #pragma omp single
+    for (int sub_step = 0; sub_step <= 2; sub_step++) {
+        #pragma omp single
+        sort_particles(particles, npts);
+        #pragma omp barrier
+
+        // Compute derivatives => store in f_ab3_r[sub_step], f_ab3_v[sub_step].
+        #pragma omp parallel for default(shared) schedule(static)
+        for (int i_eval = 0; i_eval < npts; i_eval++) {
+            int orig_id = (int)particles[3][i_eval];
+            double rr = particles[0][i_eval];
+            double vrad = particles[1][i_eval];
+            double ell = particles[2][i_eval];
+
+            double drdt = vrad;
+            // Use the gravitational_force and effective_angular_force functions.
+            double force = gravitational_force(rr, i_eval, npts, G_CONST, g_active_halo_mass);
+            double dvdt = force + effective_angular_force(rr, ell);
+
+            f_ab3_r[sub_step][orig_id] = drdt;
+            f_ab3_v[sub_step][orig_id] = dvdt;
+        }
+
+        // perform mini-substeps to advance particles to the next state with higher accuracy.
+        if (sub_step == 2)
+            continue;
+
+        double dt_mini = dt / (double)NUM_MINI_SUBSTEPS_BOOTSTRAP;
+        #pragma omp parallel for default(shared) schedule(static)
+        for (int i_part = 0; i_part < npts; i_part++) {
+            // Each particle is evolved independently over NUM_MINI_SUBSTEPS_BOOTSTRAP
+            double current_r_mini = particles[0][i_part];
+            double current_vrad_mini = particles[1][i_part];
+            double current_ell_mini = particles[2][i_part]; // Angular momentum (constant)
+
+            // Perform NUM_MINI_SUBSTEPS_BOOTSTRAP mini-steps
+            for (int m = 0; m < NUM_MINI_SUBSTEPS_BOOTSTRAP; m++) {
+                // Calculate derivatives based on current mini-step state
+                double drdt_m = current_vrad_mini;
+                double force_m = gravitational_force(current_r_mini, i_part, npts, G_CONST, g_active_halo_mass);
+                double dvdt_m = force_m + effective_angular_force(current_r_mini, current_ell_mini);
+
+                // Euler update for this mini-step
+                current_r_mini += dt_mini * drdt_m;
+                current_vrad_mini += dt_mini * dvdt_m;
+            }
+
+            // After all mini-steps, update the main particles array
+            particles[0][i_part] = current_r_mini;
+            particles[1][i_part] = current_vrad_mini;
+        }
+    }
+}
+
+/**
+ * @brief Performs Adams-Bashforth 3rd Order (AB3) method (post bootstrap).
+ */
+void ab3_method() {
+    // Adams-Bashforth coefficients for different orders
+    static int ab3_num[3] = {23, -16, 5};        ///< Numerator coefficients for the AB3 formula: \f$y_{n+1} = y_n + (h/12) \sum (\text{ab3_num}_i \cdot f_{n-i})\f$.
+    static int ab2_num[2] = {18, -6};            ///< Numerator coefficients for the AB2 formula (for comparison or fallback).
+    static double ab3_den = 12.0;                ///< Common denominator for the AB3 formula coefficients.
+
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        // Adams-Bashforth 8th order integration step.
+        int orig_id = (int)particles[3][i];
+        double rr = particles[0][i];
+        double vrad = particles[1][i];
+
+        double sum_r = 0.0;
+        double sum_v = 0.0;
+        int particle_state = g_particle_scatter_state[orig_id];
+
+        // AB3 coefficients: b0=23/12, b1=-16/12, b2=5/12. Denom ab3_den=12.0.
+        // History: f_ab3_[r/v][2] is f_n (latest), [1] is f_{n-1}, [0] is f_{n-2}
+
+        if (particle_state == 1) { // Just scattered: Use AB1 (Euler-like)
+            // sum = 12 * f_n
+            sum_r = 12.0 * f_ab3_r[2][orig_id];
+            sum_v = 12.0 * f_ab3_v[2][orig_id];
+            if (g_doDebug && i < 5) // Extremely sparse debug
+                log_message("DEBUG", "AB3_RESET: Particle %d (orig_id) using AB1 step (state 1)", orig_id);
+        } else if (particle_state == 2) { // One step after scatter: Use AB2
+            // sum = ab2_num[0] * f_n + ab2_num[1] * f_{n-1}
+            sum_r = ab2_num[0] * f_ab3_r[2][orig_id] + ab2_num[1] * f_ab3_r[1][orig_id];
+            sum_v = ab2_num[0] * f_ab3_v[2][orig_id] + ab2_num[1] * f_ab3_v[1][orig_id];
+            if (g_doDebug && i < 5)
+                log_message("DEBUG", "AB3_RESET: Particle %d (orig_id) using AB2 step (state 2)", orig_id);
+        } else { // Normal AB3 step
+            sum_r = ab3_num[0] * f_ab3_r[2][orig_id] + ab3_num[1] * f_ab3_r[1][orig_id] + ab3_num[2] * f_ab3_r[0][orig_id];
+            sum_v = ab3_num[0] * f_ab3_v[2][orig_id] + ab3_num[1] * f_ab3_v[1][orig_id] + ab3_num[2] * f_ab3_v[0][orig_id];
+        }
+
+        double r_next = rr + (dt / ab3_den) * sum_r;
+        double v_next = vrad + (dt / ab3_den) * sum_v;
+
+        particles[0][i] = r_next;
+        particles[1][i] = v_next;
+    }
+}
+
+/**
+ * @brief Performs Adams-Bashforth 3rd Order (AB3) method post-step phase.
+ */
+void ab3_method_post_step() {
+    // We re-sort & compute new derivatives to shift the AB3 history.
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    // Recompute the derivatives for the new time => goes into f_ab3_r[2], f_ab3_v[2].
+    double **f_new_r = (double **)malloc(sizeof(double *));
+    double **f_new_v = (double **)malloc(sizeof(double *));
+    f_new_r[0] = (double *)malloc(npts * sizeof(double));
+    f_new_v[0] = (double *)malloc(npts * sizeof(double));
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i_dbg = 0; i_dbg < npts; i_dbg++) {
+        int orig_id = (int)particles[3][i_dbg];
+        double rr = particles[0][i_dbg];
+        double vrad = particles[1][i_dbg];
+        double ell = particles[2][i_dbg];
+
+        double drdt = vrad;
+        // Use the gravitational_force and effective_angular_force functions.
+        double force = gravitational_force(rr, i_dbg, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(rr, ell);
+
+        f_new_r[0][orig_id] = drdt;
+        f_new_v[0][orig_id] = dvdt;
+    }
+
+    #pragma omp single
+    {
+        // SHIFT AB3 HISTORY: f0 <- f1, f1 <- f2
+        for (int i_s = 0; i_s < npts; i_s++) {
+            f_ab3_r[0][i_s] = f_ab3_r[1][i_s]; // f_{n-2} becomes old f_{n-1}
+            f_ab3_v[0][i_s] = f_ab3_v[1][i_s];
+
+            f_ab3_r[1][i_s] = f_ab3_r[2][i_s]; // f_{n-1} becomes old f_n
+            f_ab3_v[1][i_s] = f_ab3_v[2][i_s];
+        }
+        // Put the new derivative (f_n for the just-completed step) in slot #2
+        for (int i_s = 0; i_s < npts; i_s++) {
+            f_ab3_r[2][i_s] = f_new_r[0][i_s]; // f_n (latest)
+            f_ab3_v[2][i_s] = f_new_v[0][i_s];
+        }
+
+        free(f_new_r[0]);
+        free(f_new_v[0]);
+        free(f_new_r);
+        free(f_new_v);
+
+        // Advance particle scatter states for next AB step
+        if (bootstrap_phase_done) // Only advance state if AB is active and past bootstrap
+            for (int k_pstate = 0; k_pstate < npts; k_pstate++) {
+                // k_pstate here is the original_id since g_particle_scatter_state is indexed by orig_id
+                if (g_particle_scatter_state[k_pstate] == 2)
+                    g_particle_scatter_state[k_pstate] = 0; // Transition from AB2 to full AB3
+                else if (g_particle_scatter_state[k_pstate] == 1)
+                    g_particle_scatter_state[k_pstate] = 2; // Transition from AB1 to AB2
+                // If state is 0, it remains 0 unless SIDM sets it to 1 in the next call to handle_sidm_step
+            }
+    }
+}
+
+/**
  * @brief Make a dynamic step using the selected method.
  */
 void make_dynamic_step() {
@@ -1021,6 +1212,8 @@ void make_dynamic_step() {
         leapfrog_method_full_step_adaptive();
     else if (method_select == 4)
         forest_ruth_yoshida_integration();
+    else if (method_select == 5)
+        ab3_method();
     else if (method_select == 6)
         leapfrog_method_velocity_half_step();
     else if (method_select == 7)
@@ -1029,4 +1222,24 @@ void make_dynamic_step() {
         rk4_method();
     else if (method_select == 9)
         euler_step();
+}
+
+/**
+ * @brief Make the post step phase using the selected method.
+ */
+void make_dynamic_post_step() {
+    if (method_select == 5)
+        ab3_method_post_step();
+}
+
+/**
+ * @brief Make the bootstrap phase using the selected method.
+ */
+void make_dynamic_bootstrap_phase() {
+    if (bootstrap_phase_done == 1)
+        return;
+    if (method_select == 5)
+        bootstrap_ab3_method();
+    #pragma omp single
+    bootstrap_phase_done = 1; // Mark bootstrap done.
 }

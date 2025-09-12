@@ -17,6 +17,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "logging.h"
+#include "garbage_collection.h"
 
 // =========================================================================
 // GLOBAL PARTICLE DATA ARRAYS
@@ -78,4 +79,8 @@ void trim_particles(int npts) {
         particles[i] = final_particles[i]; // particles[i] now points to the smaller array
     }
     free(final_particles); // Free the temporary ** structure, not the data arrays
+}
+
+void free_particles_memory() {
+    free_double_array(particles, 5);
 }
