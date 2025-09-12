@@ -2474,7 +2474,7 @@ cleanup_diag_iteration:
         fclose(fp);
     }
 
-    write_full_density_output(fp); // Write theoretical profiles (profile-specific formulas)
+    write_full_density_output(fp);
 
     char filename[256];
     get_full_filename("data/particles.dat", 1, filename, sizeof(filename));

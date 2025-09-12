@@ -1238,6 +1238,8 @@ void write_distribution_after_simulation(FILE *fp) {
  *          Analytical formulas for the density and its derivatives are used where appropriate.
  */
 void write_full_density_output(FILE *fp) {
+    if (skip_file_writes)
+        return;
     log_message("INFO", "Writing density theoretical profiles to final .dat files...");
     write_mass_profile(fp);
     write_potential_profile(fp);
