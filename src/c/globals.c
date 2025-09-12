@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_interp.h>
@@ -104,6 +103,8 @@ int use_identity_gravity = 0;
  *          1 = Direct spatial convolution (more accurate but slower).
  */
 int debug_direct_convolution = 0;
+
+int bootstrap_phase_done = 1;
 
 double g_active_halo_mass = HALO_MASS;
 double normalization; ///< Mass normalization factor for energy calculations. Calculated based on the integral of the density profile.
@@ -222,3 +223,15 @@ char apd_filename[256];
 
 int skip_simulation = 0;
 int ext_Ntimes;
+
+// =========================================================================
+// SIMULATION TIMESTEP CALCULATION
+// =========================================================================
+
+/** @brief Initialize simulation time tracking and progress reporting. */
+double tdyn;
+double totaltime;
+double current_time = 0.0;
+double dt;
+double start_time;
+int print_steps[21];

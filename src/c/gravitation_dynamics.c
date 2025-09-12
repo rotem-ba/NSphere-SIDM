@@ -15,6 +15,10 @@
  */
 
 #include "gravitation_dynamics.h"
+#include "globals.h"
+#include "particle_array_ops.h"
+#include "density.h"
+#include "utils.h"
 #include <math.h>
 
 // =========================================================================
@@ -42,14 +46,13 @@
  * @param r_in                [in] Input radial position (kpc) at the start of the total interval `h`.
  * @param v_in                [in] Input radial velocity (kpc/Myr) at the start of `h`.
  * @param ell                 [in] Angular momentum per unit mass (kpc^2/Myr).
- * @param h                   [in] Total physical time interval for this leapfrog sequence (Myr).
  * @param N_subdivision_factor [in] Base subdivision factor \f$N\f$ used to determine micro-timestep sizes.
  * @param subSteps            [in] Total number of Kicks/Drifts (e.g., \f$2N+1\f$ or \f$4N+1\f$).
  * @param grav                [in] Gravitational constant G (simulation units).
  * @param r_out               [out] Pointer to store the output radial position (kpc) after time `h`.
  * @param v_out               [out] Pointer to store the output radial velocity (kpc/Myr) after time `h`.
  */
-void doMicroLeapfrog(int i, int npts, double r_in, double v_in, double ell, double h, int N, int subSteps, double grav, double *r_out, double *v_out) {
+void doMicroLeapfrog(int i, int npts, double r_in, double v_in, double ell, int N, int subSteps, double grav, double *r_out, double *v_out) {
     // Initialize current state with input values
     double r_curr = r_in;
     double v_curr = v_in;
@@ -58,12 +61,12 @@ void doMicroLeapfrog(int i, int npts, double r_in, double v_in, double ell, doub
     double halfKick, midStep;
     if (subSteps == (2 * N + 1)) {
         // Coarse integration (2N+1 substeps)
-        halfKick = h / (2.0 * N);
-        midStep = h / (1.0 * N);
+        halfKick = dt / (2.0 * N);
+        midStep = dt / (1.0 * N);
     } else {
         // Fine integration (4N+1 substeps)
-        halfKick = h / (4.0 * N);
-        midStep = h / (2.0 * N);
+        halfKick = dt / (4.0 * N);
+        midStep = dt / (2.0 * N);
     }
 
     // Initial half-kick (velocity update)
@@ -115,7 +118,6 @@ void doMicroLeapfrog(int i, int npts, double r_in, double v_in, double ell, doub
  * @param r_in          [in] Initial radial position (kpc) at the start of the step `h`.
  * @param v_in          [in] Initial radial velocity (kpc/Myr) at the start of `h`.
  * @param ell           [in] Angular momentum per unit mass (kpc^2/Myr), conserved.
- * @param h             [in] Full physical timestep size \f$\Delta T_{phys}\f$ (Myr).
  * @param radius_tol    [in] Relative convergence tolerance for radius comparison.
  * @param velocity_tol  [in] Relative convergence tolerance for velocity comparison.
  * @param max_subdiv    [in] Maximum allowed subdivision factor \f$N\f$ for micro-steps.
@@ -125,7 +127,7 @@ void doMicroLeapfrog(int i, int npts, double r_in, double v_in, double ell, doub
  * @param r_out         [out] Pointer to store the final radial position (kpc) after time `h`.
  * @param v_out         [out] Pointer to store the final radial velocity (kpc/Myr) after time `h`.
  */
-void doAdaptiveFullLeap(int i, int npts, double r_in, double v_in, double ell, double h, double radius_tol, double velocity_tol, int max_subdiv,
+void doAdaptiveFullLeap(int i, int npts, double r_in, double v_in, double ell, double radius_tol, double velocity_tol, int max_subdiv,
                         double grav, int out_type, double *r_out, double *v_out ) {
     int N = 1; // Start with N=1 micro-steps.
 
@@ -135,10 +137,10 @@ void doAdaptiveFullLeap(int i, int npts, double r_in, double v_in, double ell, d
 
     while (N <= max_subdiv) {
         // Coarse pass (2N+1 steps)
-        doMicroLeapfrog( i, npts, r_in, v_in, ell, h, N, (2 * N + 1), grav, &r_coarse, &v_coarse);
+        doMicroLeapfrog( i, npts, r_in, v_in, ell, N, (2 * N + 1), grav, &r_coarse, &v_coarse);
 
         // Fine pass (4N+1 steps)
-        doMicroLeapfrog( i, npts, r_in, v_in, ell, h, N, (4 * N + 1), grav, &r_fine, &v_fine);
+        doMicroLeapfrog( i, npts, r_in, v_in, ell, N, (4 * N + 1), grav, &r_fine, &v_fine);
 
         // Compare radius, velocity.
         double radius_diff = fabs(r_fine - r_coarse) / (fabs(r_fine) + 1.0e-30);
@@ -202,14 +204,13 @@ void doAdaptiveFullLeap(int i, int npts, double r_in, double v_in, double ell, d
  * @param r_in      [in] Initial physical radial position (kpc) at the start of the physical step `dt`.
  * @param v_in      [in] Initial physical radial velocity (kpc/Myr) at the start of `dt`.
  * @param ell       [in] Angular momentum per unit mass (kpc^2/Myr) for the force calculation.
- * @param dt        [in] The full physical timestep \f$\Delta T_{phys}\f$ (Myr) to advance the particle.
  * @param N_taumin  [in] Target number of fictitious \f$τ\f$-steps within the `dt` interval; influences
  *                     the initial guess for \f$Δτ\f$.
  * @param grav      [in] Gravitational constant G (simulation units).
  * @param r_out     [out] Pointer to store the final physical radial position (kpc) after time `dt`.
  * @param v_out     [out] Pointer to store the final physical radial velocity (kpc/Myr) after time `dt`.
  */
-void doLeviCivitaLeapfrog(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double grav, double *r_out, double *v_out) {
+void doLeviCivitaLeapfrog(int i, int npts, double r_in, double v_in, double ell, int N_taumin, double grav, double *r_out, double *v_out) {
     // Transform to Levi-Civita coordinates: rho = sqrt(r)
     double rho = sqrt(r_in);
     double v_rad = v_in;
@@ -469,7 +470,6 @@ void doSingleTauStepAdaptiveLeviCivita(int i, int npts, double rho_in, double v_
  * @param r_in          [in] Initial physical radial position (kpc) at the start of the physical step `dt`.
  * @param v_in          [in] Initial physical radial velocity (kpc/Myr) at the start of `dt`.
  * @param ell           [in] Angular momentum per unit mass (kpc^2/Myr), conserved during integration.
- * @param dt            [in] The full physical timestep \f$\Delta T_{phys}\f$ (Myr) to advance the particle.
  * @param N_taumin      [in] Target number of fictitious \f$τ\f$-steps within `dt`; influences the initial \f$Δτ\f$ guess.
  * @param radius_tol    [in] Relative convergence tolerance for \f$ρ\f$ comparison within each adaptive \f$τ\f$-step.
  * @param velocity_tol  [in] Relative convergence tolerance for velocity comparison within each adaptive \f$τ\f$-step.
@@ -480,7 +480,7 @@ void doSingleTauStepAdaptiveLeviCivita(int i, int npts, double rho_in, double v_
  * @param r_out         [out] Pointer to store the final physical radial position (kpc) after time `dt`.
  * @param v_out         [out] Pointer to store the final physical radial velocity (kpc/Myr) after time `dt`.
  */
-void doAdaptiveFullLeviCivita(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double radius_tol, double velocity_tol,
+void doAdaptiveFullLeviCivita(int i, int npts, double r_in, double v_in, double ell, int N_taumin, double radius_tol, double velocity_tol,
                               int max_subdiv, double grav, int out_type, double *r_out, double *v_out) {
     // Handle near-zero radius edge case
     if (r_in < 1.0e-30) {
@@ -549,4 +549,484 @@ void doAdaptiveFullLeviCivita(int i, int npts, double r_in, double v_in, double 
     double r_fin = rho_current * rho_current;
     *r_out = r_fin;
     *v_out = v_current;
+}
+
+// TRACKING
+
+
+void update_trajectory_tacking(int current_step, int *inverse_map, int upper_npts_num_traj, double **trajectories, double **energies,
+                               double **mu_arr, double **L_arr, double **E_arr, double **velocities_arr) {
+    #pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
+    for (int p = 0; p < upper_npts_num_traj; p++) {
+        int idx = inverse_map[p];
+        double rr = particles[0][idx];
+        double vrad = particles[1][idx];
+        double ell = particles[2][idx];
+        double Psi_val = evaluatespline(splinePsi, Psiinterp, rr) * VEL_CONV_SQ;
+        double vtot = to_velocity(vrad,ell,rr);
+        double E_rel = Psi_val - 0.5 * sqr(vtot);
+        trajectories[p][current_step] = rr;
+        energies[p][current_step] = E_rel;
+        E_arr[p][current_step] = E_rel;
+        velocities_arr[p][current_step] = vrad;
+        mu_arr[p][current_step] = vrad / vtot;
+        L_arr[p][current_step] = ell;
+    }
+}
+
+void update_inverse_map(int *inverse_map){
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int idx = 0; idx < npts; idx++)
+        inverse_map[(int)particles[3][idx]] = idx;
+}
+
+/**
+ * @brief Performs euler_step method.
+ */
+void euler_step() {
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double vrad = particles[1][i];
+        double ell = particles[2][i];
+        double drdt = vrad;
+
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+
+        particles[0][i] += drdt * dt;
+        particles[1][i] += dvdt * dt;
+    }
+}
+
+/**
+ * @brief Performs leapfrog method (position half step).
+ */
+void leapfrog_method_position_half_step() {
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++)
+        particles[0][i] += particles[1][i] * (dt / 2.0);
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double ell = particles[2][i];
+
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+
+        particles[1][i] += dvdt * dt;
+        particles[0][i] += particles[1][i] * (dt / 2.0);
+    }
+}
+
+/**
+ * @brief Performs leapfrog method (velocity half step).
+ */
+void leapfrog_method_velocity_half_step() {
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double vrad = particles[1][i];
+        double ell = particles[2][i];
+
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+
+        particles[1][i] = vrad + 0.5 * dvdt * dt;
+    }
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++)
+        particles[0][i] += particles[1][i] * dt;
+
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double vrad = particles[1][i];
+        double ell = particles[2][i];
+
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+
+        particles[1][i] = vrad + 0.5 * dvdt * dt;
+    }
+}
+
+/**
+ * @brief Full-step adaptive leapfrog integration.
+ * @details Performs single step integration from (r_n, v_n) to (r_{n+1}, v_{n+1})
+ *          using adaptive timestep control and the doAdaptiveFullLeap function.
+ */
+void leapfrog_method_full_step_adaptive() {
+    double velocity_tol = 1.0e-5;
+    double radius_tol = 1.0e-5;
+    int max_subdiv = 1;
+
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    /**
+     * @brief Main integration loop - adaptive leapfrog update for each particle.
+     * @details Each particle is advanced independently using adaptive timestepping.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double v = particles[1][i];
+        double ell = particles[2][i];
+
+        // One full step => h = dt.
+        doAdaptiveFullLeap(i, npts, r, v, ell, radius_tol, velocity_tol, max_subdiv, G_CONST, 0, &particles[0][i], &particles[1][i]);
+    }
+}
+
+/**
+ * @brief Hybrid integration with adaptive method selection.
+ * @details Uses Levi-Civita regularization for close encounters (r < r_crit)
+ *          and standard leapfrog otherwise. Radius threshold r_crit is
+ *          dynamically calculated for each particle.
+ */
+void hybrid_adaptive_method(){
+    double velocity_tol = 1.0e-8;
+    double radius_tol = 1.0e-8;
+    int max_subdiv = 4096 * 4096;
+    int N_taumin = 1000;
+    double alpha_param = 0.05;
+
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    /**
+     * @brief Main integration loop - method selection based on orbital parameters.
+     * @details Dynamically selects between standard leapfrog and Levi-Civita
+     *          regularization based on particle's radius and angular momentum.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double v = particles[1][i];
+        double ell = particles[2][i];
+        double r_new, v_new;
+        // Define critical radius r_crit for switching integration method:
+        // r_crit = alpha_param * (ell^2) / (G * M(r))
+        double r_crit = 0.0;
+        if (ell != 0.0) {
+            double M_enc = ((double)i / (double)npts) * g_active_halo_mass;
+            double gravPart = VEL_CONV_SQ * G_CONST * M_enc;
+            r_crit = sqr(ell) * alpha_param / gravPart;
+        } else
+            r_crit = 0.0;
+
+        if ((r > 1.0e-30) && (r < r_crit))
+            doLeviCivitaLeapfrog(i, npts, r, v, ell, N_taumin, G_CONST, &r_new, &v_new);
+        else
+            doAdaptiveFullLeap(i, npts, r, v, ell, radius_tol, velocity_tol,max_subdiv, G_CONST, 2, &r_new, &v_new);
+
+        particles[0][i] = r_new;
+        particles[1][i] = v_new;
+    }
+}
+
+/**
+ * @brief Performs adaptive leapfrog with adaptive Levi-Civita.
+ */
+void adaptive_leapfrog_adaptive_levi_civita() {
+    double velocity_tol = 1.0e-7;
+    double radius_tol = 1.0e-7;
+    int max_subdiv = 4096 * 4096 * 16;
+    int out_type = 2;
+    int N_taumin = 10;
+    double alpha_param = 0.05;
+
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double v = particles[1][i];
+        double ell = particles[2][i];
+
+        // Calculate r_crit, using special handling for particle i=0 (M_enc=0) to avoid division by zero.
+        double r_crit = 0.0;
+        if (fabs(ell) > 1.0e-30) {
+            double M_enc;
+            if (i == 0) // Special handling for i=0 to avoid zero mass in denominator
+                M_enc = 0.1 * (1.0 / (double)npts) * g_active_halo_mass;
+            else
+                M_enc = ((double)i / (double)npts) * g_active_halo_mass;
+            double gravPart = (VEL_CONV_SQ * G_CONST) * M_enc;
+            r_crit = (ell * ell) * alpha_param / gravPart;
+        }
+
+        double r_new, v_new;
+        if (r > 1.0e-30 && r < r_crit) // Switch based on critical radius
+            doAdaptiveFullLeviCivita(i, npts, r, v, ell, N_taumin, radius_tol, velocity_tol, max_subdiv, G_CONST, out_type, &r_new, &v_new);
+        else
+            doAdaptiveFullLeap(i, npts, r, v, ell, radius_tol, velocity_tol, max_subdiv, G_CONST, out_type, &r_new, &v_new);
+        particles[0][i] = r_new;
+        particles[1][i] = v_new;
+    }
+}
+
+/**
+ * @brief Performs 4th-order Forest-Ruth-Yoshida integrator.
+ */
+void forest_ruth_yoshida_integration() {
+    // Coefficients for 4th-order Forest-Ruth-Yoshida integrator (c1=c3).
+    // Derived from: c1 = 1 / (2 - 2^(1/3)), c2 = 1 - 2*c1
+    double c1 = 0.6756035959798289;
+    double c2 = -0.3512071919596578; // = 1.0 - 2.0 * c1
+    double c3 = c1;
+
+    /**
+     * @brief STEP 1: Kick by (c1 * dt/2).
+     * @details Velocity update using the old position.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double vrad = particles[1][i];
+        double ell = particles[2][i];
+
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+        particles[1][i] = vrad + 0.5 * c1 * dt * dvdt;
+    }
+
+    /**
+     * @brief STEP 2: Drift by (c1 * dt).
+     * @details Position update using the intermediate velocity v^*.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        particles[0][i] += particles[1][i] * c1 * dt;
+    }
+
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    /**
+     * @brief STEP 3: Kick by ((c1 + c2) * dt/2).
+     * @details Velocity update using the new position after the first drift.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double vrad = particles[1][i];
+        double ell = particles[2][i];
+
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+        double coeff = 0.5 * (c1 + c2);
+        particles[1][i] = vrad + coeff * dt * dvdt;
+    }
+
+    /**
+     * @brief STEP 4: Drift by (c2 * dt).
+     * @details Position update using the intermediate velocity.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        particles[0][i] += particles[1][i] * c2 * dt;
+    }
+
+    /**
+     * @brief STEP 5: Kick by ((c2 + c3) * dt/2).
+     * @details Velocity update using the new position after the second drift.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double vrad = particles[1][i];
+        double ell = particles[2][i];
+
+        // Recompute acceleration at new position.
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+
+        // Combination of the remaining half of c2 and half of c3.
+        double coeff = 0.5 * (c2 + c3);
+        particles[1][i] = vrad + coeff * dt * dvdt;
+    }
+
+    /**
+     * @brief STEP 6: Drift by (c3 * dt).
+     * @details Final position update in this integration step.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++)
+        particles[0][i] += particles[1][i] * c3 * dt;
+
+    /**
+     * @brief STEP 7: Kick by (c3 * dt/2).
+     * @details Final velocity update (half-kick) to complete the integration step.
+     */
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        double r = particles[0][i];
+        double vrad = particles[1][i];
+        double ell = particles[2][i];
+
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+        particles[1][i] = vrad + 0.5 * c3 * dt * dvdt;
+    }
+}
+
+/**
+ * @brief Performs classic RK4 method.
+ */
+void rk4_method() {
+    double *r_orig_by_id = (double *)malloc(npts * sizeof(double));
+    double *v_orig_by_id = (double *)malloc(npts * sizeof(double));
+    double *k1r_by_id = (double *)malloc(npts * sizeof(double));
+    double *k1v_by_id = (double *)malloc(npts * sizeof(double));
+    double *k2r_by_id = (double *)malloc(npts * sizeof(double));
+    double *k2v_by_id = (double *)malloc(npts * sizeof(double));
+    double *k3r_by_id = (double *)malloc(npts * sizeof(double));
+    double *k3v_by_id = (double *)malloc(npts * sizeof(double));
+    double *k4r_by_id = (double *)malloc(npts * sizeof(double));
+    double *k4v_by_id = (double *)malloc(npts * sizeof(double));
+    double h = dt;
+
+    // Store original state by orig_id.
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        int orig_id = (int)particles[3][i];
+        r_orig_by_id[orig_id] = particles[0][i];
+        v_orig_by_id[orig_id] = particles[1][i];
+    }
+
+    // K1 calculation.
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        int orig_id = (int)particles[3][i];
+        double r = particles[0][i];
+        double vrad = particles[1][i];
+        double ell = particles[2][i];
+
+        double drdt = vrad;
+        // Use the gravitational_force and effective_angular_force functions.
+        double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r, ell);
+
+        k1r_by_id[orig_id] = drdt;
+        k1v_by_id[orig_id] = dvdt;
+    }
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        int orig_id = (int)particles[3][i];
+        double r_mid = particles[0][i];
+        double v_mid = particles[1][i];
+        double ell = particles[2][i];
+
+        double drdt = v_mid;
+        // Use the gravitational_force and effective_angular_force functions.
+        double force = gravitational_force(r_mid, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r_mid, ell);
+
+        k2r_by_id[orig_id] = drdt;
+        k2v_by_id[orig_id] = dvdt;
+    }
+
+    #pragma omp single
+    sort_particles(particles, npts);
+    #pragma omp barrier
+
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        int orig_id = (int)particles[3][i];
+        double r_mid = particles[0][i];
+        double v_mid = particles[1][i];
+        double ell = particles[2][i];
+
+        double drdt = v_mid;
+        // Use the gravitational_force and effective_angular_force functions.
+        double force = gravitational_force(r_mid, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r_mid, ell);
+
+        k3r_by_id[orig_id] = drdt;
+        k3v_by_id[orig_id] = dvdt;
+    }
+
+    // K4 calculation.
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        int orig_id = (int)particles[3][i];
+        double r_end = particles[0][i];
+        double v_end = particles[1][i];
+        double ell = particles[2][i];
+
+        double drdt = v_end;
+        // Use the gravitational_force and effective_angular_force functions.
+        double force = gravitational_force(r_end, i, npts, G_CONST, g_active_halo_mass);
+        double dvdt = force + effective_angular_force(r_end, ell);
+
+        k4r_by_id[orig_id] = drdt;
+        k4v_by_id[orig_id] = dvdt;
+    }
+
+    // Final RK4 combination.
+    #pragma omp parallel for default(shared) schedule(static)
+    for (int i = 0; i < npts; i++) {
+        int orig_id = (int)particles[3][i];
+
+        double r_new = r_orig_by_id[orig_id] + (h / 6.0) * (k1r_by_id[orig_id] + 2.0 * k2r_by_id[orig_id] + 2.0 * k3r_by_id[orig_id] + k4r_by_id[orig_id]);
+        double v_new = v_orig_by_id[orig_id] + (h / 6.0) * (k1v_by_id[orig_id] + 2.0 * k2v_by_id[orig_id] + 2.0 * k3v_by_id[orig_id] + k4v_by_id[orig_id]);
+
+        particles[0][i] = r_new;
+        particles[1][i] = v_new;
+    }
+
+    // Free RK4 arrays.
+    free(r_orig_by_id);
+    free(v_orig_by_id);
+    free(k1r_by_id);
+    free(k1v_by_id);
+    free(k2r_by_id);
+    free(k2v_by_id);
+    free(k3r_by_id);
+    free(k3v_by_id);
+    free(k4r_by_id);
+    free(k4v_by_id);
+}
+
+/**
+ * @brief Make a dynamic step using the selected method.
+ */
+void make_dynamic_step() {
+    if (method_select == 1)
+        adaptive_leapfrog_adaptive_levi_civita();
+    else if (method_select == 2)
+        hybrid_adaptive_method();
+    else if (method_select == 3)
+        leapfrog_method_full_step_adaptive();
+    else if (method_select == 4)
+        forest_ruth_yoshida_integration();
+    else if (method_select == 6)
+        leapfrog_method_velocity_half_step();
+    else if (method_select == 7)
+        leapfrog_method_position_half_step();
+    else if (method_select == 8)
+        rk4_method();
+    else if (method_select == 9)
+        euler_step();
 }

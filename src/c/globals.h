@@ -108,6 +108,9 @@ extern double g_halo_mass_param;            ///< Generalized halo mass (Msun), d
 extern double g_cutoff_factor_param;        ///< Generalized rmax factor, defaults to Cored's default.
 extern char   g_profile_type_str[16];       ///< Profile type string ("nfw" or "cored"), default "nfw".
 
+/** @def returns the current active profile's scale radius */
+#define rc_for_sidm() (g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc);
+
 extern int g_scale_radius_param_provided;   ///< Flag: 1 if `--scale-radius` was given by the user.
 extern int g_halo_mass_param_provided;      ///< Flag: 1 if `--halo-mass` was given by the user.
 extern int g_cutoff_factor_param_provided;  ///< Flag: 1 if `--cutoff-factor` was given by the user.
@@ -156,6 +159,8 @@ extern int use_identity_gravity;
  *          1 = Direct spatial convolution (more accurate but slower).
  */
 extern int debug_direct_convolution;
+
+extern int bootstrap_phase_done; ///< Flag indicating if the bootstrap phase of the gravitation simulation has been completed (0=no, 1=yes).
 
 extern double g_active_halo_mass; ///< Active halo mass for N-body force calculations.
 extern double normalization; ///< Mass normalization factor for energy calculations. Calculated based on the integral of the density profile.
@@ -278,5 +283,15 @@ extern int skip_simulation;           ///< Flag to determine if simulation phase
 extern int ext_Ntimes;                ///< Extended time steps potentially needed for trajectory arrays bounds.
 /** @def Steps between major snapshots. */
 #define stepBetweenSnaps (int)floor((double)(total_writes() - 1) / (double)(nout - 1) + 0.5)
+
+// =========================================================================
+// SIMULATION TIMESTEP CALCULATION
+// =========================================================================
+extern double tdyn;
+extern double totaltime;    ///< Total simulation time (Myr)
+extern double dt;           ///< Individual timestep size (Myr)
+extern double current_time; ///< Current simulation time (Myr)
+extern double start_time;   ///< Wall-clock start time for timing
+extern int print_steps[21]; ///< Setup progress reporting steps (array `print_steps` holding step numbers for 0%, 5%, ..., 100%).
 
 #endif // GLOBALS_H

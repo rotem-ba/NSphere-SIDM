@@ -21,4 +21,6 @@
 int adjust_ntimesteps(int Ntimes_initial, int nout, int dtwrite);
 void adjust_Ntimes();
 
+void initialize_simulation_time();
+
 #endif // TIMESTEPS_H

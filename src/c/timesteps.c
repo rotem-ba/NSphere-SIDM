@@ -16,6 +16,7 @@
 
 #include <math.h>
 #include "globals.h"
+#include "utils.h"
 
 /**
  * @brief Adjusts the total number of timesteps to align with desired output snapshot intervals.
@@ -77,4 +78,30 @@ void adjust_Ntimes() {
         printf("Adjusted Number of Time Steps to %d to satisfy parameter constraints.\n", Ntimes);
     /** @brief Calculate total number of write events and steps between major snapshots. */
     ext_Ntimes = Ntimes + dtwrite; // Allocate trajectory arrays slightly larger
+}
+
+/**
+ * @brief SIMULATION TIMESTEP CALCULATION block.
+ * @details Calculates the characteristic dynamical time (`tdyn`) based on core radius (`RC`)
+ *          and total mass (`HALO_MASS`). Uses this to determine the total simulation
+ *          duration (`totaltime = tfinal_factor * tdyn`) and the individual timestep
+ *          size (`dt = totaltime / Ntimes`) used in the integration loop.
+ * @see tdyn
+ * @see totaltime
+ * @see dt
+ */
+void initialize_simulation_time() {
+     double characteristic_radius_for_tdyn = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
+     tdyn = 1.0 / sqrt((VEL_CONV_SQ * G_CONST) * g_active_halo_mass / cube(characteristic_radius_for_tdyn));
+     totaltime = (double)tfinal_factor * tdyn; ///< Total simulation time (Myr)
+     dt = totaltime / ((double)Ntimes);        ///< Individual timestep size (Myr)
+     printf("Dynamical time tdyn = %.4f Myr\n", tdyn);
+     printf("Total simulation time = %.4f Myr (%.1f tdyn)\n", totaltime, (double)tfinal_factor);
+     printf("Timestep dt = %.6f Myr\n\n", dt);
+
+     start_time = omp_get_wtime(); ///< Wall-clock start time for timing
+     /** @brief Setup progress reporting steps (array `print_steps` holding step numbers for 0%, 5%, ..., 100%). */
+     for (int k = 0; k <= 20; k++)
+         print_steps[k] = (int)floor(k * 0.05 * Ntimes); // Calculate steps for progress output
+
 }

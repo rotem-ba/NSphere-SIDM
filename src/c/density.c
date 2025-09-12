@@ -40,6 +40,17 @@
  double rmax = 0.0;
  int num_points = 0;
 
+ // Common spline objects and accelerators
+gsl_spline *splinemass = NULL;
+gsl_interp_accel *enclosedmass = NULL;
+gsl_spline *splinePsi = NULL;
+gsl_interp_accel *Psiinterp = NULL;
+gsl_spline *splinerofPsi = NULL;
+gsl_interp_accel *rofPsiinterp = NULL;
+gsl_interp *g_main_fofEinterp = NULL;
+gsl_interp_accel *g_main_fofEacc = NULL;
+
+
  double fEintegrand(double t, void *params)
  {
      fEintegrand_params *p = (fEintegrand_params *)params;

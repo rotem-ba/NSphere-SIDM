@@ -44,6 +44,16 @@ extern double Psimax;                      ///< Maximum potential (at r=0)
 extern double rmax;                        ///< Maximum radius for profile calculations
 extern int num_points;                     ///< Number of points for spline interpolation
 
+// Common spline objects and accelerators
+extern gsl_spline *splinemass;           ///< Spline for mass profile M(r)
+extern gsl_interp_accel *enclosedmass;   ///< Accelerator for mass spline
+extern gsl_spline *splinePsi;            ///< Spline for potential profile Psi(r)
+extern gsl_interp_accel *Psiinterp;      ///< Accelerator for potential spline
+extern gsl_spline *splinerofPsi;         ///< Spline for inverse potential r(Psi)
+extern gsl_interp_accel *rofPsiinterp;   ///< Accelerator for r(Psi) spline
+extern gsl_interp *g_main_fofEinterp;    ///< Main f(E) interpolator
+extern gsl_interp_accel *g_main_fofEacc; ///< Accelerator for f(E)
+
 
 // =========================================================================
 // ENERGY CALCULATION AND INTEGRATION STRUCTURES

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
-#include "sidm.h"
 #include "globals.h"
+#include "particle_data.h"
+#include "sidm.h"
 #include "logging.h"
 #include "utils.h"
 #include <math.h>
@@ -29,16 +30,15 @@
  *
  * @param vrel [in] Relative velocity between particles (unused in current implementation).
  * @param npts [in] Number of particles in the simulation.
- * @param halo_mass_for_calc [in] Total halo mass (Msun).
- * @param rc_for_calc [in] Scale radius (kpc) (unused in current implementation).
  * @return double Cross-section in kpc^2.
  */
-double sigmatotal(double vrel __attribute__((unused)), int npts, double halo_mass_for_calc, double rc_for_calc __attribute__((unused))) {
+double sigmatotal(double vrel __attribute__((unused)), int npts) {
     double kappa = g_sidm_kappa; // Self-interaction opacity parameter (cm²/g)
+    // double active_profile_rc = rc_for_sidm(); //Unused at the moment
     // Ensure npts is positive to prevent division by zero or negative particle mass
     if (npts <= 0)
         return 0.0;
-    double particle_mass_Msun = halo_mass_for_calc / ((double)npts);
+    double particle_mass_Msun = g_halo_mass_param / ((double)npts);
     if (particle_mass_Msun <= 0)
         return 0.0;
     return 2.089e-10 * kappa * particle_mass_Msun; // Cross-section (kpc²)
@@ -54,24 +54,13 @@ double sigmatotal(double vrel __attribute__((unused)), int npts, double halo_mas
  *          and debugging is enabled. The core scattering functions are responsible for updating
  *          the `g_particle_scatter_state` flags for particles that underwent scattering.
  *
- * @param particles         [in,out] The main particle data array: `particles[component][current_sorted_index]`.
- *                              Modified in-place with post-scattering velocities/angular momenta.
- * @param npts              [in] Total number of particles.
- * @param dt                [in] The simulation timestep (Myr).
- * @param current_sim_time  [in] The current simulation time at the beginning of this step (Myr).
- * @param active_profile_rc [in] The scale radius (kpc) of the currently active profile (NFW or Cored),
- *                              passed to `sigmatotal`.
- * @param current_method_display_num [in] The user-facing display number of the current integration method (for logging).
- * @param bootstrap_phase_active [in] Flag (0 or 1) indicating if a bootstrap phase (e.g., for Adams-Bashforth)
- *                               is active. If 1, SIDM scattering is skipped for this step.
  * @note This function modifies the `particles` array in-place.
  * @note It uses global variables: `g_enable_sidm_scattering`, `g_sidm_execution_mode`,
  *       `g_rng_per_thread`, `g_max_omp_threads_for_rng`, `g_rng`, `g_total_sidm_scatters`,
  *       `g_active_halo_mass`, `g_doDebug`, and `g_particle_scatter_state`.
  */
-void handle_sidm_step(double **particles, int npts, double dt, double current_sim_time, double active_profile_rc, int current_method_display_num,
-                      int bootstrap_phase_active) {
-    if (!g_enable_sidm_scattering || bootstrap_phase_active)
+void handle_sidm_step() {
+    if (!g_enable_sidm_scattering || !bootstrap_phase_done)
         return; // Skip SIDM if disabled or in a bootstrap phase that should skip SIDM
 
     long long Nscatters_in_this_step = 0;
@@ -79,8 +68,7 @@ void handle_sidm_step(double **particles, int npts, double dt, double current_si
     if (g_sidm_execution_mode == 1) { // Parallel
         #ifdef _OPENMP
             if (g_rng_per_thread != NULL && g_max_omp_threads_for_rng > 0)
-                perform_sidm_scattering_parallel(particles, npts, dt, current_sim_time, g_rng_per_thread, g_max_omp_threads_for_rng,
-                                                 &Nscatters_in_this_step, g_active_halo_mass, active_profile_rc);
+                perform_sidm_scattering_parallel(g_rng_per_thread, g_max_omp_threads_for_rng, &Nscatters_in_this_step);
             else {
                 log_message("ERROR", "SIDM Parallel mode selected but per-thread RNGs not available. Skipping SIDM for step.");
                 Nscatters_in_this_step = 0;
@@ -90,8 +78,7 @@ void handle_sidm_step(double **particles, int npts, double dt, double current_si
             log_message("WARNING", "SIDM Parallel mode selected but OpenMP not enabled. Running SIDM serially.");
             gsl_rng *rng_for_serial_fallback = (g_rng_per_thread != NULL && g_rng_per_thread[0] != NULL) ? g_rng_per_thread[0] : g_rng;
             if (rng_for_serial_fallback != NULL)
-                perform_sidm_scattering_serial(particles, npts, dt, current_sim_time, rng_for_serial_fallback, &Nscatters_in_this_step,
-                                               g_active_halo_mass, active_profile_rc);
+                perform_sidm_scattering_serial(rng_for_serial_fallback, &Nscatters_in_this_step);
             else {
                 log_message("ERROR", "SIDM Serial fallback: No suitable RNG available. Skipping SIDM for step.");
                 Nscatters_in_this_step = 0;
@@ -100,8 +87,7 @@ void handle_sidm_step(double **particles, int npts, double dt, double current_si
     } else { // Serial SIDM execution
         gsl_rng *rng_for_serial = (g_rng_per_thread != NULL && g_rng_per_thread[0] != NULL) ? g_rng_per_thread[0] : g_rng;
         if (rng_for_serial != NULL)
-            perform_sidm_scattering_serial(particles, npts, dt, current_sim_time, rng_for_serial, &Nscatters_in_this_step, g_active_halo_mass,
-                                           active_profile_rc);
+            perform_sidm_scattering_serial(rng_for_serial, &Nscatters_in_this_step);
         else {
             log_message("ERROR", "SIDM Serial mode: No suitable RNG available. Skipping SIDM for step.");
             Nscatters_in_this_step = 0;
@@ -111,7 +97,7 @@ void handle_sidm_step(double **particles, int npts, double dt, double current_si
     g_total_sidm_scatters += Nscatters_in_this_step;
 
     if (Nscatters_in_this_step > 0 && g_doDebug)
-        log_message("DEBUG", "Method %d Step: %lld SIDM scatters this step, %lld total", current_method_display_num, Nscatters_in_this_step,
+        log_message("DEBUG", "Method %d Step: %lld SIDM scatters this step, %lld total", method_select, Nscatters_in_this_step,
                     g_total_sidm_scatters);
 }
 
@@ -141,14 +127,10 @@ void handle_sidm_step(double **particles, int npts, double dt, double current_si
  *                           - Component 2: angular momentum (kpc × km/s)
  *                           - Component 3: original particle ID
  * @param npts [in] Number of particles in the simulation.
- * @param dt [in] Current timestep duration (Myr).
- * @param current_time [in] Current simulation time (Myr) [unused but kept for API compatibility].
  * @param rng [in] GSL random number generator instance for all stochastic processes.
  * @param Nscatter_total_step [out] Pointer to a long long to accumulate total scattering events this timestep.
- * @param halo_mass_for_sidm [in] Total halo mass (Msun) for the active profile, passed to `sigmatotal`.
- * @param rc_for_sidm [in] Scale radius (kpc) for the active profile, passed to `sigmatotal`.
  */
-void perform_sidm_scattering_serial(double **particles, int npts, double dt, double current_time __attribute__((unused)), gsl_rng *rng, long long *Nscatter_total_step, double halo_mass_for_sidm __attribute__((unused)), double rc_for_sidm __attribute__((unused))) {
+void perform_sidm_scattering_serial(gsl_rng *rng, long long *Nscatter_total_step) {
     long long Nscatters_this_call = 0;
     int i;
 
@@ -181,7 +163,7 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
             double vrel_val = sqrt(dotproduct(Vrel_vec, Vrel_vec));
 
             // Calculate interaction rate: σ × v_rel
-            partialprobability[m] = sigmatotal(vrel_val, npts, halo_mass_for_sidm, rc_for_sidm) * vrel_val;
+            partialprobability[m] = sigmatotal(vrel_val, npts) * vrel_val;
             probability_sum_term += partialprobability[m];
         }
 
@@ -343,16 +325,12 @@ void perform_sidm_scattering_serial(double **particles, int npts, double dt, dou
  * @param particles             [in,out] Main particle data array: `particles[component][current_sorted_index]`.
  *                              Modified in-place with post-scattering velocities/angular momenta.
  * @param npts                  [in] Total number of particles.
- * @param dt                    [in] Simulation timestep (Myr), used in probability calculation.
- * @param current_time          [in] Current simulation time (Myr). Marked `unused` but available for future use.
  * @param rng_per_thread_list   [in] Array of GSL RNG states, one for each OpenMP thread.
  * @param num_threads_for_rng   [in] The number of allocated RNGs in `rng_per_thread_list` (should match max threads).
  * @param Nscatter_total_step   [out] Pointer to a long long to accumulate the total number of scatter events
  *                              that occurred in this timestep.
- * @param halo_mass_for_sidm    [in] Total halo mass (Msun) for the active profile, passed to `sigmatotal`.
- * @param rc_for_sidm           [in] Scale radius (kpc) for the active profile, passed to `sigmatotal`.
  */
-void perform_sidm_scattering_parallel(double **particles, int npts, double dt, double current_time __attribute__((unused)), gsl_rng **rng_per_thread_list, int num_threads_for_rng, long long *Nscatter_total_step, double halo_mass_for_sidm, double rc_for_sidm) {
+void perform_sidm_scattering_parallel(gsl_rng **rng_per_thread_list, int num_threads_for_rng, long long *Nscatter_total_step) {
     long long Nscatters_this_call_atomic = 0; // Accumulated in parallel reduction
 
     // Buffer for storing scattering event outcomes from all threads
@@ -432,7 +410,7 @@ void perform_sidm_scattering_parallel(double **particles, int npts, double dt, d
                 threevector Vm = to_vector(Vmperp, 0.0, particles[1][partner_idx]);
                 threevector Vrel_vec = vector_diff(Vi, Vm);
                 double vrel_val = sqrt(dotproduct(Vrel_vec, Vrel_vec));
-                partialprobability[m] = sigmatotal(vrel_val, npts, halo_mass_for_sidm, rc_for_sidm) * vrel_val;
+                partialprobability[m] = sigmatotal(vrel_val, npts) * vrel_val;
                 probability_sum_term += partialprobability[m];
             }
 

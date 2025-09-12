@@ -45,6 +45,8 @@
 #include "cli.h"
 #include "io.h"
 #include "timesteps.h"
+#include "rng.h"
+#include "tidal_stripping.h"
 #include <float.h> // For DBL_MAX
 #ifdef _WIN32
 #include <windows.h>
@@ -177,8 +179,7 @@ printf("  \n");
 
     fill_suffix_tags();
     /** @brief Set flag `skip_file_writes=1` if in restart mode (`g_doRestart`). */
-    if (g_doRestart)
-    {
+    if (g_doRestart) {
         printf("Restart mode: Skipping simulation phase and file writes, proceeding directly to data product generation.\n\n");
         skip_file_writes = 1;
     }
@@ -198,20 +199,9 @@ printf("  \n");
      *          and will be populated by whichever profile pathway is chosen.
      */
 
-    int i = 0;                          ///< Loop counter
     double result, error;               ///< GSL integration results
     double calE;                        ///< Energy value for calculations
     gsl_integration_workspace *w = NULL; ///< GSL integration workspace
-
-    // Common spline objects and accelerators
-    gsl_spline *splinemass = NULL;      ///< Spline for mass profile M(r)
-    gsl_interp_accel *enclosedmass = NULL; ///< Accelerator for mass spline
-    gsl_spline *splinePsi = NULL;       ///< Spline for potential profile Psi(r)
-    gsl_interp_accel *Psiinterp = NULL; ///< Accelerator for potential spline
-    gsl_spline *splinerofPsi = NULL;    ///< Spline for inverse potential r(Psi)
-    gsl_interp_accel *rofPsiinterp = NULL; ///< Accelerator for r(Psi) spline
-    gsl_interp *g_main_fofEinterp = NULL;  ///< Main f(E) interpolator
-    gsl_interp_accel *g_main_fofEacc = NULL; ///< Accelerator for f(E)
 
     // File handling
     char fname[256];                    ///< Buffer for file names
@@ -221,55 +211,10 @@ printf("  \n");
      * @brief Allocate main particle data array before profile selection.
      * @details This ensures both NFW and Cored pathways use the same particles array.
      */
-    particles = (double **)malloc(5 * sizeof(double *));
-    if (particles == NULL)
-        raise_error("ERROR: Memory allocation failed for particle array pointer\n", i);
-    for (i = 0; i < 5; i++) {
-        particles[i] = (double *)malloc(npts_initial * sizeof(double));
-        if (particles[i] == NULL)
-            raise_error("ERROR: Memory allocation failed for particles[%d]\n", i);
-    }
+    allocate_particles_memory(npts_initial);
 
-    /**
-     * @brief Initialize random number generator for particle generation.
-     * @details Sets up the GSL Random Number Generator environment and allocates
-     *          the global GSL RNG state used throughout the simulation.
-     *          Needed for the Sample Generator if not reading ICs from file.
-     */
-    gsl_rng_env_setup();                           // Setup GSL RNG environment
-    const gsl_rng_type * T_rng = gsl_rng_default;  // Use default RNG type
-    g_rng = gsl_rng_alloc(T_rng);                  // Allocate global GSL RNG state
-    if (g_rng == NULL)                             // Check allocation success
-        raise_error("Error allocating GSL RNG.\n");
-
-    // Seed the global g_rng (used for ICs and Serial SIDM)
-    gsl_rng_set(g_rng, g_initial_cond_seed);       // Use the determined IC seed for g_rng
-    log_message("INFO", "Global g_rng (intended primarily for IC generation) seeded with %lu", g_initial_cond_seed);
-
-    // Initialize per-thread GSL RNGs if OpenMP is enabled
-    #ifdef _OPENMP
-        g_max_omp_threads_for_rng = omp_get_max_threads();
-        if (g_max_omp_threads_for_rng <= 0) g_max_omp_threads_for_rng = 1; // Safety
-    #else
-        g_max_omp_threads_for_rng = 1;
-    #endif
-
-    g_rng_per_thread = (gsl_rng **)malloc(g_max_omp_threads_for_rng * sizeof(gsl_rng *));
-    if (g_rng_per_thread == NULL)
-        raise_error("Error: Failed to allocate memory for per-thread RNG array.\n");
-
-    const gsl_rng_type *T_rng_thread = gsl_rng_default;
-
-    for (int i_rng = 0; i_rng < g_max_omp_threads_for_rng; ++i_rng) {
-        g_rng_per_thread[i_rng] = gsl_rng_alloc(T_rng_thread);
-        if (g_rng_per_thread[i_rng] == NULL) {
-            for (int k_rng = 0; k_rng < i_rng; ++k_rng) gsl_rng_free(g_rng_per_thread[k_rng]);
-            free(g_rng_per_thread);
-            raise_error("Error: Failed to allocate GSL RNG for thread %d.\n", i_rng);
-        }
-        gsl_rng_set(g_rng_per_thread[i_rng], g_sidm_seed + (unsigned long int)i_rng);
-    }
-    log_message("INFO", "Initialized %d per-thread GSL RNGs (for SIDM) using base SIDM seed %lu", g_max_omp_threads_for_rng, g_sidm_seed);
+    init_rng();
+    init_rng_per_thread();
 
     if (g_use_nfw_profile) {
         log_message("INFO", "Starting IC generation using NFW-like profile pathway.");
@@ -1097,18 +1042,8 @@ cleanup_diag_iteration:
 
             /**
              * @brief Allocate memory for the particle data array.
-             * @details 2D array particles[5][npts_initial] where:
-             *          [0] = radius, [1] = velocity, [2] = angular momentum,
-             *          [3] = particle ID, [4] = orientation (mu)
              */
-            particles = (double **)malloc(5 * sizeof(double *));
-            if (particles == NULL)
-                raise_error("NFW_PATH: Memory allocation failed for particle array\n");
-            for (i = 0; i < 5; i++) {
-                particles[i] = (double *)malloc(npts_initial * sizeof(double));
-                if (particles[i] == NULL)
-                    raise_error("NFW_PATH: Memory allocation failed for particles[%d]\n", i);
-            }
+            allocate_particles_memory(npts_initial);
 
             /**
              * @brief Calculate maximum velocity squared at each radius for rejection sampling.
@@ -1684,7 +1619,7 @@ cleanup_diag_iteration:
     F_for_psi_cored.function = &Psiintegrand;
     F_for_psi_cored.params = &psi_params_cored;
 
-    for (i = 0; i < num_points; i++) {
+    for (int i = 0; i < num_points; i++) {
         double r = (double)i * rmax / ((double)num_points);
         double r1 = fmax(r, g_cored_profile_rc / 1000000.0);
         gsl_integration_qagiu(&F_for_psi_cored, r1, 0, 1e-12, 1000, w, &result, &error);
@@ -1729,7 +1664,7 @@ cleanup_diag_iteration:
     F.function = &fEintegrand;
     fEintegrand_params params = {calE, splinerofPsi, splinemass, rofPsiinterp, enclosedmass};
     F.params = &params;
-    for (i = 0; i < num_points; i++) {
+    for (int i = 0; i < num_points; i++) {
         double t = sqrt(calE - Psimin) * ((double)i) / ((double)num_points);
         fprintf_bin(fp, "%f %f\n", t, fEintegrand(t, &params));
     }
@@ -1739,7 +1674,7 @@ cleanup_diag_iteration:
     innerintegrandvalues[0] = 0.0;
     Evalues[0] = Psimin;
 
-    for (i = 1; i <= num_points; i++) {
+    for (int i = 1; i <= num_points; i++) {
         calE = Psimin + (Psimax - Psimin) * ((double)i) / ((double)num_points);
         fEintegrand_params params2 = {calE, splinerofPsi, splinemass, rofPsiinterp, enclosedmass};
         F.params = &params2;
@@ -1760,7 +1695,7 @@ cleanup_diag_iteration:
      *          Component indices: 0=radius, 1=velocity magnitude (initially), 2=ang. mom.,
      *          3=ID (initial index 0..npts_initial-1), 4=orientation(mu).
      */
-    for (i = 0; i < npts_initial; i++) {
+    for (int i = 0; i < npts_initial; i++) {
         particles[0][i] = 0.0;
         particles[1][i] = 0.0;
         particles[2][i] = 0.0;
@@ -1781,57 +1716,35 @@ cleanup_diag_iteration:
     char seed_filepath[512];
     FILE *fp_seed;
 
-    // Determine Initial Conditions Seed
-    if (!g_initial_cond_seed_provided) {
-        if (g_master_seed_provided)
-            g_initial_cond_seed = g_master_seed + 1; // Deterministic offset
-        else if (g_attempt_load_seeds) {
-            get_full_filename(g_initial_cond_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
-            fp_seed = fopen(seed_filepath, "r");
-            if (fp_seed) {
-                if (fscanf(fp_seed, "%lu", &g_initial_cond_seed) == 1)
-                    log_message("INFO", "Loaded initial conditions seed %lu from %s", g_initial_cond_seed, seed_filepath);
-                else {
-                    g_initial_cond_seed = current_time_pid_seed + 100; // Fallback if read fails
-                    log_message("WARNING", "Failed to read IC seed from %s, generating new: %lu", seed_filepath, g_initial_cond_seed);
-                }
-                fclose(fp_seed);
-            } else {
-                g_initial_cond_seed = current_time_pid_seed + 100; // File not found, generate
-                log_message("INFO", "No IC seed file found, generating new: %lu", g_initial_cond_seed);
-            }
-        } else {
-            g_initial_cond_seed = current_time_pid_seed + 100; // Default generation
-            log_message("INFO", "Generating new IC seed: %lu", g_initial_cond_seed);
-        }
-    } else
-        log_message("INFO", "Using user-provided IC seed: %lu", g_initial_cond_seed);
+    // // Determine Initial Conditions Seed
+    // if (!g_initial_cond_seed_provided) {
+    //     if (g_master_seed_provided)
+    //         g_initial_cond_seed = g_master_seed + 1; // Deterministic offset
+    //     else if (g_attempt_load_seeds) {
+    //         get_full_filename(g_initial_cond_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
+    //         fp_seed = fopen(seed_filepath, "r");
+    //         if (fp_seed) {
+    //             if (fscanf(fp_seed, "%lu", &g_initial_cond_seed) == 1)
+    //                 log_message("INFO", "Loaded initial conditions seed %lu from %s", g_initial_cond_seed, seed_filepath);
+    //             else {
+    //                 g_initial_cond_seed = current_time_pid_seed + 100; // Fallback if read fails
+    //                 log_message("WARNING", "Failed to read IC seed from %s, generating new: %lu", seed_filepath, g_initial_cond_seed);
+    //             }
+    //             fclose(fp_seed);
+    //         } else {
+    //             g_initial_cond_seed = current_time_pid_seed + 100; // File not found, generate
+    //             log_message("INFO", "No IC seed file found, generating new: %lu", g_initial_cond_seed);
+    //         }
+    //     } else {
+    //         g_initial_cond_seed = current_time_pid_seed + 100; // Default generation
+    //         log_message("INFO", "Generating new IC seed: %lu", g_initial_cond_seed);
+    //     }
+    // } else
+    //     log_message("INFO", "Using user-provided IC seed: %lu", g_initial_cond_seed);
 
-    // Determine SIDM Seed
-    if (!g_sidm_seed_provided) {
-        if (g_master_seed_provided)
-            g_sidm_seed = g_master_seed + 2; // Deterministic offset, different from IC seed
-        else if (g_attempt_load_seeds) {
-            get_full_filename(g_sidm_seed_filename_base, 1, seed_filepath, sizeof(seed_filepath));
-            fp_seed = fopen(seed_filepath, "r");
-            if (fp_seed) {
-                if (fscanf(fp_seed, "%lu", &g_sidm_seed) == 1) {
-                    log_message("INFO", "Loaded SIDM seed %lu from %s", g_sidm_seed, seed_filepath);
-                } else {
-                    g_sidm_seed = current_time_pid_seed + 200; // Fallback
-                    log_message("WARNING", "Failed to read SIDM seed from %s, generating new: %lu", seed_filepath, g_sidm_seed);
-                }
-                fclose(fp_seed);
-            } else {
-                g_sidm_seed = current_time_pid_seed + 200; // File not found, generate
-                log_message("INFO", "No SIDM seed file found, generating new: %lu", g_sidm_seed);
-            }
-        } else {
-            g_sidm_seed = current_time_pid_seed + 200; // Default generation
-            log_message("INFO", "Generating new SIDM seed: %lu", g_sidm_seed);
-        }
-    } else
-        log_message("INFO", "Using user-provided SIDM seed: %lu", g_sidm_seed);
+    set_seed(&g_initial_cond_seed, "IC", g_initial_cond_seed_provided, g_initial_cond_seed_filename_base, current_time_pid_seed);
+    set_seed(&g_sidm_seed, "SIDM", g_sidm_seed_provided, g_sidm_seed_filename_base, current_time_pid_seed);
+    // set_sidm_seed(current_time_pid_seed, seed_filepath, fp_seed);
 
     // If --readinit is used, we should generally use a specified/loaded SIDM seed
     // or a newly generated one, NOT one derived from IC seed, as ICs are fixed.
@@ -1915,15 +1828,11 @@ cleanup_diag_iteration:
      *          - If `g_doRestart` is true: Skips generation (assumes simulation data exists or will be checked).
      *          - Otherwise: Generates new particles using the Sample Generator.
      */
-
-    if (doReadInit)
-    {
+    if (doReadInit) {
         /** @brief Load existing initial conditions from specified file. */
         printf("Reading initial conditions from %s...\n", readInitFilename);
         read_initial_conditions(particles, npts_initial, readInitFilename);
-    }
-    else if (!g_doRestart) // Only generate if NOT reading init file and NOT restarting
-    {
+    } else if (!g_doRestart) { // Only generate if NOT reading init file and NOT restarting
         /**
          * @brief SAMPLE GENERATOR block.
          * @details Generates the initial particle distribution (radius, velocity magnitude, orientation)
@@ -1989,7 +1898,7 @@ cleanup_diag_iteration:
          * @note Uses GSL random number generation. For thread-safety in parallel code,
          *       thread-specific RNG states should be used instead of the global state.
          */
-        for (i = 0; i < npts_initial; i++) { // Loop over particles to generate
+        for (int i = 0; i < npts_initial; i++) { // Loop over particles to generate
             /** @note 1. Choose radius `r` using inverse transform sampling on M(r). */
             double mass_frac_sample = gsl_rng_uniform(g_rng) * 0.999999; // Avoid sampling exactly M_total
             double mass_sample = mass_frac_sample * g_cored_profile_halo_mass;
@@ -2044,56 +1953,7 @@ cleanup_diag_iteration:
     if (doWriteInit && !g_doRestart)
         write_initial_conditions(particles, npts_initial, writeInitFilename);
 
-    /**
-     * @brief TIDAL STRIPPING IMPLEMENTATION block.
-     * @details If `tidal_fraction` > 0 and not in restart mode, simulates tidal stripping by removing the outermost
-     *          fraction of particles based on radius. It first sorts the `npts_initial`
-     *          particles by radius, then keeps only the innermost `npts` particles.
-     *          It reallocates the `particles` array to the final size `npts` and remaps
-     *          the original indices stored in `particles[3]` to ranks [0, npts-1] using
-     *          `reassign_orig_ids_with_rank`.
-     * @see reassign_orig_ids_with_rank
-     * @see sort_particles_with_alg
-     */
-    if (!g_doRestart){ // Skip stripping if restarting
-        /** @note Only show stripping message if `--ftidal` was used. */
-        if (tidal_fraction > 0.0)
-            printf("Tidal stripping: sorting and retaining inner %.1f%% of particles...\n", (1.0 - tidal_fraction) * 100.0);
-
-        /** @note Sort all `npts_initial` particles by radius using basic quadsort. */
-        sort_particles_with_alg(particles, npts_initial, "quadsort"); // Sorts by particles[0]
-
-        /** @note Allocate new smaller arrays (`final_particles`) for the `npts` particles to keep. */
-        double **final_particles = (double **)malloc(5 * sizeof(double *));
-        if (final_particles == NULL)
-            raise_error("Memory allocation failed for final_particles\n");
-
-        /** @brief Copy innermost `npts` particles to final arrays and replace `particles` pointers. */
-        for (int i = 0; i < 5; i++){ // Loop over components
-            final_particles[i] = (double *)malloc(npts * sizeof(double));
-            if (final_particles[i] == NULL)
-                raise_error("Memory allocation failed for final_particles[%d]\n", i);
-            /** @note Copy only the first `npts` elements (innermost after sort). */
-            memcpy(final_particles[i], particles[i], npts * sizeof(double));
-
-            /** @note Free original oversized array and update `particles[i]` pointer. */
-            free(particles[i]);                // Free the original oversized array
-            particles[i] = final_particles[i]; // particles[i] now points to the smaller array
-        }
-        free(final_particles); // Free the temporary ** structure, not the data arrays
-
-        /** @note Only show completion message if `--ftidal` was used. */
-        if (tidal_fraction > 0.0) {
-            printf("Tidal stripping complete: %d particles retained.\n\n", npts);
-        }
-
-        /**
-         * @brief Remap original IDs (now in `particles[3]` for the kept particles) to ranks [0, npts-1].
-         * @details Ensures `particles[3][i]` holds the final rank ID (0 to npts-1)
-         *          for the particle currently at index `i` after stripping and sorting.
-         */
-        reassign_orig_ids_with_rank(particles[3], npts);
-    } // End tidal stripping block (!g_doRestart)
+    tidal_strip(npts_initial);
 
     /**
      * @brief VELOCITY UNIT CONVERSION and ORIENTATION block.
@@ -2107,7 +1967,7 @@ cleanup_diag_iteration:
      * @see kmsec_to_kpcmyr
      */
     if (!g_doRestart)
-        for (i = 0; i < npts; i++) { // Loop over final npts particles
+        for (int i = 0; i < npts; i++) { // Loop over final npts particles
             // particles[1] holds velocity magnitude 'v' from Sample Generator
             // particles[4] holds orientation 'mu' from Sample Generator
             particles[1][i] *= particles[4][i]; ///< Apply orientation: v_rad = v * mu
@@ -2146,39 +2006,7 @@ cleanup_diag_iteration:
         printf("Wrote initial particle state to %s\n", filename);
     } // End skip_file_writes block for particles.dat
 
-    /**
-     * @brief SIMULATION TIMESTEP CALCULATION block.
-     * @details Calculates the characteristic dynamical time (`tdyn`) based on core radius (`RC`)
-     *          and total mass (`HALO_MASS`). Uses this to determine the total simulation
-     *          duration (`totaltime = tfinal_factor * tdyn`) and the individual timestep
-     *          size (`dt = totaltime / Ntimes`) used in the integration loop.
-     * @see tdyn
-     * @see totaltime
-     * @see dt
-     */
-    double characteristic_radius_for_tdyn;
-    if (g_use_nfw_profile)
-        characteristic_radius_for_tdyn = g_nfw_profile_rc; // Set from g_scale_radius_param
-    else
-        characteristic_radius_for_tdyn = g_cored_profile_rc; // Set from g_scale_radius_param
-    double tdyn = 1.0 / sqrt((VEL_CONV_SQ * G_CONST) * g_active_halo_mass / cube(characteristic_radius_for_tdyn));
-    double totaltime = (double)tfinal_factor * tdyn; ///< Total simulation time (Myr)
-    double dt = totaltime / ((double)Ntimes);        ///< Individual timestep size (Myr)
-    printf("Dynamical time tdyn = %.4f Myr\n", tdyn);
-    printf("Total simulation time = %.4f Myr (%.1f tdyn)\n", totaltime, (double)tfinal_factor);
-    printf("Timestep dt = %.6f Myr\n\n", dt);
-
-    /** @brief Initialize simulation time tracking and progress reporting. */
-    double time = 0.0;                   ///< Current simulation time (Myr)
-    double start_time = omp_get_wtime(); ///< Wall-clock start time for timing
-    /** @brief Setup progress reporting steps (array `print_steps` holding step numbers for 0%, 5%, ..., 100%). */
-    int print_steps[21];
-    for (int k = 0; k <= 20; k++)
-        print_steps[k] = (int)floor(k * 0.05 * Ntimes); // Calculate steps for progress output
-
-
-
-    /** @brief Set up simulation tracking variables. */
+    initialize_simulation_time();
 
     /**
      * @brief TRAJECTORY TRACKING SETUP block.
@@ -2197,11 +2025,11 @@ cleanup_diag_iteration:
     // Index `p` corresponds to the particle with final_rank_id `p`.
     double **trajectories = (double **)malloc(upper_npts_num_traj * sizeof(double *)); // Radius (kpc)
     // Add checks for allocation failure
-    for (i = 0; i < upper_npts_num_traj; i++)
+    for (int i = 0; i < upper_npts_num_traj; i++)
         trajectories[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
     double **energies = (double **)malloc(upper_npts_num_traj * sizeof(double *)); // Relative Energy E_rel (per unit mass)
     // Add checks for allocation failure
-    for (i = 0; i < upper_npts_num_traj; i++)
+    for (int i = 0; i < upper_npts_num_traj; i++)
         energies[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
 
     /** @brief Allocate arrays for additional tracked properties [tracked_particle_index][time_step]. */
@@ -2216,7 +2044,7 @@ cleanup_diag_iteration:
     // Add checks for allocation failure
 
     // Allocate memory for each particle's timestep history
-    for (i = 0; i < upper_npts_num_traj; i++) {
+    for (int i = 0; i < upper_npts_num_traj; i++) {
         velocities_arr[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
         mu_arr[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // Add checks for allocation failure
         E_arr[i] = (double *)malloc(ext_Ntimes * sizeof(double)); // If kept, needs allocation check
@@ -2241,7 +2069,7 @@ cleanup_diag_iteration:
     // Add checks for allocation failure
 
     /** @brief Calculate initial E_rel and L for each particle and store by final rank ID. */
-    for (i = 0; i < npts; i++) { // Loop through particles 0..npts-1 (current index 'i')
+    for (int i = 0; i < npts; i++) { // Loop through particles 0..npts-1 (current index 'i')
         double rr = particles[0][i];            // Radius (at current index i)
         double vrad = particles[1][i];          // Radial velocity (at current index i)
         double ell = particles[2][i];           // Angular momentum (at current index i)
@@ -2449,7 +2277,7 @@ cleanup_diag_iteration:
      *          This prepares the block storage for the first chunk of simulation data.
      * @note Assumes L_block is indexed [step_in_block * npts + final_rank_id].
      */
-    for (i = 0; i < npts; i++) { // Loop over final_rank_id 'i'
+    for (int i = 0; i < npts; i++) { // Loop over final_rank_id 'i'
         double l_val = L_i_arr[i];
         float lf = (float)l_val;
         // Store initial L in the slot for step 0 for this final_rank_id
@@ -2478,7 +2306,7 @@ cleanup_diag_iteration:
             double psi_val = evaluatespline(splinePsi, Psiinterp, r0) * VEL_CONV_SQ;
 
             /** @brief Calculate initial approximate energy E = Psi - KE. */
-            double E_approx0 = psi_val - 0.5 * (v0 * v0 + (l0 * l0) / (r0 * r0));
+            double E_approx0 = psi_val - 0.5 * sqr(to_velocity(v0,l0,r0));
             double time0 = 0.0;
 
             /** @brief Store initial energy in debug arrays at snapshot index 0. */
@@ -2496,9 +2324,7 @@ cleanup_diag_iteration:
      *          corresponds to its rank based on radius.
      */
     #pragma omp single
-    {
-        sort_particles_with_alg(particles, npts, "quadsort");
-    }
+    sort_particles_with_alg(particles, npts, "quadsort");
 
     /**
      * @brief Main Simulation Timestepping Loop.
@@ -2522,873 +2348,18 @@ cleanup_diag_iteration:
      *          where only post-processing of existing `all_particle_data.dat` is required).
      */
     if (!skip_simulation) {
-        for (int j = 0; j < Ntimes + dtwrite; j++) { // Main time loop
-            int current_step;
-
-            // Method_select = 1; Flag now.
-            if (method_select == 9) {//
-/****************************/
-// EULER METHOD
-/****************************/
-#pragma omp single
-                {
-                    sort_particles(particles, npts);
-                }
-
-#pragma omp barrier
-
-#pragma omp parallel for default(shared) schedule(static)
-                {
-                    for (int idx = 0; idx < npts; idx++)
-                    {
-                        int orig_id = (int)particles[3][idx];
-                        inverse_map[orig_id] = idx;
-                    }
-                }
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double vrad = particles[1][i];
-                    double ell = particles[2][i];
-                    double drdt = vrad;
-
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-
-                    particles[0][i] += drdt * dt;
-                    particles[1][i] += dvdt * dt;
-                }
-
-                // SIDM scattering: profile-aware scale radius selection and execution mode handling
-                double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
-
-#pragma omp single
-                {
-                    current_step = j + 1;
-                    time += dt;
-                }
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-                for (int p = 0; p < upper_npts_num_traj; p++)
-                {
-                    int idx = inverse_map[p];
-                    double rr = particles[0][idx];
-                    double vrad = particles[1][idx];
-                    double ell = particles[2][idx];
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    Psi_val *= VEL_CONV_SQ;
-                    double vtot = sqrt(vrad * vrad + (ell * ell) / (rr * rr));
-                    double mu_val = vrad / vtot;
-                    double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
-                    double l_current = ell;
-                    trajectories[p][j] = rr;
-                    energies[p][j] = E_rel;
-                    velocities_arr[p][j] = vrad;
-                    mu_arr[p][j] = mu_val;
-                    E_arr[p][j] = E_rel;
-                    L_arr[p][j] = l_current;
-                }
-            }
-            else if (method_select == 7)//
-            {
-                /****************************/
-                // LEAPFROG METHOD (POSITION HALF STEP)
-                /****************************/
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    particles[0][i] += particles[1][i] * (dt / 2.0);
-                }
-
-#pragma omp single
-                {
-                    sort_particles(particles, npts);
-                }
-
-#pragma omp barrier
-#pragma omp parallel for default(shared) schedule(static)
-                for (int idx = 0; idx < npts; idx++)
-                {
-                    int orig_id = (int)particles[3][idx];
-                    inverse_map[orig_id] = idx;
-                }
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double ell = particles[2][i];
-
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-
-                    particles[1][i] += dvdt * dt;
-                    particles[0][i] += particles[1][i] * (dt / 2.0);
-                }
-
-                // SIDM scattering after leapfrog drift completion
-                double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
-
-#pragma omp single
-                {
-                    current_step = j + 1;
-                    time += dt;
-                }
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-
-                for (int p = 0; p < upper_npts_num_traj; p++)
-                {
-                    int idx = inverse_map[p];
-                    double rr = particles[0][idx];
-                    double vrad = particles[1][idx];
-                    double ell = particles[2][idx];
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    Psi_val *= VEL_CONV_SQ;
-                    double vtot = sqrt(vrad * vrad + (ell * ell) / (rr * rr));
-                    double mu_val = vrad / vtot;
-                    double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
-                    double l_current = ell;
-                    trajectories[p][j] = rr;
-                    energies[p][j] = E_rel;
-                    velocities_arr[p][j] = vrad;
-                    mu_arr[p][j] = mu_val;
-                    E_arr[p][j] = E_rel;
-                    L_arr[p][j] = l_current;
-                }
-            }
-            else if (method_select == 6)//
-            {
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double vrad = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-
-                    particles[1][i] = vrad + 0.5 * dvdt * dt;
-                }
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double vrad = particles[1][i];
-                    particles[0][i] += vrad * dt;
-                }
-
-#pragma omp single
-                {
-                    sort_particles(particles, npts);
-                }
-#pragma omp barrier
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (int idx = 0; idx < npts; idx++)
-                {
-                    int orig_id = (int)particles[3][idx];
-                    inverse_map[orig_id] = idx;
-                }
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double vrad = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-
-                    particles[1][i] = vrad + 0.5 * dvdt * dt;
-                }
-
-                // SIDM scattering after velocity half-step completion
-                double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
-
-#pragma omp single
-                {
-                    current_step = j + 1;
-                    time += dt;
-                }
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-
-                for (int p = 0; p < upper_npts_num_traj; p++)
-                {
-                    int idx = inverse_map[p];
-                    double rr = particles[0][idx];
-                    double vrad = particles[1][idx];
-                    double ell = particles[2][idx];
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    Psi_val *= VEL_CONV_SQ;
-                    double vtot = sqrt(vrad * vrad + (ell * ell) / (rr * rr));
-                    double mu_val = vrad / vtot;
-                    double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
-                    double l_current = ell;
-                    trajectories[p][j] = rr;
-                    energies[p][j] = E_rel;
-                    velocities_arr[p][j] = vrad;
-                    mu_arr[p][j] = mu_val;
-                    E_arr[p][j] = E_rel;
-                    L_arr[p][j] = l_current;
-                }
-            }
-            else if (method_select == 3)//
-            {
-                /**
-                 * @brief Full-step adaptive leapfrog integration.
-                 * @details Performs single step integration from (r_n, v_n) to (r_{n+1}, v_{n+1})
-                 *          using adaptive timestep control and the doAdaptiveFullLeap function.
-                 */
-
-                double velocity_tol = 1.0e-5;
-                double radius_tol = 1.0e-5;
-                // Int max_subdiv = 8383608;
-                int max_subdiv = 1;
-                int out_type = 0;
-
-                /**
-                 * @brief Radial sorting phase - organize particles by radius.
-                 * @details Sorting improves cache locality and force calculation efficiency.
-                 */
-#pragma omp single
-                {
-                    sort_particles(particles, npts);
-                }
-                /**
-                 * @brief Main integration loop - adaptive leapfrog update for each particle.
-                 * @details Each particle is advanced independently using adaptive timestepping.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double v = particles[1][i];
-                    double ell = particles[2][i];
-
-                    // One full step => h = dt.
-                    double r_new, v_new;
-                    doAdaptiveFullLeap(
-                        i, npts,
-                        r, v,
-                        ell,
-                        dt,
-                        radius_tol, velocity_tol,
-                        max_subdiv,
-                        G_CONST,
-                        out_type,
-                        &r_new, &v_new);
-
-                    particles[0][i] = r_new;
-                    particles[1][i] = v_new;
-                }
-
-                /**
-                 * Particle sorting after integration (commented out)
-                 *
-                 * Optional re-sorting could be performed after each full step
-                 * Currently disabled for performance reasons
-                 */
-                // #pragma omp single.
-                // Sort_particles(particles, npts);.
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (int idx = 0; idx < npts; idx++)
-                {
-                    int orig_id = (int)particles[3][idx];
-                    inverse_map[orig_id] = idx;
-                }
-                // }
-
-                // SIDM scattering after adaptive leapfrog completion
-                double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
-
-                /**
-                 * @brief Timestep wrap-up phase - update time and record particle states.
-                 * @details Updates global time counter and records trajectory information
-                 *          for selected particles.
-                 */
-#pragma omp single
-                {
-                    current_step = j + 1;
-                    time += dt;
-                }
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-
-                for (int p = 0; p < upper_npts_num_traj; p++)
-                {
-                    int idx = inverse_map[p];
-                    double rr = particles[0][idx];
-                    double vrad = particles[1][idx];
-                    double ell = particles[2][idx];
-
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    Psi_val *= VEL_CONV_SQ;
-
-                    double vtot = sqrt(vrad * vrad + (ell * ell) / (rr * rr));
-                    double mu_val = vrad / vtot;
-
-                    double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
-
-                    energies[p][j] = E_rel;
-                    velocities_arr[p][j] = vrad;
-                    mu_arr[p][j] = mu_val;
-                    E_arr[p][j] = E_rel;
-                    L_arr[p][j] = ell;
-                }
-            }
-            else if (method_select == 2)//
-            {
-                /**
-                 * @brief Hybrid integration with adaptive method selection.
-                 * @details Uses Levi-Civita regularization for close encounters (r < r_crit)
-                 *          and standard leapfrog otherwise. Radius threshold r_crit is
-                 *          dynamically calculated for each particle.
-                 */
-
-                double velocity_tol = 1.0e-8;
-                double radius_tol = 1.0e-8;
-                int max_subdiv = 4096 * 4096;
-                int out_type = 2;
-                int N_taumin = 1000;
-
-                double alpha_param = 0.05;
-
-#pragma omp single
-                {
-                    sort_particles(particles, npts);
-                }
-                /**
-                 * @brief Main integration loop - method selection based on orbital parameters.
-                 * @details Dynamically selects between standard leapfrog and Levi-Civita
-                 *          regularization based on particle's radius and angular momentum.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double v = particles[1][i];
-                    double ell = particles[2][i];
-
-                    // Define critical radius r_crit for switching integration method:
-                    // r_crit = alpha_param * (ell^2) / (G * M(r))
-                    double r_crit = 0.0;
-                    if (ell != 0.0)
-                    {
-                        double M_enc = ((double)i / (double)npts) * g_active_halo_mass;
-                        double gravPart = (VEL_CONV_SQ * G_CONST) * M_enc;
-                        r_crit = (ell * ell) * (alpha_param) / (gravPart);
-                    }
-                    else
-                    {
-                        r_crit = 0.0;
-                    }
-
-                    double r_new, v_new;
-
-                    if ((r > 1.0e-30) && (r < r_crit))
-                    {
-                        doLeviCivitaLeapfrog(
-                            i, npts,
-                            r, v,
-                            ell,
-                            dt,
-                            N_taumin,
-                            G_CONST,
-                            &r_new, &v_new);
-                    }
-                    else
-                    {
-                        doAdaptiveFullLeap(
-                            i, npts,
-                            r, v,
-                            ell,
-                            dt,
-                            radius_tol, velocity_tol,
-                            max_subdiv,
-                            G_CONST,
-                            out_type,
-                            &r_new, &v_new);
-                    }
-
-                    particles[0][i] = r_new;
-                    particles[1][i] = v_new;
-                }
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (int idx = 0; idx < npts; idx++)
-                {
-                    int orig_id = (int)particles[3][idx];
-                    inverse_map[orig_id] = idx;
-                }
-                // }
-
-                // SIDM scattering after hybrid integrator completion (Levi-Civita/adaptive leapfrog)
-                double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
-
-#pragma omp single
-                {
-                    current_step = j + 1;
-                    time += dt;
-                }
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-
-                for (int p = 0; p < upper_npts_num_traj; p++)
-                {
-                    int idx = inverse_map[p];
-                    double rr = particles[0][idx];
-                    double vrad = particles[1][idx];
-                    double ell = particles[2][idx];
-
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    Psi_val *= VEL_CONV_SQ;
-
-                    double vtot = sqrt(vrad * vrad + (ell * ell) / (rr * rr));
-                    double mu_val = vrad / vtot;
-
-                    double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
-
-                    energies[p][j] = E_rel;
-                    velocities_arr[p][j] = vrad;
-                    mu_arr[p][j] = mu_val;
-                    E_arr[p][j] = E_rel;
-                    L_arr[p][j] = ell;
-                }
-            }
-            else if (method_select == 1)//
-            {
-                double velocity_tol = 1.0e-7;
-                double radius_tol = 1.0e-7;
-                int max_subdiv = 4096 * 4096 * 16;
-                int out_type = 2;
-                int N_taumin = 10;
-                double alpha_param = 0.05;
-
-#pragma omp single
-                {
-                    sort_particles(particles, npts);
-                }
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (int idx = 0; idx < npts; idx++)
-                {
-                    int orig_id = (int)particles[3][idx];
-                    inverse_map[orig_id] = idx;
-                }
-
-                // SIDM scattering before adaptive orbital integration with Levi-Civita regularization
-                double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (int i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double v = particles[1][i];
-                    double ell = particles[2][i];
-
-                    // Calculate r_crit, using special handling for particle i=0 (M_enc=0) to avoid division by zero.
-                    double r_crit = 0.0;
-                    if (fabs(ell) > 1.0e-30)
-                    {
-                        double M_enc;
-                        if (i == 0)
-                        {
-                            // Special handling for i=0 to avoid zero mass in denominator
-                            M_enc = 0.1 * (1.0 / (double)npts) * g_active_halo_mass;
-                        }
-                        else
-                        {
-                            M_enc = ((double)i / (double)npts) * g_active_halo_mass;
-                        }
-                        double gravPart = (VEL_CONV_SQ * G_CONST) * M_enc;
-                        r_crit = (ell * ell) * alpha_param / gravPart;
-                    }
-
-                    double r_new, v_new;
-                    if (r > 1.0e-30 && r < r_crit) // Switch based on critical radius
-                    {
-                        doAdaptiveFullLeviCivita(
-                            i, npts, r, v, ell, dt, N_taumin,
-                            radius_tol, velocity_tol, max_subdiv,
-                            G_CONST, out_type, &r_new, &v_new);
-                    }
-                    else
-                    {
-                        doAdaptiveFullLeap(
-                            i, npts, r, v, ell, dt,
-                            radius_tol, velocity_tol, max_subdiv,
-                            G_CONST, out_type, &r_new, &v_new);
-                    }
-                    particles[0][i] = r_new;
-                    particles[1][i] = v_new;
-                }
-
-#pragma omp single
-                {
-                    current_step = j + 1;
-                    time += dt;
-                }
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-                for (int p = 0; p < upper_npts_num_traj; p++)
-                {
-                    int idx = inverse_map[p];
-                    double rr = particles[0][idx];
-                    double vr = particles[1][idx];
-                    double ell = particles[2][idx];
-
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    Psi_val *= VEL_CONV_SQ;
-
-                    double vtot = sqrt(vr * vr + (ell * ell) / (rr * rr));
-                    double mu_val = vr / vtot;
-                    double E_rel = Psi_val - 0.5 * (vr * vr + (ell * ell) / (rr * rr));
-
-                    trajectories[p][j] = rr;
-                    energies[p][j] = E_rel;
-                    velocities_arr[p][j] = vr;
-                    mu_arr[p][j] = mu_val;
-                    E_arr[p][j] = E_rel;
-                    L_arr[p][j] = ell;
-                }
-            }
-            else if (method_select == 4)//
-            {
-
-                // Coefficients for 4th-order Forest-Ruth-Yoshida integrator (c1=c3).
-                // Derived from: c1 = 1 / (2 - 2^(1/3)), c2 = 1 - 2*c1
-                double c1 = 0.6756035959798289;
-                double c2 = -0.3512071919596578; // = 1.0 - 2.0 * c1
-                double c3 = c1;
-
-                /**
-                 * @brief STEP 1: Kick by (c1 * dt/2).
-                 * @details Velocity update using the old position.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double vrad = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-                    particles[1][i] = vrad + 0.5 * c1 * dt * dvdt;
-                }
-
-                /**
-                 * @brief STEP 2: Drift by (c1 * dt).
-                 * @details Position update using the intermediate velocity v^*.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double vrad = particles[1][i];
-                    particles[0][i] += vrad * (c1 * dt);
-                }
-
-#pragma omp single
-                {
-                    sort_particles(particles, npts);
-                }
-
-#pragma omp barrier
-#pragma omp parallel for default(shared) schedule(static)
-                for (int idx = 0; idx < npts; idx++)
-                {
-                    int orig_id = (int)particles[3][idx];
-                    inverse_map[orig_id] = idx;
-                }
-                // }
-
-                /**
-                 * @brief STEP 3: Kick by ((c1 + c2) * dt/2).
-                 * @details Velocity update using the new position after the first drift.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double vrad = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-                    double coeff = 0.5 * (c1 + c2);
-                    particles[1][i] = vrad + coeff * dt * dvdt;
-                }
-
-                /**
-                 * @brief STEP 4: Drift by (c2 * dt).
-                 * @details Position update using the intermediate velocity.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double vrad = particles[1][i];
-                    particles[0][i] += vrad * (c2 * dt);
-                }
-
-                /**
-                 * @brief STEP 5: Kick by ((c2 + c3) * dt/2).
-                 * @details Velocity update using the new position after the second drift.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double vrad = particles[1][i];
-                    double ell = particles[2][i];
-
-                    // Recompute acceleration at new position.
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-
-                    // Combination of the remaining half of c2 and half of c3.
-                    double coeff = 0.5 * (c2 + c3);
-                    particles[1][i] = vrad + coeff * dt * dvdt;
-                }
-
-                /**
-                 * @brief STEP 6: Drift by (c3 * dt).
-                 * @details Final position update in this integration step.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double vrad = particles[1][i];
-                    particles[0][i] += vrad * (c3 * dt);
-                }
-
-                /**
-                 * @brief STEP 7: Kick by (c3 * dt/2).
-                 * @details Final velocity update (half-kick) to complete the integration step.
-                 */
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    double r = particles[0][i];
-                    double vrad = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-                    particles[1][i] = vrad + 0.5 * c3 * dt * dvdt;
-                }
-
-                // SIDM scattering after 4th-order Yoshida symplectic integration
-                double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
-
-#pragma omp single
-                {
-                    current_step = j + 1;
-                    time += dt;
-                }
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-
-                for (int p = 0; p < upper_npts_num_traj; p++)
-                {
-                    int idx = inverse_map[p];
-                    double rr = particles[0][idx];
-                    double vrad = particles[1][idx];
-                    double ell = particles[2][idx];
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    Psi_val *= VEL_CONV_SQ;
-                    double vtot = sqrt(vrad * vrad + (ell * ell) / (rr * rr));
-                    double mu_val = vrad / vtot;
-                    double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
-                    double l_current = ell;
-                    trajectories[p][j] = rr;
-                    energies[p][j] = E_rel;
-                    velocities_arr[p][j] = vrad;
-                    mu_arr[p][j] = mu_val;
-                    E_arr[p][j] = E_rel;
-                    L_arr[p][j] = l_current;
-                }
-            }
-            else if (method_select == 8)//
-            {
-                /****************************/
-                // RK4 METHOD
-                // In similar style as
-                // the Euler code above
-                /****************************/
-
-                double *r_orig_by_id = (double *)malloc(npts * sizeof(double));
-                double *v_orig_by_id = (double *)malloc(npts * sizeof(double));
-                double *k1r_by_id = (double *)malloc(npts * sizeof(double));
-                double *k1v_by_id = (double *)malloc(npts * sizeof(double));
-                double *k2r_by_id = (double *)malloc(npts * sizeof(double));
-                double *k2v_by_id = (double *)malloc(npts * sizeof(double));
-                double *k3r_by_id = (double *)malloc(npts * sizeof(double));
-                double *k3v_by_id = (double *)malloc(npts * sizeof(double));
-                double *k4r_by_id = (double *)malloc(npts * sizeof(double));
-                double *k4v_by_id = (double *)malloc(npts * sizeof(double));
-                double h = dt;
-
-// Store original state by orig_id.
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    int orig_id = (int)particles[3][i];
-                    r_orig_by_id[orig_id] = particles[0][i];
-                    v_orig_by_id[orig_id] = particles[1][i];
-                }
-
-// K1 calculation.
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    int orig_id = (int)particles[3][i];
-                    double r = particles[0][i];
-                    double vrad = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double drdt = vrad;
-                    // Use the gravitational_force and effective_angular_force functions.
-                    double force = gravitational_force(r, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r, ell);
-
-                    k1r_by_id[orig_id] = drdt;
-                    k1v_by_id[orig_id] = dvdt;
-                }
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    int orig_id = (int)particles[3][i];
-                    double r_mid = particles[0][i];
-                    double v_mid = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double drdt = v_mid;
-                    // Use the gravitational_force and effective_angular_force functions.
-                    double force = gravitational_force(r_mid, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r_mid, ell);
-
-                    k2r_by_id[orig_id] = drdt;
-                    k2v_by_id[orig_id] = dvdt;
-                }
-
-#pragma omp single
-                {
-                    sort_particles(particles, npts);
-                }
-
-#pragma omp barrier
-#pragma omp parallel for default(shared) schedule(static)
-                for (int idx = 0; idx < npts; idx++)
-                {
-                    int orig_id = (int)particles[3][idx];
-                    inverse_map[orig_id] = idx;
-                }
-                // }
-
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    int orig_id = (int)particles[3][i];
-                    double r_mid = particles[0][i];
-                    double v_mid = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double drdt = v_mid;
-                    // Use the gravitational_force and effective_angular_force functions.
-                    double force = gravitational_force(r_mid, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r_mid, ell);
-
-                    k3r_by_id[orig_id] = drdt;
-                    k3v_by_id[orig_id] = dvdt;
-                }
-
-// K4 calculation.
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    int orig_id = (int)particles[3][i];
-                    double r_end = particles[0][i];
-                    double v_end = particles[1][i];
-                    double ell = particles[2][i];
-
-                    double drdt = v_end;
-                    // Use the gravitational_force and effective_angular_force functions.
-                    double force = gravitational_force(r_end, i, npts, G_CONST, g_active_halo_mass);
-                    double dvdt = force + effective_angular_force(r_end, ell);
-
-                    k4r_by_id[orig_id] = drdt;
-                    k4v_by_id[orig_id] = dvdt;
-                }
-
-// Final RK4 combination.
-#pragma omp parallel for default(shared) schedule(static)
-                for (i = 0; i < npts; i++)
-                {
-                    int orig_id = (int)particles[3][i];
-
-                    double r_new = r_orig_by_id[orig_id] + (h / 6.0) * (k1r_by_id[orig_id] + 2.0 * k2r_by_id[orig_id] + 2.0 * k3r_by_id[orig_id] + k4r_by_id[orig_id]);
-                    double v_new = v_orig_by_id[orig_id] + (h / 6.0) * (k1v_by_id[orig_id] + 2.0 * k2v_by_id[orig_id] + 2.0 * k3v_by_id[orig_id] + k4v_by_id[orig_id]);
-
-                    particles[0][i] = r_new;
-                    particles[1][i] = v_new;
-                }
-
-                // SIDM scattering after RK4 state update completion
-                double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, 0);
-
-#pragma omp single
-                {
-                    current_step = j + 1;
-                    time += h;
-                }
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-
-                for (int p = 0; p < upper_npts_num_traj; p++)
-                {
-                    int idx = inverse_map[p];
-                    double rr = particles[0][idx];
-                    double vrad = particles[1][idx];
-                    double ell = particles[2][idx];
-                    double Psi_val = evaluatespline(splinePsi, Psiinterp, rr);
-                    Psi_val *= VEL_CONV_SQ;
-                    double vtot = sqrt(vrad * vrad + (ell * ell) / (rr * rr));
-                    double mu_val = vrad / vtot;
-                    double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
-                    double l_current = ell;
-                    trajectories[p][j] = rr;
-                    energies[p][j] = E_rel;
-                    velocities_arr[p][j] = vrad;
-                    mu_arr[p][j] = mu_val;
-                    E_arr[p][j] = E_rel;
-                    L_arr[p][j] = l_current;
-                }
-
-                // Free RK4 arrays.
-                free(r_orig_by_id);
-                free(v_orig_by_id);
-                free(k1r_by_id);
-                free(k1v_by_id);
-                free(k2r_by_id);
-                free(k2v_by_id);
-                free(k3r_by_id);
-                free(k3v_by_id);
-                free(k4r_by_id);
-                free(k4v_by_id);
-            }
-            else if (method_select == 5)
-            {
+        for (int current_step = 0; current_step < Ntimes + dtwrite; current_step++) { // Main time loop
+            #pragma omp single
+            current_time += dt;
+
+            if (method_select != 5) {
+                make_dynamic_step();
+                update_inverse_map(inverse_map);
+                handle_sidm_step(); // SIDM scattering: profile-aware scale radius selection and execution mode handling
+                update_trajectory_tacking(current_step, inverse_map, upper_npts_num_traj, trajectories, energies, mu_arr, L_arr, E_arr, velocities_arr);
+            } else {
                 // Static variables for Adams-Bashforth 3rd Order (AB3) method
-                static int ab3_bootstrap_done = 0;           ///< Flag indicating if the AB3 bootstrap phase has been completed (0=no, 1=yes).
+                bootstrap_phase_done = 0;
                 static double **f_ab3_r = NULL;               ///< History array for \f$dr/dt\f$ derivatives. Indexed by `[history_slot (0..2)][original_particle_id]`. Slot 2 is most recent (\f$f_n\f$).
                 static double **f_ab3_v = NULL;               ///< History array for \f$dv_{rad}/dt\f$ derivatives. Indexed by `[history_slot (0..2)][original_particle_id]`. Slot 2 is most recent (\f$f_n\f$).
                 static double h_ab3_bootstrap_step;         ///< Timestep size (`dt`) used during the Euler steps of the bootstrap phase.
@@ -3401,12 +2372,10 @@ cleanup_diag_iteration:
                 static int bootstrap_euler_steps_needed = 2; ///< Number of full Euler steps (each of size \f$h_{bootstrap}\f$) required to generate the initial 3 derivative history points (\f$f_0, f_1, f_2\f$).
 
                 // Allocate AB3 history arrays once.
-                if (f_ab3_r == NULL)
-                {
+                if (f_ab3_r == NULL) {
                     f_ab3_r = (double **)malloc(3 * sizeof(double *));
                     f_ab3_v = (double **)malloc(3 * sizeof(double *));
-                    for (int hh = 0; hh < 3; hh++)
-                    {
+                    for (int hh = 0; hh < 3; hh++) {
                         f_ab3_r[hh] = (double *)malloc(npts * sizeof(double));
                         f_ab3_v[hh] = (double *)malloc(npts * sizeof(double));
                     }
@@ -3414,109 +2383,83 @@ cleanup_diag_iteration:
                 }
 
                 // If bootstrap not done yet, do it ONCE to fill the 3-step derivative history.
-                if (!ab3_bootstrap_done)
-                {
-
+                if (!bootstrap_phase_done) {
                     // Bootstrap for AB3: Need to compute f0, f1, f2.
                     // This requires 2 Euler steps to get states y1, y2.
                     // sub_step = 0: calc f0 (from y0), store f_ab3_x[0]. Euler y0->y1. state is y1.
                     // sub_step = 1: calc f1 (from y1), store f_ab3_x[1]. Euler y1->y2. state is y2.
                     // sub_step = 2: calc f2 (from y2), store f_ab3_x[2]. NO Euler update. state is y2.
-#pragma omp single
-                    {
-                        for (int sub_step = 0; sub_step <= bootstrap_euler_steps_needed; sub_step++)
-                        {
-                            sort_particles(particles, npts);
-#pragma omp parallel for default(shared) schedule(static)
-                            for (int idx = 0; idx < npts; idx++)
-                            {
-                                int orig_id = (int)particles[3][idx];
-                                inverse_map[orig_id] = idx;
-                            }
-                            // Compute derivatives => store in f_ab3_r[sub_step], f_ab3_v[sub_step].
-#pragma omp parallel for default(shared) schedule(static)
-                            for (int i_eval = 0; i_eval < npts; i_eval++)
-                            {
-                                int orig_id = (int)particles[3][i_eval];
-                                double rr = particles[0][i_eval];
-                                double vrad = particles[1][i_eval];
-                                double ell = particles[2][i_eval];
+                    #pragma omp single
+                    for (int sub_step = 0; sub_step <= bootstrap_euler_steps_needed; sub_step++) {
+                        sort_particles(particles, npts);
+                        #pragma omp parallel for default(shared) schedule(static)
+                        for (int idx = 0; idx < npts; idx++) {
+                            int orig_id = (int)particles[3][idx];
+                            inverse_map[orig_id] = idx;
+                        }
+                        // Compute derivatives => store in f_ab3_r[sub_step], f_ab3_v[sub_step].
+                        #pragma omp parallel for default(shared) schedule(static)
+                        for (int i_eval = 0; i_eval < npts; i_eval++) {
+                            int orig_id = (int)particles[3][i_eval];
+                            double rr = particles[0][i_eval];
+                            double vrad = particles[1][i_eval];
+                            double ell = particles[2][i_eval];
 
-                                double drdt = vrad;
-                                // Use the gravitational_force and effective_angular_force functions.
-                                double force = gravitational_force(rr, i_eval, npts, G_CONST, g_active_halo_mass);
-                                double dvdt = force + effective_angular_force(rr, ell);
+                            double drdt = vrad;
+                            // Use the gravitational_force and effective_angular_force functions.
+                            double force = gravitational_force(rr, i_eval, npts, G_CONST, g_active_halo_mass);
+                            double dvdt = force + effective_angular_force(rr, ell);
 
-                                f_ab3_r[sub_step][orig_id] = drdt;
-                                f_ab3_v[sub_step][orig_id] = dvdt;
-                            }
+                            f_ab3_r[sub_step][orig_id] = drdt;
+                            f_ab3_v[sub_step][orig_id] = dvdt;
+                        }
 
-                            // If sub_step < bootstrap_euler_steps_needed (i.e., for sub_step 0 and 1),
-                            // perform mini-substeps to advance particles to the next state with higher accuracy.
-                            if (sub_step < bootstrap_euler_steps_needed)
-                            {
-                                double dt_mini = h_ab3_bootstrap_step / (double)NUM_MINI_SUBSTEPS_BOOTSTRAP;
+                        // If sub_step < bootstrap_euler_steps_needed (i.e., for sub_step 0 and 1),
+                        // perform mini-substeps to advance particles to the next state with higher accuracy.
+                        if (sub_step < bootstrap_euler_steps_needed) {
+                            double dt_mini = h_ab3_bootstrap_step / (double)NUM_MINI_SUBSTEPS_BOOTSTRAP;
 
-#pragma omp parallel for default(shared) schedule(static)
-                                for (int i_part = 0; i_part < npts; i_part++)
-                                {
-                                    // Each particle is evolved independently over NUM_MINI_SUBSTEPS_BOOTSTRAP
-                                    double current_r_mini = particles[0][i_part];
-                                    double current_vrad_mini = particles[1][i_part];
-                                    double current_ell_mini = particles[2][i_part]; // Angular momentum (constant)
+                            #pragma omp parallel for default(shared) schedule(static)
+                            for (int i_part = 0; i_part < npts; i_part++) {
+                                // Each particle is evolved independently over NUM_MINI_SUBSTEPS_BOOTSTRAP
+                                double current_r_mini = particles[0][i_part];
+                                double current_vrad_mini = particles[1][i_part];
+                                double current_ell_mini = particles[2][i_part]; // Angular momentum (constant)
 
-                                    // Perform NUM_MINI_SUBSTEPS_BOOTSTRAP mini-steps
-                                    for (int m = 0; m < NUM_MINI_SUBSTEPS_BOOTSTRAP; m++)
-                                    {
-                                        // Calculate derivatives based on current mini-step state
-                                        double drdt_m = current_vrad_mini;
-                                        double force_m = gravitational_force(current_r_mini, i_part, npts, G_CONST, g_active_halo_mass);
-                                        double dvdt_m = force_m + effective_angular_force(current_r_mini, current_ell_mini);
+                                // Perform NUM_MINI_SUBSTEPS_BOOTSTRAP mini-steps
+                                for (int m = 0; m < NUM_MINI_SUBSTEPS_BOOTSTRAP; m++) {
+                                    // Calculate derivatives based on current mini-step state
+                                    double drdt_m = current_vrad_mini;
+                                    double force_m = gravitational_force(current_r_mini, i_part, npts, G_CONST, g_active_halo_mass);
+                                    double dvdt_m = force_m + effective_angular_force(current_r_mini, current_ell_mini);
 
-                                        // Euler update for this mini-step
-                                        current_r_mini += dt_mini * drdt_m;
-                                        current_vrad_mini += dt_mini * dvdt_m;
-                                    }
-
-                                    // After all mini-steps, update the main particles array
-                                    particles[0][i_part] = current_r_mini;
-                                    particles[1][i_part] = current_vrad_mini;
+                                    // Euler update for this mini-step
+                                    current_r_mini += dt_mini * drdt_m;
+                                    current_vrad_mini += dt_mini * dvdt_m;
                                 }
+
+                                // After all mini-steps, update the main particles array
+                                particles[0][i_part] = current_r_mini;
+                                particles[1][i_part] = current_vrad_mini;
                             }
                         }
                     }
 
-#pragma omp single
-                    {
-                        // Mark bootstrap done.
-                        ab3_bootstrap_done = 1;
-                    }
-                }
-                else
-                {
+                    #pragma omp single
+                    bootstrap_phase_done = 1; // Mark bootstrap done.
+                } else {
                     /**
                      * Normal AB3 step each iteration
                      */
 
-#pragma omp single
-                    {
-                        sort_particles(particles, npts);
-                    }
+                    #pragma omp single
+                    sort_particles(particles, npts);
+                    #pragma omp barrier
 
-#pragma omp barrier
-// #pragma omp single.
-// {
-#pragma omp parallel for default(shared) schedule(static)
-                    for (int idx = 0; idx < npts; idx++)
-                    {
-                        int orig_id = (int)particles[3][idx];
-                        inverse_map[orig_id] = idx;
-                    }
-                    // }
+                    update_inverse_map(inverse_map);
 
-#pragma omp parallel for default(shared) schedule(static)
-                    for (int i = 0; i < npts; i++)
-                    {
+                    #pragma omp parallel for default(shared) schedule(static)
+                    for (int i = 0; i < npts; i++) {
                         // Adams-Bashforth 8th order integration step.
                         int orig_id = (int)particles[3][i];
                         double rr = particles[0][i];
@@ -3533,16 +2476,14 @@ cleanup_diag_iteration:
                             // sum = 12 * f_n
                             sum_r = 12.0 * f_ab3_r[2][orig_id];
                             sum_v = 12.0 * f_ab3_v[2][orig_id];
-                            if (g_doDebug && i < 5) { // Extremely sparse debug
+                            if (g_doDebug && i < 5) // Extremely sparse debug
                                  log_message("DEBUG", "AB3_RESET: Particle %d (orig_id) using AB1 step (state 1)", orig_id);
-                            }
                         } else if (particle_state == 2) { // One step after scatter: Use AB2
                             // sum = ab2_num[0] * f_n + ab2_num[1] * f_{n-1}
                             sum_r = ab2_num[0] * f_ab3_r[2][orig_id] + ab2_num[1] * f_ab3_r[1][orig_id];
                             sum_v = ab2_num[0] * f_ab3_v[2][orig_id] + ab2_num[1] * f_ab3_v[1][orig_id];
-                            if (g_doDebug && i < 5) {
+                            if (g_doDebug && i < 5)
                                  log_message("DEBUG", "AB3_RESET: Particle %d (orig_id) using AB2 step (state 2)", orig_id);
-                            }
                         } else { // Normal AB3 step
                             sum_r = ab3_num[0] * f_ab3_r[2][orig_id] + ab3_num[1] * f_ab3_r[1][orig_id] + ab3_num[2] * f_ab3_r[0][orig_id];
                             sum_v = ab3_num[0] * f_ab3_v[2][orig_id] + ab3_num[1] * f_ab3_v[1][orig_id] + ab3_num[2] * f_ab3_v[0][orig_id];
@@ -3556,24 +2497,14 @@ cleanup_diag_iteration:
                     }
 
                     // SIDM scattering after Adams-Bashforth update (skip during bootstrap)
-                    double current_active_rc_for_sidm = g_use_nfw_profile ? g_nfw_profile_rc : g_cored_profile_rc;
-                    handle_sidm_step(particles, npts, dt, time, current_active_rc_for_sidm, method_select, !ab3_bootstrap_done);
+                    handle_sidm_step();
 
                     // We re-sort & compute new derivatives to shift the AB3 history.
-#pragma omp single
-                    {
-                        sort_particles(particles, npts);
-                    }
-#pragma omp barrier
-                    // #pragma omp single.
-                    // {
+                    #pragma omp single
+                    sort_particles(particles, npts);
+                    #pragma omp barrier
 
-#pragma omp parallel for default(shared) schedule(static)
-                    for (int idx = 0; idx < npts; idx++)
-                    {
-                        int orig_id = (int)particles[3][idx];
-                        inverse_map[orig_id] = idx;
-                    }
+                    update_inverse_map(inverse_map);
 
                     // Recompute the derivatives for the new time => goes into f_ab3_r[2], f_ab3_v[2].
                     double **f_new_r = (double **)malloc(sizeof(double *));
@@ -3581,9 +2512,8 @@ cleanup_diag_iteration:
                     f_new_r[0] = (double *)malloc(npts * sizeof(double));
                     f_new_v[0] = (double *)malloc(npts * sizeof(double));
 
-#pragma omp parallel for default(shared) schedule(static)
-                    for (int i_dbg = 0; i_dbg < npts; i_dbg++)
-                    {
+                    #pragma omp parallel for default(shared) schedule(static)
+                    for (int i_dbg = 0; i_dbg < npts; i_dbg++) {
                         int orig_id = (int)particles[3][i_dbg];
                         double rr = particles[0][i_dbg];
                         double vrad = particles[1][i_dbg];
@@ -3598,11 +2528,10 @@ cleanup_diag_iteration:
                         f_new_v[0][orig_id] = dvdt;
                     }
 
-#pragma omp single
+                    #pragma omp single
                     {
                         // SHIFT AB3 HISTORY: f0 <- f1, f1 <- f2
-                        for (int i_s = 0; i_s < npts; i_s++)
-                        {
+                        for (int i_s = 0; i_s < npts; i_s++) {
                             f_ab3_r[0][i_s] = f_ab3_r[1][i_s]; // f_{n-2} becomes old f_{n-1}
                             f_ab3_v[0][i_s] = f_ab3_v[1][i_s];
 
@@ -3610,8 +2539,7 @@ cleanup_diag_iteration:
                             f_ab3_v[1][i_s] = f_ab3_v[2][i_s];
                         }
                         // Put the new derivative (f_n for the just-completed step) in slot #2
-                        for (int i_s = 0; i_s < npts; i_s++)
-                        {
+                        for (int i_s = 0; i_s < npts; i_s++) {
                             f_ab3_r[2][i_s] = f_new_r[0][i_s]; // f_n (latest)
                             f_ab3_v[2][i_s] = f_new_v[0][i_s];
                         }
@@ -3621,107 +2549,65 @@ cleanup_diag_iteration:
                         free(f_new_r);
                         free(f_new_v);
 
-                        current_step = j + 1;
-                        time += dt;
-
                         // Advance particle scatter states for next AB step
-                        if (ab3_bootstrap_done) { // Only advance state if AB is active and past bootstrap
+                        if (bootstrap_phase_done) // Only advance state if AB is active and past bootstrap
                             for (int k_pstate = 0; k_pstate < npts; k_pstate++) {
                                 // k_pstate here is the original_id since g_particle_scatter_state is indexed by orig_id
-                                if (g_particle_scatter_state[k_pstate] == 2) {
+                                if (g_particle_scatter_state[k_pstate] == 2)
                                     g_particle_scatter_state[k_pstate] = 0; // Transition from AB2 to full AB3
-                                } else if (g_particle_scatter_state[k_pstate] == 1) {
+                                else if (g_particle_scatter_state[k_pstate] == 1)
                                     g_particle_scatter_state[k_pstate] = 2; // Transition from AB1 to AB2
-                                }
                                 // If state is 0, it remains 0 unless SIDM sets it to 1 in the next call to handle_sidm_step
                             }
-                        }
                     }
                 } // End of the "else" block for normal AB3.
             }
             // Record trajectory data for selected low-ID particles
-#pragma omp parallel for if (upper_npts_num_traj > 1000) schedule(static)
-
-            for (int p = 0; p < upper_npts_num_traj; p++)
-            {
-                int idx = inverse_map[p];
-                double rr = particles[0][idx];
-                double vrad = particles[1][idx];
-                double ell = particles[2][idx];
-                double Psi_val = evaluatespline(splinePsi, Psiinterp, rr) * VEL_CONV_SQ;
-                double vtot = sqrt(vrad * vrad + (ell * ell) / (rr * rr));
-                double mu_val = vrad / vtot;
-
-                double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
-                trajectories[p][j] = rr;
-                energies[p][j] = E_rel;
-                velocities_arr[p][j] = vrad;
-                mu_arr[p][j] = mu_val;
-                E_arr[p][j] = E_rel;
-                L_arr[p][j] = ell;
-            }
+            update_trajectory_tacking(current_step, inverse_map, upper_npts_num_traj, trajectories, energies, mu_arr, L_arr, E_arr,
+                                      velocities_arr);
 
             // Record trajectory data for selected low-L particles
             int max_threads = omp_get_max_threads();
             gsl_interp_accel **thread_accel = (gsl_interp_accel **)malloc(max_threads * sizeof(gsl_interp_accel *));
             for (int i = 0; i < max_threads; i++)
-            {
                 thread_accel[i] = gsl_interp_accel_alloc();
-            }
 
-#pragma omp parallel for if (nlowest > 1000) schedule(static)
-            for (int p = 0; p < nlowest; p++)
-            {
+            #pragma omp parallel for if (nlowest > 1000) schedule(static)
+            for (int p = 0; p < nlowest; p++) {
                 int thread_id = omp_get_thread_num();
                 gsl_interp_accel *thread_safe_accel = thread_accel[thread_id];
 
                 int idx_lowest = inverse_map[chosen[p]];
 
-                double rr = particles[0][idx_lowest];
+                double rr = clip(particles[0][idx_lowest], 0.0000000001, rmax);
                 double vrad = particles[1][idx_lowest];
                 double ell = particles[2][idx_lowest];
 
-                if (rr < 0.0)
-                {
-                    rr = 0.0000000001;
-                }
-                if (rr > rmax)
-                {
-                    rr = rmax;
-                }
-
                 // Use thread-safe accelerator instead of shared one.
                 double Psi_val = evaluatespline(splinePsi, thread_safe_accel, rr) * VEL_CONV_SQ;
-                double E_rel = Psi_val - 0.5 * (vrad * vrad + (ell * ell) / (rr * rr));
+                double E_rel = Psi_val - 0.5 * sqr(to_velocity(vrad,ell,rr));
 
-                lowestL_r[p][j] = rr;    // Store R.
-                lowestL_E[p][j] = E_rel; // Store E.
-                lowestL_L[p][j] = ell;   // Store L.
+                lowestL_r[p][current_step] = rr;    // Store R.
+                lowestL_E[p][current_step] = E_rel; // Store E.
+                lowestL_L[p][current_step] = ell;   // Store L.
             }
 
             // Clean up thread-local accelerators.
             for (int i = 0; i < max_threads; i++)
-            {
                 gsl_interp_accel_free(thread_accel[i]);
-            }
             free(thread_accel);
-            // }
 
-#pragma omp single
+            #pragma omp single
             {
-                if ((current_step % dtwrite) == 0) {
-
+                if ((current_step+1) % dtwrite == 0) {
                     double elapsed = omp_get_wtime() - start_time;
-                    printf("Write data at timestep %d after %.2f s.\n",
-                           current_step, elapsed);
+                    printf("Write data at timestep %d after %.2f s.\n", current_step+1, elapsed);
 
                     // Calculate the write index (0-based) corresponding to this timestep
-                    int nwrite = current_step / dtwrite - 1;
-                    if (g_doAllParticleData) {
-                        // Calculate index within the current block (0 to block_size-1)
-                        int block_index_apd = nwrite % block_size;
-                        for (int pi = 0; pi < npts; pi++) {
-                            int orig_id = pi;
+                    int nwrite = (current_step+1) / dtwrite - 1;
+                    int block_index_apd = nwrite % block_size;
+                    if (g_doAllParticleData) // Calculate index within the current block (0 to block_size-1)
+                        for (int orig_id = 0; orig_id < npts; orig_id++) {
                             int rank = inverse_map[orig_id];
                             double par_r = particles[0][rank];
                             double par_vrad = particles[1][rank];
@@ -3732,40 +2618,35 @@ cleanup_diag_iteration:
                             Vrad_block[block_index_apd * npts + orig_id] = (float)par_vrad;
                             L_block[block_index_apd * npts + orig_id] = (float)par_ell;
 
-                            if (g_doDebug) {
-                                // Check if this write corresponds to a desired snapshot output time
-                                if (nwrite % stepBetweenSnaps == 0) {
-                                    int snapIndex = nwrite / stepBetweenSnaps;
-                                    if (snapIndex < noutsnaps) { // Ensure snapIndex is valid
-                                        int debug_id = DEBUG_PARTICLE_ID;
+                            int snapIndex = nwrite / stepBetweenSnaps;
+                            // Check if this write corresponds to a desired snapshot output time
+                            // Ensure snapIndex is valid
+                            if (g_doDebug && nwrite % stepBetweenSnaps == 0 && snapIndex < noutsnaps) {
+                                int debug_id = DEBUG_PARTICLE_ID;
 
-                                        // Retrieve current state for debug particle from block arrays
-                                        float r_valF = R_block[block_index_apd * npts + debug_id];
-                                        float v_valF = Vrad_block[block_index_apd * npts + debug_id];
-                                        float l_valF = L_block[block_index_apd * npts + debug_id];
-                                        double r_val = (double)r_valF;
-                                        double v_val = (double)v_valF;
-                                        double l_val = (double)l_valF;
+                                // Retrieve current state for debug particle from block arrays
+                                float r_valF = R_block[block_index_apd * npts + debug_id];
+                                float v_valF = Vrad_block[block_index_apd * npts + debug_id];
+                                float l_valF = L_block[block_index_apd * npts + debug_id];
+                                double r_val = (double)r_valF;
+                                double v_val = (double)v_valF;
+                                double l_val = (double)l_valF;
 
-                                        // Evaluate theoretical potential using original spline
-                                        double psi_val = 0.0;
-                                        if (r_val >= 0.0 && r_val <= rmax)
-                                            psi_val = evaluatespline(splinePsi, Psiinterp, r_val) * VEL_CONV_SQ;
+                                // Evaluate theoretical potential using original spline
+                                double psi_val = 0.0;
+                                if (r_val >= 0.0 && r_val <= rmax)
+                                    psi_val = evaluatespline(splinePsi, Psiinterp, r_val) * VEL_CONV_SQ;
 
-                                        // Calculate approximate energy E = Psi - KE
-                                        double E_approx = psi_val - 0.5 * (v_val * v_val + (l_val * l_val) / (r_val * r_val));
-                                        double sim_time = time;
+                                // Calculate approximate energy E = Psi - KE
+                                double E_approx = psi_val - 0.5 * sqr(to_velocity(v_val,l_val,r_val));
+                                double sim_time = current_time;
 
-                                        // Store the approximate energy for comparison
-                                        store_debug_approxE(snapIndex, E_approx, sim_time);
-                                    }
-                                }
+                                // Store the approximate energy for comparison
+                                store_debug_approxE(snapIndex, E_approx, sim_time);
                             }
                         }
-                    }
-                    if (g_doAllParticleData)
+                    if (g_doAllParticleData && ((nwrite + 1) % block_size) == 0 && nwrite > 0) {
                         // Append block to file if block is full
-                        if (((nwrite + 1) % block_size) == 0 && nwrite > 0) {
                             append_all_particle_data_chunk_to_file(apd_filename, npts, block_size, L_block, Rank_block, R_block, Vrad_block);
                             printf("Appended block ending write index %d to %s\n", nwrite, apd_filename);
                         }
@@ -3773,24 +2654,19 @@ cleanup_diag_iteration:
                     nwrite_total++;
                 }
             }
-
             for (int k = 0; k <= 20; k++)
-                if (current_step == print_steps[k]) {
+                if ((current_step+1) == print_steps[k]) {
                     double elapsed = omp_get_wtime() - start_time;
                     int percent = k * 5;
-                    printf("%d%% complete, timestep %d/%d, time=%f Myr, elapsed=%.2f s\n", percent, current_step, Ntimes, time, elapsed);
+                    printf("%d%% complete, timestep %d/%d, time=%f Myr, elapsed=%.2f s\n", percent, current_step+1, Ntimes, current_time, elapsed);
                     break;
                 }
         }
         // After the main simulation loop, flush any remaining data in the last partial block.
-        {
-            if (g_doAllParticleData) {
-                int leftover = nwrite_total % block_size; // Number of steps in this partial block
-                if (leftover > 0) {
-                    printf("Flushing leftover %d steps from block storage...\n", leftover);
-                    append_all_particle_data_chunk_to_file(apd_filename, npts, leftover, L_block, Rank_block, R_block, Vrad_block);
-                }
-            }
+        int leftover = nwrite_total % block_size; // Number of steps in this partial block
+        if (g_doAllParticleData && leftover > 0) {
+            printf("Flushing leftover %d steps from block storage...\n", leftover);
+            append_all_particle_data_chunk_to_file(apd_filename, npts, leftover, L_block, Rank_block, R_block, Vrad_block);
         }
     } // Close the skip_simulation if block.
 
@@ -3801,7 +2677,7 @@ cleanup_diag_iteration:
         if (fp == NULL)
             raise_error("Error opening file %s for writing\n", full_filename);
 
-        for (i = 0; i < npts; i++)
+        for (int i = 0; i < npts; i++)
             fprintf_bin(fp, "%f %f %f  %f\n", particles[0][i], particles[1][i], particles[2][i], particles[3][i]);
         fclose(fp);
     }
@@ -3850,7 +2726,7 @@ cleanup_diag_iteration:
         fp = fopen(full_filename, "wb");
         if (fp) {
             double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * M_PI * normalization);
-            for (i = 0; i < num_points; i++) {
+            for (int i = 0; i < num_points; i++) {
                 double rr = radius[i];
                 double rs_k = rr / g_nfw_profile_rc;
                 double term_s_k = rs_k + 0.01;
@@ -3872,7 +2748,7 @@ cleanup_diag_iteration:
         get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (i = 0; i < num_points; i++) {
+            for (int i = 0; i < num_points; i++) {
                 double rr = radius[i];
                 if (rr > 0.0) {
                     double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
@@ -3889,7 +2765,7 @@ cleanup_diag_iteration:
         fp = fopen(full_filename, "wb");
         if (fp) {
             double nt_nfw_scaler_final = g_nfw_profile_halo_mass / (4.0 * M_PI * normalization);
-            for (i = 1; i < num_points - 1; i++) {
+            for (int i = 1; i < num_points - 1; i++) {
                 double rr = radius[i];
                 if (rr <= 1e-9)
                     continue;
@@ -3914,7 +2790,7 @@ cleanup_diag_iteration:
         get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (i = 0; i <= num_points; i++) {
+            for (int i = 0; i <= num_points; i++) {
                 double E = Evalues[i];
                 double deriv = 0.0;
                 if (i > 0 && i < num_points + 1) {
@@ -4010,7 +2886,7 @@ cleanup_diag_iteration:
         get_full_filename("data/density_profile.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (i = 0; i < num_points; i++) {
+            for (int i = 0; i < num_points; i++) {
                 double rr = radius[i];
                 double rho_r = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(rr / g_cored_profile_rc)));
                 fprintf_bin(fp, "%f %f\n", rr, rho_r);
@@ -4023,7 +2899,7 @@ cleanup_diag_iteration:
         get_full_filename("data/dpsi_dr.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (i = 0; i < num_points; i++) {
+            for (int i = 0; i < num_points; i++) {
                 double rr = radius[i];
                 if (rr > 0.0) {
                     double Menc = gsl_spline_eval(splinemass, rr, enclosedmass);
@@ -4039,7 +2915,7 @@ cleanup_diag_iteration:
         get_full_filename("data/drho_dpsi.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (i = 1; i < num_points - 1; i++) {
+            for (int i = 1; i < num_points - 1; i++) {
                 double rr = radius[i];
                 double rho_left = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(radius[i - 1] / g_cored_profile_rc)));
                 double rho_right = g_cored_profile_halo_mass / normalization * (1.0 / cube(1.0 + sqr(radius[i + 1] / g_cored_profile_rc)));
@@ -4059,7 +2935,7 @@ cleanup_diag_iteration:
         get_full_filename("data/f_of_E.dat", 1, full_filename, sizeof(full_filename));
         fp = fopen(full_filename, "wb");
         if (fp) {
-            for (i = 0; i <= num_points; i++) {
+            for (int i = 0; i <= num_points; i++) {
                 double E = Evalues[i];
                 double deriv = 0.0;
                 if (i > 0 && i < num_points + 1) {
@@ -4125,16 +3001,16 @@ cleanup_diag_iteration:
     double *v_initial = (double *)malloc(npts * sizeof(double));
     double *l_initial = (double *)malloc(npts * sizeof(double));
     double rank_id;
-    for (i = 0; i < npts; i++)
+    for (int i = 0; i < npts; i++)
         fscanf_bin(finit, "%f %f %f %f\n", &r_initial[i], &rv_initial[i], &l_initial[i], &rank_id);
     fclose(finit);
 
-    for (i = 0; i < npts; i++)
+    for (int i = 0; i < npts; i++)
         v_initial[i] = sqrt(rv_initial[i] * rv_initial[i] + l_initial[i] * l_initial[i] / (r_initial[i] * r_initial[i]));
 
     double *r_final = (double *)malloc(npts * sizeof(double));
     double *v_final = (double *)malloc(npts * sizeof(double));
-    for (i = 0; i < npts; i++) {
+    for (int i = 0; i < npts; i++) {
         r_final[i] = particles[0][i];
         v_final[i] = sqrt(particles[1][i] * particles[1][i] + particles[2][i] * particles[2][i] / (particles[0][i] * particles[0][i]));
     }
@@ -4149,7 +3025,7 @@ cleanup_diag_iteration:
     double *v_all_sorted = (double *)malloc(2 * npts * sizeof(double));
 
     // Combine initial and final data for percentile calculation
-    for (i = 0; i < npts; i++) {
+    for (int i = 0; i < npts; i++) {
         r_all_sorted[i] = r_initial[i];
         r_all_sorted[npts + i] = r_final[i];
         v_all_sorted[i] = fabs(v_initial[i]) * (1.0 / kmsec_to_kpcmyr); // Convert to km/s
@@ -4204,7 +3080,7 @@ cleanup_diag_iteration:
     int hist_final[HIST_NBINS][HIST_NBINS];
     memset(hist_final, 0, sizeof(hist_final));
 
-    for (i = 0; i < npts; i++) {
+    for (int i = 0; i < npts; i++) {
         int rbini = (int)(r_initial[i] / rbin_width);
         int vbini = (int)(fabs(v_initial[i]) * (1.0 / kmsec_to_kpcmyr) / vbin_width);
         if (rbini < HIST_NBINS && vbini < HIST_NBINS && rbini >= 0 && vbini >= 0)
@@ -4253,7 +3129,7 @@ cleanup_diag_iteration:
     int hist_f[HIST_NBINS];
     memset(hist_f, 0, sizeof(hist_f));
 
-    for (i = 0; i < npts; i++) {
+    for (int i = 0; i < npts; i++) {
         int b = (int)(r_initial[i] / bin_width);
         if (b < HIST_NBINS && b >= 0)
             hist_i[b]++;
@@ -4267,7 +3143,7 @@ cleanup_diag_iteration:
         char filename[256];
         get_full_filename("data/combined_histogram.dat", 1, filename, sizeof(filename));
         fp = fopen(filename, "wb"); // Binary mode for fprintf_bin
-        for (i = 0; i < HIST_NBINS; i++) {
+        for (int i = 0; i < HIST_NBINS; i++) {
             double bin_center = (i + 0.5) * bin_width;
             fprintf_bin(fp, "%f %d %d\n", bin_center, hist_i[i], hist_f[i]);
         }
@@ -4345,8 +3221,6 @@ cleanup_diag_iteration:
     free(lowestL_E);
     free(lowestL_L);
 
-
-
     int snapshot_steps[noutsnaps];
     // Determine the timesteps corresponding to the desired snapshot outputs
     for (int s = 0; s < noutsnaps; s++) {
@@ -4392,7 +3266,7 @@ cleanup_diag_iteration:
         log_message("INFO", "Starting parallel processing with %d threads for %d snapshots (from index %d to %d)",
                     omp_get_max_threads(), noutsnaps - start_index, start_index, noutsnaps - 1);
 
-#pragma omp parallel for schedule(static, 1) ordered
+        #pragma omp parallel for schedule(static, 1) ordered
         for (int s = start_index; s < noutsnaps; s++) {
             int snap = snapshot_steps[s]; // Which snap to read.
 
@@ -4552,14 +3426,10 @@ cleanup_diag_iteration:
                                     fname_lowest_ids);
                     }
                     else
-                    {
                         log_message("ERROR", "Thread %d: Failed to open %s for writing", omp_get_thread_num(), fname_lowest_ids);
-                    }
                 }
                 else
-                {
                     log_message("INFO", "Thread %d: Skipping lowest radius ID file creation in restart mode", omp_get_thread_num());
-                }
             }
 
             // Allocate arrays to store the data sorted by radius
@@ -4722,8 +3592,7 @@ cleanup_diag_iteration:
                 // Check for invalid size, non-positive min, inverted range, or non-finite values (NaN or Inf)
                 if (decimated_size <= 0 || min_r_check <= 0.0 || max_r_check <= min_r_check ||
                     ((min_r_check != min_r_check) || !(fabs(min_r_check) <= DBL_MAX)) || // Check !isfinite(min_r_check)
-                    ((max_r_check != max_r_check) || !(fabs(max_r_check) <= DBL_MAX))    // Check !isfinite(max_r_check)
-                   ) {
+                    ((max_r_check != max_r_check) || !(fabs(max_r_check) <= DBL_MAX))) { // Check !isfinite(max_r_check)
                     log_message("ERROR", "Thread %d: Invalid radius range [%f, %f] with %d points after decimation for snapshot %d",
                                 omp_get_thread_num(), min_r_check, max_r_check, decimated_size, snap);
                     free(R_decimated);
@@ -4759,10 +3628,8 @@ cleanup_diag_iteration:
                 gsl_interp_accel *acc = NULL;
                 gsl_spline *mass_spline = NULL;
 
-#pragma omp critical(gsl_accel)
-                {
-                    acc = gsl_interp_accel_alloc();
-                }
+                #pragma omp critical(gsl_accel)
+                acc = gsl_interp_accel_alloc();
 
                 if (!acc) {
                     log_message("ERROR", "Thread %d: Failed to allocate GSL interp accel for snapshot %d", omp_get_thread_num(), snap);
@@ -4781,7 +3648,7 @@ cleanup_diag_iteration:
                      log_message("WARNING", "Thread %d made %d corrections to R_decimated for monotonicity in snapshot %d", omp_get_thread_num(),
                                  corrections_made, snap);
 
-#pragma omp critical(gsl_mass_spline)
+                #pragma omp critical(gsl_mass_spline)
                 {
                     mass_spline = gsl_spline_alloc(gsl_interp_cspline, decimated_size);
                     if (mass_spline)
@@ -4789,8 +3656,7 @@ cleanup_diag_iteration:
                 }
 
                 if (!mass_spline) {
-                    log_message("ERROR", "Thread %d: Failed to allocate or initialize mass spline for snapshot %d",
-                                omp_get_thread_num(), snap);
+                    log_message("ERROR", "Thread %d: Failed to allocate or initialize mass spline for snapshot %d", omp_get_thread_num(), snap);
                     gsl_interp_accel_free(acc);
                     continue;
                 }
@@ -4801,11 +3667,8 @@ cleanup_diag_iteration:
                     else if (r_grid[i] > R_decimated[decimated_size - 1])
                         mass_grid[i] = Mass_decimated[decimated_size - 1]; // Extrapolate using last point
                     else {
-#pragma omp critical(gsl_mass_eval)
-                        {
-                            // Use _e version for error checking if needed
-                            mass_grid[i] = gsl_spline_eval(mass_spline, r_grid[i], acc);
-                        }
+                        #pragma omp critical(gsl_mass_eval)
+                        mass_grid[i] = gsl_spline_eval(mass_spline, r_grid[i], acc); // Use _e version for error checking if needed
                     }
                 }
 
@@ -4816,8 +3679,7 @@ cleanup_diag_iteration:
                     if (dr > 1e-15) {
                         double dM = mass_grid[i + 1] - mass_grid[i - 1];
                         density_grid[i] = dM / dr;
-                    } else
-                        // Fallback for coincident points (e.g., use forward/backward difference or average)
+                    } else // Fallback for coincident points (e.g., use forward/backward difference or average)
                         density_grid[i] = (i > 1) ? density_grid[i-1] : 0.0; // Simple fallback
 
                     // Ensure non-negative density, apply floor
@@ -4857,21 +3719,16 @@ cleanup_diag_iteration:
                 }
 
                 // Use critical section for FFTW thread safety if FFT is used internally
-#pragma omp critical(gaussian_convolution)
-                {
-                    gaussian_convolution(density_grid, grid_size, log_r_grid, sigma_log, direct_grid_result);
-                }
+                #pragma omp critical(gaussian_convolution)
+                gaussian_convolution(density_grid, grid_size, log_r_grid, sigma_log, direct_grid_result);
 
                 // Create a GSL spline from the smoothed density on the uniform grid
                 gsl_spline *density_spline = NULL;
 
-#pragma omp critical(gsl_alloc)
-                {
-                    density_spline = gsl_spline_alloc(gsl_interp_cspline, grid_size);
-                }
+                #pragma omp critical(gsl_alloc)
+                density_spline = gsl_spline_alloc(gsl_interp_cspline, grid_size);
 
-                if (!density_spline)
-                {
+                if (!density_spline) {
                     log_message("ERROR", "Thread %d: Failed to allocate GSL spline for snapshot %d", omp_get_thread_num(), snap);
                     // Clean up and skip.
                     free(density_smoothed_direct);
@@ -4879,10 +3736,8 @@ cleanup_diag_iteration:
                     continue;
                 }
 
-#pragma omp critical(gsl_init)
-                {
-                    gsl_spline_init(density_spline, r_grid, direct_grid_result, grid_size);
-                }
+                #pragma omp critical(gsl_init)
+                gsl_spline_init(density_spline, r_grid, direct_grid_result, grid_size);
 
                 // Temporarily disable GSL default error handler to manage errors locally
                 gsl_error_handler_t *old_handler = gsl_set_error_handler_off();
@@ -4900,11 +3755,9 @@ cleanup_diag_iteration:
                         int status = 0;
                         double result = 0.0;
 
-// Try to evaluate with error checking.
-#pragma omp critical(gsl_eval)
-                        {
-                            status = gsl_spline_eval_e(density_spline, r_val, acc, &result);
-                        }
+                        // Try to evaluate with error checking.
+                        #pragma omp critical(gsl_eval)
+                        status = gsl_spline_eval_e(density_spline, r_val, acc, &result);
 
                         if (status != GSL_SUCCESS)
                         {
@@ -4989,14 +3842,12 @@ cleanup_diag_iteration:
                 }
 
                 double *inv_rA = (double *)malloc(npts * sizeof(double));
-                for (int ii = 0; ii < npts; ii++) {
+                for (int ii = 0; ii < npts; ii++)
                     inv_rA[ii] = 1.0 / rrA[ii];
-                }
                 double *suffix_sum_invrA = (double *)malloc(npts * sizeof(double));
                 suffix_sum_invrA[npts - 1] = inv_rA[npts - 1];
-                for (int jj = npts - 2; jj >= 0; jj--) {
+                for (int jj = npts - 2; jj >= 0; jj--)
                     suffix_sum_invrA[jj] = suffix_sum_invrA[jj + 1] + inv_rA[jj];
-                }
 
                 double *psiAarr = (double *)malloc(npts * sizeof(double));
                 for (int ii = 0; ii < npts; ii++) {
@@ -5030,10 +3881,8 @@ cleanup_diag_iteration:
                 // Write the zero point first.
                 double rr_zero = 0.0;
                 fprintf_bin(fA, "%f %f\n", rr_zero, PsiA0);
-                for (int ii = 0; ii < npts; ii++) {
-                    double rr = rrA[ii];
-                    fprintf_bin(fA, "%f %f\n", rr, psiAarr[ii]);
-                }
+                for (int ii = 0; ii < npts; ii++)
+                    fprintf_bin(fA, "%f %f\n", rrA[ii], psiAarr[ii]);
                 fclose(fA);
 
                 // Now create a new array with npts+1 points for PsiA to include (0,PsiA0) for spline
@@ -5294,7 +4143,7 @@ cleanup_diag_iteration:
 
     free(inverse_map);
 
-    for (i = 0; i < num_traj_particles; i++) {
+    for (int i = 0; i < num_traj_particles; i++) {
         free(trajectories[i]);
         free(energies[i]);
         free(velocities_arr[i]);
@@ -5341,7 +4190,7 @@ cleanup_diag_iteration:
     // End method_select == 3 block.
 
     // Move the freeing of particles *outside* the if-block.
-    for (i = 0; i < 5; i++)
+    for (int i = 0; i < 5; i++)
         free(particles[i]);
     free(particles);
 

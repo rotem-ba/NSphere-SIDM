@@ -165,14 +165,27 @@ inline double forceLCfun(int i, int npts, double totalmass, double grav, double 
     return gravPart + angPart;
 }
 
-void doMicroLeapfrog(int i, int npts,double r_in, double v_in, double ell, double h, int N, int subSteps, double grav, double *r_out, double *v_out);
-void doAdaptiveFullLeap(int i, int npts, double r_in, double v_in, double ell, double h, double radius_tol, double velocity_tol, int max_subdiv,
+void doMicroLeapfrog(int i, int npts,double r_in, double v_in, double ell, int N, int subSteps, double grav, double *r_out, double *v_out);
+void doAdaptiveFullLeap(int i, int npts, double r_in, double v_in, double ell, double radius_tol, double velocity_tol, int max_subdiv,
                         double grav, int out_type, double *r_out, double *v_out);
-void doLeviCivitaLeapfrog(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double grav, double *r_out, double *v_out);
+void doLeviCivitaLeapfrog(int i, int npts, double r_in, double v_in, double ell, int N_taumin, double grav, double *r_out, double *v_out);
 void doMicroLeviCivita(int i, int npts, double rho_in, double v_in, double t_in, int subSteps, double h_tau, double grav, double ell, double *rho_out,
                        double *v_out, double *t_out);
 void doSingleTauStepAdaptiveLeviCivita(int i, int npts, double rho_in, double v_in, double t_in, double h_guess, double radius_tol, double velocity_tol,
                                        int max_subdiv, double grav, double ell, int out_type, double *rho_out, double *v_out, double *t_out);
-void doAdaptiveFullLeviCivita(int i, int npts, double r_in, double v_in, double ell, double dt, int N_taumin, double radius_tol, double velocity_tol,
+void doAdaptiveFullLeviCivita(int i, int npts, double r_in, double v_in, double ell, int N_taumin, double radius_tol, double velocity_tol,
                               int max_subdiv, double grav, int out_type, double *r_out, double *v_out);
+
+void update_trajectory_tacking(int current_step, int *inverse_map, int upper_npts_num_traj, double **trajectories, double **energies,
+                               double **mu_arr, double **L_arr, double **E_arr, double **velocities_arr);
+void update_inverse_map(int *inverse_map);
+void euler_step();
+void leapfrog_method_position_half_step();
+void leapfrog_method_velocity_half_step();
+void leapfrog_method_full_step_adaptive();
+void hybrid_adaptive_method();
+void adaptive_leapfrog_adaptive_levi_civita();
+void forest_ruth_yoshida_integration();
+void rk4_method();
+void make_dynamic_step();
 #endif // DYNAMICS_H
