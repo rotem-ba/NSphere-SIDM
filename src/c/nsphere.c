@@ -159,19 +159,7 @@ printf("  \n");
 
     // ... proceed with simulation ...
 
-    /**
-     * @brief Oversample initial conditions based on tidal fraction.
-     * @details Calculate the number of initial particles (`npts_initial`) needed
-     *          before tidal stripping to ensure `npts` particles remain afterwards.
-     *          If `tidal_fraction` is 0, `npts_initial` equals `npts`.
-     */
-    int npts_initial;
-    if (tidal_fraction > 0.0) {
-        // Use ceiling to ensure enough particles remain after stripping
-        npts_initial = ceil(npts / (1.0 - tidal_fraction));
-    } else {
-        npts_initial = npts;
-    }
+    int npts_initial = get_npts_initial_with_tidal_fraction();
 
     /** @note Calculate number of snapshots (`noutsnaps`) based on desired intervals (`nout`). */
     nout = nout + 1; // nout specifies intervals, noutsnaps is number of points (intervals + 1)
@@ -185,12 +173,6 @@ printf("  \n");
         skip_file_writes = 1;
     }
 
-    /** @brief Create the output 'data' directory if it doesn't exist. */
-    {
-        struct stat st = {0};
-        if (stat("data", &st) == -1)
-            mkdir("data", 0755); // POSIX standard, works on most systems including MinGW/Cygwin
-    }
     mkdir_init();
     write_to_lastparams();
 

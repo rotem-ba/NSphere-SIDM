@@ -18,5 +18,7 @@
 #define TIDAL_STRIPPING_H
 
 void tidal_strip(int npts_initial);
+int get_npts_initial_with_tidal_fraction();
+
 
 #endif // TIDAL_STRIPPING_H

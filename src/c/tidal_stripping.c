@@ -17,6 +17,7 @@
 #include "globals.h"
 #include "particle_array_ops.h"
 #include "particle_data.h"
+#include <math.h>
 
 /**
  * @brief TIDAL STRIPPING IMPLEMENTATION block.
@@ -43,4 +44,14 @@ void tidal_strip(int npts_initial) {
     }
     /** @note Remap original IDs (now in `particles[3]` for the kept particles) to ranks [0, npts-1]. */
     reassign_orig_ids_with_rank(particles[3], npts);
+}
+
+/**
+ * @brief Oversample initial conditions based on tidal fraction.
+ * @details Calculate the number of initial particles (`npts_initial`) needed
+ *          before tidal stripping to ensure `npts` particles remain afterwards.
+ *          If `tidal_fraction` is 0, `npts_initial` equals `npts`.
+ */
+int get_npts_initial_with_tidal_fraction() {
+    return (tidal_fraction > 0.0) ? ceil(npts / (1.0 - tidal_fraction)) : npts;
 }

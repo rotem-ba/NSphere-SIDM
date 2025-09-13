@@ -795,6 +795,11 @@ void compile_filename_tag() {
  * @brief Create the 'init' directory if it doesn't exist.
  */
 void mkdir_init(){
+    /** @brief Create the output 'data' directory if it doesn't exist. */
+    struct stat st = {0};
+    if (stat("data", &st) == -1)
+        mkdir("data", 0755); // POSIX standard, works on most systems including MinGW/Cygwin
+
     struct stat st_init = {0};
     if (stat("init", &st_init) == -1) {
         #if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
