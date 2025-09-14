@@ -750,7 +750,7 @@ void retrieve_all_particle_snapshot(const char *filename, int snap, int npts, in
         // Read npts records into local buffers.
         for (int i = 0; i < npts; i++) {
             int rankval;
-            float rval, vval, lval;
+            float rval = 0.0, vval = 0.0, lval = 0.0;  // Just to silence the compiler warnings
 
             if (fread(&rankval, sizeof(int), 1, f) != 1 || fread(&rval, sizeof(float), 1, f) != 1 || fread(&vval, sizeof(float), 1, f) != 1 || fread(&lval, sizeof(float), 1, f) != 1) {
                 fclose(f);
