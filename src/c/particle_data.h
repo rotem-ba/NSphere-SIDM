@@ -87,7 +87,7 @@ struct RrPsiPair {
 };
 typedef struct RrPsiPair RrPsiPair;
 
-void allocate_particles_memory(double **particles, int npts_initial);
+void allocate_particles_memory(int npts_initial);
 void allocate_all_particles_memory(int npts_dark_matter, int npts_baryons);
 void trim_particles(double **particles, int npts);
 

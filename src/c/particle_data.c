@@ -48,7 +48,7 @@ double **baryons = NULL;             ///< Main baryons data array
 /**
  * @brief Allocate main particle data array.
  */
-void allocate_particles_memory(double **particles, int npts_initial) {
+void allocate_particles_memory(int npts_initial) {
     particles = (double **)malloc(5 * sizeof(double *));
     if (particles == NULL)
         raise_error("ERROR: Memory allocation failed for particle array pointer\n");
@@ -63,9 +63,9 @@ void allocate_particles_memory(double **particles, int npts_initial) {
 /**
  * @brief Allocate dark matter and baryon particle data array.
  */
-void allocate_all_particles_memory(int npts_dark_matter, int npts_baryons) {
-    allocate_particles_memory(particles, npts_dark_matter);
-    allocate_particles_memory(baryons, npts_baryons);
+void allocate_all_particles_memory(int npts_dark_matter, int npts_baryons __attribute__((unused))) {
+    allocate_particles_memory(npts_dark_matter);
+    // allocate_particles_memory(baryons, npts_baryons);
 }
 
 /**
