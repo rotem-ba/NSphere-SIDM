@@ -71,7 +71,7 @@ void allocate_all_particles_memory(int npts_dark_matter, int npts_baryons __attr
 /**
  * @brief Allocate new smaller arrays (`final_particles`) for the `npts` particles to keep.
  */
-void trim_particles(double **particles, int npts) {
+void trim_particles(int npts) {
     double **final_particles = (double **)malloc(5 * sizeof(double *));
     if (final_particles == NULL)
         raise_error("Memory allocation failed for final_particles\n");
@@ -91,11 +91,11 @@ void trim_particles(double **particles, int npts) {
     free(final_particles); // Free the temporary ** structure, not the data arrays
 }
 
-void free_particles_memory(double **particles) {
+void free_particles_memory() {
     free_double_array(particles, 5);
 }
 
 void free_all_particles_memory() {
-    free_particles_memory(particles);
-    free_particles_memory(baryons);
+    free_particles_memory();
+    // free_particles_memory(&baryons);
 }

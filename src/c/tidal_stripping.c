@@ -39,7 +39,7 @@ void tidal_strip(int npts_initial) {
     else {
         printf("Tidal stripping: sorting and retaining inner %.1f%% of particles...\n", (1.0 - tidal_fraction) * 100.0);
         sort_particles_with_alg(particles, npts_initial, "quadsort"); // Sorts by particles[0]
-        trim_particles(particles, npts);
+        trim_particles(npts);
         printf("Tidal stripping complete: %d particles retained.\n\n", npts);
     }
     /** @note Remap original IDs (now in `particles[3]` for the kept particles) to ranks [0, npts-1]. */
