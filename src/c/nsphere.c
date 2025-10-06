@@ -1885,7 +1885,7 @@ cleanup_diag_iteration:
             while (vflag == 0) {
                 vel = gsl_rng_uniform(g_rng) * maxv;
                 // Evaluate target function (proportional to v^2 * f(E))
-                double target_func_val = vel * vel * gsl_interp_eval_deriv(g_main_fofEinterp, Evalues, innerintegrandvalues, Psir - (0.5) * vel * vel, g_main_fofEacc);
+                double target_func_val = sqr(vel) * gsl_interp_eval_deriv(g_main_fofEinterp, Evalues, innerintegrandvalues, Psir - (0.5) * vel * vel, g_main_fofEacc);
                 ratio = (maxvalue > 1e-15) ? (target_func_val / maxvalue) : 0.0; // Avoid division by zero
                 if (gsl_rng_uniform(g_rng) < ratio) {
                     particles[1][i] = vel;
