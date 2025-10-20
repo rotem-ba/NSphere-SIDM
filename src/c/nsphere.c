@@ -2420,7 +2420,7 @@ cleanup_diag_iteration:
                 if ((current_step+1) == print_steps[k]) {
                     double elapsed = omp_get_wtime() - start_time;
                     int percent = k * 5;
-                    printf("%d%% complete, timestep %d/%d, time=%f Myr, elapsed=%.2f s\n", percent, current_step+1, Ntimes, current_time, elapsed);
+                    printf("%d%% complete, timestep %d/%d, time=%f Myr, elapsed=%.2f s, n_scatters=%lld\n", percent, current_step+1, Ntimes, current_time, elapsed, g_total_sidm_scatters);
                     break;
                 }
         }
