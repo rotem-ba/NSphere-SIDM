@@ -100,8 +100,4 @@ void initialize_simulation_time() {
      printf("Timestep dt = %.6f Myr\n\n", dt);
 
      start_time = omp_get_wtime(); ///< Wall-clock start time for timing
-     /** @brief Setup progress reporting steps (array `print_steps` holding step numbers for 0%, 5%, ..., 100%). */
-     for (int k = 0; k <= 20; k++)
-         print_steps[k] = (int)floor(k * 0.05 * Ntimes); // Calculate steps for progress output
-
 }

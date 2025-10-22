@@ -2416,10 +2416,10 @@ cleanup_diag_iteration:
                 }
                 nwrite_total++; // Increment count of dtwrite-based writes
             }
-            for (int k = 0; k <= 20; k++)
-                if ((current_step+1) == print_steps[k]) {
+            for (int k = 0; k <= number_of_logs; k++)
+                if ((current_step+1) == get_print_step(k)) {
                     double elapsed = omp_get_wtime() - start_time;
-                    int percent = k * 5;
+                    int percent = k * log_every_p();
                     printf("%d%% complete, timestep %d/%d, time=%f Myr, elapsed=%.2f s, n_scatters=%lld\n", percent, current_step+1, Ntimes, current_time, elapsed, g_total_sidm_scatters);
                     break;
                 }

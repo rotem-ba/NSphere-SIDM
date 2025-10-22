@@ -18,9 +18,14 @@
 #ifndef TIMESTEPS_H
 #define TIMESTEPS_H
 
+#include "globals.h"
+#include <math.h>
+
 int adjust_ntimesteps(int Ntimes_initial, int nout, int dtwrite);
 void adjust_Ntimes();
 
 void initialize_simulation_time();
+
+inline int get_print_step(int k) {return (int)floor(k * (double)(log_every_p()) / 100 * Ntimes);}
 
 #endif // TIMESTEPS_H

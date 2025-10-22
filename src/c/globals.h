@@ -287,10 +287,11 @@ extern int ext_Ntimes;                ///< Extended time steps potentially neede
 // SIMULATION TIMESTEP CALCULATION
 // =========================================================================
 extern double tdyn;
-extern double totaltime;    ///< Total simulation time (Myr)
-extern double dt;           ///< Individual timestep size (Myr)
-extern double current_time; ///< Current simulation time (Myr)
-extern double start_time;   ///< Wall-clock start time for timing
-extern int print_steps[21]; ///< Setup progress reporting steps (array `print_steps` holding step numbers for 0%, 5%, ..., 100%).
+extern double totaltime;            ///< Total simulation time (Myr)
+extern double dt;                   ///< Individual timestep size (Myr)
+extern double current_time;         ///< Current simulation time (Myr)
+extern double start_time;           ///< Wall-clock start time for timing
+extern int number_of_logs;          ///< Number of log prints to be make
+inline int log_every_p() { return (int)(100/number_of_logs); }
 
 #endif // GLOBALS_H

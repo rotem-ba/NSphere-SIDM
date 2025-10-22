@@ -80,6 +80,7 @@ void printUsage(const char *prog)
             "  --load-seeds                  [Default Off] Load seeds from previous run's output files\n"
             "  --init-cond-seed <int>        [Default Random/Master] Set seed for IC generation.\n"
             "                                     Overrides derivation from master-seed.\n"
+            "  --n-log-prints <int>          [Default 20] Number of log prints to make.\n"
             "\n"
             "  --method <int>                [Default 1] Integration method (1..9):\n"
             "                                          1   Adaptive Leapfrog with Adaptive Levi-Civita\n"
@@ -477,6 +478,8 @@ void read_user_arguments(int argc, char *argv[]) {
             if (g_falloff_factor_param <= 0)
                 raise_error("--falloff-factor must be positive");
             g_falloff_factor_param_provided = 1;
+        } else if (strcmp(argv[i], "--n-log-prints") == 0) {
+            number_of_logs = validate_int_input(&i, argc, argv, "n-log-prints");
         } else if (strncmp(argv[i], "--", 2) == 0)
             raise_error("unrecognized option");
         else

@@ -236,4 +236,4 @@ double totaltime;
 double current_time = 0.0;
 double dt;
 double start_time;
-int print_steps[21];
+int number_of_logs = 20;
